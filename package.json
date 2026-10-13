@@ -13,9 +13,13 @@
   "engines": {
     "node": ">=22.19.0"
   },
+  "imports": {
+    "#modules/*": "./src/modules/*/index.ts",
+    "#core/*": "./src/core/*.ts"
+  },
   "pi": {
     "extensions": [
-      "./src/index.ts"
+      "./index.ts"
     ],
     "skills": [
       "./resources/skills"

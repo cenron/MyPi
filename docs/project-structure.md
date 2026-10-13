@@ -5,7 +5,8 @@ MyPi/
 ├── AGENTS.md              # Agent guide: map, how we work, rules
 ├── CLAUDE.md              # Imports AGENTS.md for Claude Code
 ├── README.md
-├── package.json           # pi manifest, scripts, dependencies
+├── index.ts               # Extension entry point; creates MyPi, wires pi events
+├── package.json           # pi manifest, import aliases, scripts, dependencies
 ├── tsconfig.json          # TypeScript 7, noEmit, bundler resolution
 ├── biome.json             # Formatter and linter
 ├── vitest.config.ts       # Tests and coverage thresholds
@@ -16,9 +17,11 @@ MyPi/
 │   ├── project-structure.md
 │   └── modules/           # One doc per module, built or planned
 ├── src/
-│   ├── index.ts           # Extension entry point; wires modules
-│   └── modules/           # One folder per module
-├── test/                  # vitest tests, mirroring src/
+│   ├── mypi.ts            # MyPi class: pi event handlers
+│   ├── core/              # Session, Notifier, util/   (#core/<file>)
+│   ├── command/           # Slash commands: types, registry, one file per command
+│   └── modules/           # One folder per feature module   (#modules/<name>)
+├── test/                  # vitest tests, mirroring src/ (index.test.ts covers the wiring)
 └── resources/
     ├── skills/            # <name>/SKILL.md
     ├── prompts/           # <name>.md prompt templates
@@ -30,8 +33,9 @@ MyPi/
 | Adding | Put it in | Also |
 |---|---|---|
 | A module idea | `docs/modules/<name>.md` with status `idea` | Add a row to `docs/modules/README.md` |
-| Module code | `src/modules/<name>/index.ts` | Wire it in `src/index.ts`; tests in `test/modules/<name>/` |
-| Code shared by two or more modules | `src/shared/` | Only once the reuse is real |
+| A slash command | `src/command/<name>.ts`, returning a `Command` | Add it to `createCommand` in `src/command/index.ts` |
+| Module code | `src/modules/<name>/index.ts` | Call it from `MyPi`, import it as `#modules/<name>`; tests in `test/modules/<name>/` |
+| A shared service or helper | `src/core/` (helpers in `src/core/util/`) | Only once more than one place needs it; tests in `test/core/` |
 | A skill | `resources/skills/<name>/SKILL.md` | |
 | A prompt template | `resources/prompts/<name>.md` | |
 | A theme | `resources/themes/<name>.json` | |

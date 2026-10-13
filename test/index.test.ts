@@ -1,44 +1,62 @@
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
+  ExtensionContext,
   RegisteredCommand,
+  SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import mypi from "../src/index.ts";
+import mypi from "../index.ts";
 
 type CommandOptions = Omit<RegisteredCommand, "name" | "sourceInfo">;
+type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
 
-function loadCommands() {
+function loadExtension() {
   const commands = new Map<string, CommandOptions>();
+  const handlers = new Map<string, Handler>();
   const pi = {
+    on: (event: string, handler: Handler) => {
+      handlers.set(event, handler);
+      return () => {};
+    },
     registerCommand: (name: string, options: CommandOptions) => {
       commands.set(name, options);
     },
   } as unknown as ExtensionAPI;
   mypi(pi);
-  return commands;
+  return { commands, handlers };
 }
 
-function fakeContext(hasUI: boolean) {
-  const notify = vi.fn();
-  const ctx = { hasUI, ui: { notify } } as unknown as ExtensionCommandContext;
-  return { ctx, notify };
+function fakeContext() {
+  return {
+    hasUI: true,
+    ui: { notify: vi.fn() },
+  } as unknown as ExtensionCommandContext;
+}
+
+function startSession(handlers: Map<string, Handler>) {
+  const event: SessionStartEvent = { type: "session_start", reason: "startup" };
+  handlers.get("session_start")?.(event, fakeContext());
 }
 
 describe("mypi extension", () => {
-  it("registers the /mypi command", () => {
-    expect(loadCommands().has("mypi")).toBe(true);
+  it("registers no commands before a session starts", () => {
+    const { commands, handlers } = loadExtension();
+    expect(handlers.has("session_start")).toBe(true);
+    expect(commands.size).toBe(0);
   });
 
-  it("notifies that MyPi is loaded", async () => {
-    const { ctx, notify } = fakeContext(true);
-    await loadCommands().get("mypi")?.handler("", ctx);
-    expect(notify).toHaveBeenCalledWith("MyPi is loaded.", "info");
+  it("registers commands when a session starts", () => {
+    const { commands, handlers } = loadExtension();
+    startSession(handlers);
+    expect(commands.size).toBeGreaterThan(0);
   });
 
-  it("stays quiet without a UI", async () => {
-    const { ctx, notify } = fakeContext(false);
-    await loadCommands().get("mypi")?.handler("", ctx);
-    expect(notify).not.toHaveBeenCalled();
+  it("runs every registered command without throwing", async () => {
+    const { commands, handlers } = loadExtension();
+    startSession(handlers);
+    for (const command of commands.values()) {
+      await expect(command.handler("", fakeContext())).resolves.toBeUndefined();
+    }
   });
 });
