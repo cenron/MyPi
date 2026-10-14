@@ -4,11 +4,21 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
 import { errorMessage } from "#core/util/errors";
+import type { Module } from "#module/module";
 import { myPiCmd } from "./mypi.ts";
 import type { Command } from "./types.ts";
 
-export function registerCommand(pi: ExtensionAPI, session: Session) {
-  for (const cmd of createCommand(session)) {
+export function registerCommand(
+  pi: ExtensionAPI,
+  session: Session,
+  modules: Module[],
+) {
+  const commandList = [
+    ...createCommand(session),
+    ...modules.flatMap((module) => module.commands()),
+  ];
+
+  for (const cmd of commandList) {
     pi.registerCommand(cmd.name, {
       description: cmd.description,
       handler: async (args: string, ctx: ExtensionCommandContext) =>

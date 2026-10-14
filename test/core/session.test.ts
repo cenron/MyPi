@@ -1,4 +1,7 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
 
@@ -8,10 +11,12 @@ function fakeContext(hasUI: boolean) {
   return { ctx, notify };
 }
 
+const pi = {} as ExtensionAPI;
+
 describe("Session", () => {
   it("sends each log level as the matching notify type", () => {
     const { ctx, notify } = fakeContext(true);
-    const session = new Session(ctx);
+    const session = new Session(ctx, pi);
 
     session.log("hello");
     session.log_warning("careful");
@@ -26,7 +31,7 @@ describe("Session", () => {
 
   it("sends nothing without a UI", () => {
     const { ctx, notify } = fakeContext(false);
-    const session = new Session(ctx);
+    const session = new Session(ctx, pi);
 
     session.log("hello");
     session.log_warning("careful");

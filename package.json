@@ -14,8 +14,9 @@
     "node": ">=22.19.0"
   },
   "imports": {
-    "#modules/*": "./src/modules/*/index.ts",
-    "#core/*": "./src/core/*.ts"
+    "#core/*": "./src/core/*.ts",
+    "#command/*": "./src/command/*.ts",
+    "#module/*": "./src/module/*.ts"
   },
   "pi": {
     "extensions": [

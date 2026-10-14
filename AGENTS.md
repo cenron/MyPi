@@ -7,10 +7,10 @@ MyPi is a personal pi harness, packaged as a pi package. It lives at `~/.pi/MyPi
 | Where | What |
 |---|---|
 | `index.ts` | Extension entry point at the repo root, so pi labels it `MyPi`. Creates `MyPi` and wires pi events to it; no logic. |
-| `src/mypi.ts` | `MyPi` class. Handles pi events; on `session_start` it builds a `Session` and registers commands. |
+| `src/mypi.ts` | `MyPi` class. Handles pi events; on `session_start` it builds a `Session`, loads the modules, and registers commands. |
 | `src/core/` | Per-session services: `Session`, `Notifier`, `util/`. Imported as `#core/<file>`. |
-| `src/command/` | Slash commands: one file per command, listed in `createCommand` in `index.ts`. |
-| `src/modules/<name>/` | Feature modules. One folder per module, named after its doc. Imported as `#modules/<name>`. |
+| `src/command/` | Slash commands: one file per command, listed in `createCommand` in `index.ts`. Imported as `#command/<file>`. |
+| `src/module/` | Feature modules: the `Module` contract (`module.ts`), the module list (`index.ts`), and one folder per module, named after its doc. Imported as `#module/<file>`. |
 | `docs/modules/<name>.md` | Module design or idea, with a status. Index: `docs/modules/README.md`. |
 | `docs/architecture.md` | How pi loads MyPi and how modules plug in. |
 | `docs/principles.md` | Design principles. Read before adding code. |
@@ -44,5 +44,5 @@ Check that `pi --version` matches the pinned devDependency. If the docs and sour
 
 - Host packages (`@earendil-works/*`, `typebox`) are `peerDependencies` with `"*"`, plus pinned devDependencies for types. Never `dependencies`.
 - Send notifications through `Session` (`log`, `log_warning`, `log_error`), which already guards `ctx.hasUI`. Guard dialogs and other UI calls with `ctx.hasUI` yourself.
-- Import across folders with `#core/<file>` and `#modules/<name>` (the `imports` in `package.json`), never tsconfig `paths`, because pi doesn't apply them. Use relative imports inside a folder.
+- Import across folders with `#core/<file>`, `#command/<file>`, and `#module/<file>` (the `imports` in `package.json`), never tsconfig `paths`, because pi doesn't apply them. Use relative imports inside a folder.
 - Update the module's doc in `docs/modules/` when its design or status changes.

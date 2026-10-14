@@ -3,9 +3,12 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
   RegisteredCommand,
+  SessionShutdownEvent,
   SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { Session } from "#core/session";
+import { loadModules } from "#module/index";
 import mypi from "../index.ts";
 
 type CommandOptions = Omit<RegisteredCommand, "name" | "sourceInfo">;
@@ -24,7 +27,7 @@ function loadExtension() {
     },
   } as unknown as ExtensionAPI;
   mypi(pi);
-  return { commands, handlers };
+  return { pi, commands, handlers };
 }
 
 function fakeContext() {
@@ -58,5 +61,28 @@ describe("mypi extension", () => {
     for (const command of commands.values()) {
       await expect(command.handler("", fakeContext())).resolves.toBeUndefined();
     }
+  });
+
+  it("registers every module's commands", () => {
+    const { pi, commands, handlers } = loadExtension();
+    startSession(handlers);
+    const session = new Session(fakeContext(), pi);
+    const names = loadModules(session).flatMap((module) =>
+      module.commands().map((command) => command.name),
+    );
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) expect(commands.has(name)).toBe(true);
+  });
+
+  it("handles session shutdown without throwing", () => {
+    const { handlers } = loadExtension();
+    startSession(handlers);
+    const event: SessionShutdownEvent = {
+      type: "session_shutdown",
+      reason: "quit",
+    };
+    expect(() =>
+      handlers.get("session_shutdown")?.(event, fakeContext()),
+    ).not.toThrow();
   });
 });

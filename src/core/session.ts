@@ -1,10 +1,16 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { Notifier } from "./notifier.ts";
 
 export class Session {
   private notifier: Notifier;
 
-  constructor(readonly ctx: ExtensionContext) {
+  constructor(
+    readonly ctx: ExtensionContext,
+    readonly pi: ExtensionAPI,
+  ) {
     this.notifier = new Notifier(this.ctx);
   }
 
