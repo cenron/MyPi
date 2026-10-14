@@ -27,8 +27,8 @@ describe("loadModules", () => {
       module.commands(),
     );
     for (const command of commands) {
-      expect(command.name).not.toBe("");
-      expect(command.description).not.toBe("");
+      expect(command.info.name).not.toBe("");
+      expect(command.info.description).not.toBe("");
     }
   });
 });

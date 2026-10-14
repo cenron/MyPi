@@ -2,11 +2,12 @@ import type {
   ExtensionAPI,
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
+import { modulesCmd } from "#command/modules";
 import type { Session } from "#core/session";
+import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import type { Module } from "#module/module";
 import { myPiCmd } from "./mypi.ts";
-import type { Command } from "./types.ts";
 
 export function registerCommand(
   pi: ExtensionAPI,
@@ -19,15 +20,16 @@ export function registerCommand(
   ];
 
   for (const cmd of commandList) {
-    pi.registerCommand(cmd.name, {
-      description: cmd.description,
+    pi.registerCommand(cmd.info.name, {
+      description: cmd.info.description,
       handler: async (args: string, ctx: ExtensionCommandContext) =>
         await runCommand(cmd, args, ctx),
     });
   }
 }
+
 const createCommand = (session: Session): Command[] => {
-  return [myPiCmd(session)];
+  return [myPiCmd(session), modulesCmd(session)];
 };
 
 const runCommand = async (

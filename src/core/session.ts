@@ -2,9 +2,11 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { ModuleInfo } from "#core/types";
 import { Notifier } from "./notifier.ts";
 
 export class Session {
+  private modulesList: ModuleInfo[];
   private notifier: Notifier;
 
   constructor(
@@ -12,17 +14,26 @@ export class Session {
     readonly pi: ExtensionAPI,
   ) {
     this.notifier = new Notifier(this.ctx);
+    this.modulesList = [];
   }
 
   log(msg: string) {
     this.notifier.info(msg);
   }
 
-  log_warning(msg: string) {
+  logWarning(msg: string) {
     this.notifier.warn(msg);
   }
 
-  log_error(msg: string) {
+  logError(msg: string) {
     this.notifier.error(msg);
+  }
+
+  get modules(): ModuleInfo[] {
+    return this.modulesList;
+  }
+
+  set modules(modules: ModuleInfo[]) {
+    this.modulesList.push(...modules);
   }
 }

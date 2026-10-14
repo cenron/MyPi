@@ -68,7 +68,7 @@ describe("mypi extension", () => {
     startSession(handlers);
     const session = new Session(fakeContext(), pi);
     const names = loadModules(session).flatMap((module) =>
-      module.commands().map((command) => command.name),
+      module.commands().map((command) => command.info.name),
     );
     expect(names.length).toBeGreaterThan(0);
     for (const name of names) expect(commands.has(name)).toBe(true);

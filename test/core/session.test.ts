@@ -19,8 +19,8 @@ describe("Session", () => {
     const session = new Session(ctx, pi);
 
     session.log("hello");
-    session.log_warning("careful");
-    session.log_error("broken");
+    session.logWarning("careful");
+    session.logError("broken");
 
     expect(notify.mock.calls).toEqual([
       ["hello", "info"],
@@ -34,8 +34,8 @@ describe("Session", () => {
     const session = new Session(ctx, pi);
 
     session.log("hello");
-    session.log_warning("careful");
-    session.log_error("broken");
+    session.logWarning("careful");
+    session.logError("broken");
 
     expect(notify).not.toHaveBeenCalled();
   });
