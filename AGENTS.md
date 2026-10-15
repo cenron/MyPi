@@ -41,6 +41,8 @@ Check that `pi --version` matches the pinned devDependency. If the docs and sour
 ## Commands
 
 - `npm run check` runs typecheck, Biome, and tests with coverage. Run it before calling work done.
+- `npx biome check --write src test` fixes formatting. The editor must format with Biome; its built-in formatter
+  produces 4-space indents that fail the check.
 - `/reload` in a pi session picks up edits. No reinstall needed.
 - Restart pi after changing `imports` in `package.json`. `/reload` keeps the old import map.
 
