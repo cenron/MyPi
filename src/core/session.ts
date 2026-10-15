@@ -3,8 +3,9 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { ModuleInfo } from "#core/types";
-import { Notifier } from "./notifier.ts";
+import { Notifier } from "./notifier";
 
+/** Per-session handle passed to commands and modules: pi's context and API, logging, and the module list. */
 export class Session {
   private modulesList: ModuleInfo[];
   private notifier: Notifier;
@@ -34,6 +35,6 @@ export class Session {
   }
 
   set modules(modules: ModuleInfo[]) {
-    this.modulesList.push(...modules);
+    this.modulesList = [...modules];
   }
 }

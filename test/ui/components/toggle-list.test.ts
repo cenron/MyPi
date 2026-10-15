@@ -1,0 +1,89 @@
+import { stripVTControlCharacters } from "node:util";
+import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { type ToggleItem, ToggleList } from "#ui/components/toggle-list";
+
+const SPACE = " ";
+const ENTER = "\r";
+const ESCAPE = "\x1b";
+const UP = "\x1b[A";
+const DOWN = "\x1b[B";
+
+// Plain-text colours, so the circles compare as "●" and "○".
+const theme = {
+  fg: (_color: string, text: string) => text,
+} as unknown as Theme;
+
+const items: ToggleItem[] = [
+  { id: "a", label: "a", description: "first", on: true },
+  { id: "b", label: "b", description: "second", on: false },
+];
+
+function fakeHandlers() {
+  return { onToggle: vi.fn(), onAccept: vi.fn(), onCancel: vi.fn() };
+}
+
+function renderText(list: ToggleList): string[] {
+  return list.render(60).map((line) => stripVTControlCharacters(line));
+}
+
+// getSettingsListTheme() reads pi's global theme, which tests have to set up.
+beforeAll(() => initTheme("dark"));
+
+describe("ToggleList", () => {
+  it("shows a green circle for on and a grey circle for off", () => {
+    const lines = renderText(new ToggleList(theme, items, fakeHandlers()));
+    expect(lines[0]).toMatch(/a\s+●/);
+    expect(lines[1]).toMatch(/b\s+○/);
+  });
+
+  it("toggles the selected row with Space and Enter", () => {
+    const handlers = fakeHandlers();
+    const list = new ToggleList(theme, items, handlers);
+
+    list.handleInput(SPACE);
+    list.handleInput(DOWN);
+    list.handleInput(ENTER);
+
+    expect(handlers.onToggle.mock.calls).toEqual([
+      ["a", false],
+      ["b", true],
+    ]);
+    expect(renderText(list)[0]).toMatch(/a\s+○/);
+  });
+
+  it("adds a Save row that calls onAccept", () => {
+    const handlers = fakeHandlers();
+    const list = new ToggleList(theme, items, handlers);
+    expect(renderText(list)[2]).toContain("Save");
+
+    list.handleInput(UP);
+    list.handleInput(ENTER);
+
+    expect(handlers.onAccept).toHaveBeenCalledOnce();
+    expect(handlers.onToggle).not.toHaveBeenCalled();
+  });
+
+  it("leaves out the Save row without onAccept", () => {
+    const { onToggle, onCancel } = fakeHandlers();
+    const list = new ToggleList(theme, items, { onToggle, onCancel });
+    expect(renderText(list).join("\n")).not.toContain("Save");
+
+    list.handleInput(UP);
+    list.handleInput(SPACE);
+
+    expect(onToggle).toHaveBeenCalledWith("b", true);
+  });
+
+  it("calls onCancel on Escape", () => {
+    const handlers = fakeHandlers();
+    new ToggleList(theme, items, handlers).handleInput(ESCAPE);
+    expect(handlers.onCancel).toHaveBeenCalledOnce();
+    expect(handlers.onAccept).not.toHaveBeenCalled();
+  });
+
+  it("shows the selected row's description", () => {
+    const lines = renderText(new ToggleList(theme, items, fakeHandlers()));
+    expect(lines.join("\n")).toContain("first");
+  });
+});

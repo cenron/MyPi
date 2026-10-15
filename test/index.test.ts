@@ -9,7 +9,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
 import { loadModules } from "#module/index";
-import mypi from "../index.ts";
+import mypi from "../index";
 
 type CommandOptions = Omit<RegisteredCommand, "name" | "sourceInfo">;
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;

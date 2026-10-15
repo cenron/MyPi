@@ -1,6 +1,6 @@
 import type { Session } from "#core/session";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
-import type { Module } from "../module.ts";
+import type { Module } from "../module";
 
 export class PlanBuildModule implements Module {
   constructor(readonly session: Session) {}

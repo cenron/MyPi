@@ -4,6 +4,16 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
+import { type ModuleInfo, ModuleLoadMode } from "#core/types";
+
+function moduleInfo(name: string): ModuleInfo {
+  return {
+    name,
+    description: "",
+    commands: [],
+    loadType: ModuleLoadMode.ON_LOAD,
+  };
+}
 
 function fakeContext(hasUI: boolean) {
   const notify = vi.fn();
@@ -38,5 +48,14 @@ describe("Session", () => {
     session.logError("broken");
 
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("replaces the module list when set again", () => {
+    const session = new Session(fakeContext(true).ctx, pi);
+
+    session.modules = [moduleInfo("a")];
+    session.modules = [moduleInfo("b")];
+
+    expect(session.modules.map((m) => m.name)).toEqual(["b"]);
   });
 });

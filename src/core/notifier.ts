@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+/** Notification levels; the values match pi's `ctx.ui.notify` types. */
 export const MessageType = {
   Info: "info",
   Warning: "warning",
@@ -8,6 +9,7 @@ export const MessageType = {
 
 export type MessageType = (typeof MessageType)[keyof typeof MessageType];
 
+/** Sends notifications through pi, and drops them when there is no UI (print and JSON modes). */
 export class Notifier {
   constructor(readonly ctx: ExtensionContext) {}
 

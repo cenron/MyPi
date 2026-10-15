@@ -16,7 +16,8 @@
   "imports": {
     "#core/*": "./src/core/*.ts",
     "#command/*": "./src/command/*.ts",
-    "#module/*": "./src/module/*.ts"
+    "#module/*": "./src/module/*.ts",
+    "#ui/*": "./src/ui/*.ts"
   },
   "pi": {
     "extensions": [

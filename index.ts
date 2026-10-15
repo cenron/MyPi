@@ -4,7 +4,7 @@ import type {
   SessionShutdownEvent,
   SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
-import { MyPi } from "./src/mypi.ts";
+import { MyPi } from "./src/mypi";
 
 export default function (pi: ExtensionAPI) {
   const myPi = new MyPi(pi);
