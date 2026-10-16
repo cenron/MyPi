@@ -1,9 +1,7 @@
-import type { Session } from "#core/session";
-import { type Command, type Module, type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { BaseModule } from "../base";
 
-export class PlanBuildModule implements Module {
-  constructor(readonly session: Session) {}
-
+export class PlanBuildModule extends BaseModule {
   get info(): ModuleInfo {
     return {
       name: "plan-build",

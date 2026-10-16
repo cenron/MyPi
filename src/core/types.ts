@@ -1,12 +1,6 @@
 import type { CommandExec } from "#command/types";
 import type { Session } from "./session";
 
-/** Everything MyPi saves in the session, by name; stored as `mypi-<name>`. */
-export type SavedState = {
-  modules: { loaded: string[] };
-  // "plan-build": { mode: Mode };
-};
-
 /**
  * When a module loads: `ALWAYS` every time and can't be unloaded, `ON_LOAD` by default, `ON_DEMAND` only when chosen
  * in `/modules`.
@@ -42,9 +36,9 @@ export type ModuleInfo = {
 };
 
 /** A module class: every module is built as `new Module(session)`. */
-export type ModuleBase = new (session: Session) => Module;
+export type ModuleClass = new (session: Session) => Module;
 
-/** A feature module. Only loaded modules run `init()`. */
+/** A feature module. Only loaded modules run `init()`. Modules extend `BaseModule` (`src/module/base.ts`). */
 export interface Module {
   readonly session: Session;
 

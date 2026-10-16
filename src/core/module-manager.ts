@@ -59,7 +59,7 @@ export class ModuleManager {
 
   /** The last saved selection, or `undefined` (the defaults) when nothing valid was saved. */
   private savedSelection(): Set<string> | undefined {
-    const saved = this.session.load("modules");
+    const saved = this.session.load("modules") as { loaded?: unknown } | undefined;
     if (!Array.isArray(saved?.loaded)) return undefined;
     return new Set(saved.loaded.filter((name) => typeof name === "string"));
   }

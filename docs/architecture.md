@@ -48,9 +48,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   and `load`, and owns the session's `ModuleManager` as `moduleManager`.
 - **Saved state.** `session.save(name, data)` writes a `mypi-<name>` custom entry with `pi.appendEntry`, which pi keeps
   out of the model's context. `session.load(name)` returns the data of the last `mypi-<name>` entry on the current
-  branch (`ctx.sessionManager.getBranch()`), or `undefined`. `SavedState` in `types.ts` lists every name and its data
-  type, so a wrong name or shape doesn't compile. `load` trusts the file, so a caller checks the shape before using
-  it. A feature that saves something adds a line to `SavedState`.
+  branch (`ctx.sessionManager.getBranch()`), or `undefined`, typed `unknown` because the file can hold anything. This is
+  the low-level pair: core uses it directly (`ModuleManager` saves `mypi-modules`), and modules use the typed
+  `saveState`/`loadState` on `BaseModule` instead (see [Modules](#modules)).
 - **`ModuleManager`** (`module-manager.ts`) holds the session's module instances and two sets of names: `running`,
   decided on `session_start` and fixed until `/reload`, and `selected`, what `/modules` saved for the next `/reload`.
   `start(modules, reason)` reads the saved selection, picks the modules to load, and runs their `init()`.
@@ -65,9 +65,8 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
   `enum`.
-- **`types.ts`** holds the types shared across folders: `SavedState`, `Command`, `CommandInfo`, `ModuleInfo`,
-  `ModuleLoadMode` (a const object plus a type, the same pattern as `MessageType`), and the module contract, `Module`
-  and `ModuleBase`.
+- **`types.ts`** holds the types shared across folders: `Command`, `CommandInfo`, `ModuleInfo`, `ModuleLoadMode` (a
+  const object plus a type, the same pattern as `MessageType`), and the module contract, `Module` and `ModuleClass`.
   `CommandExec` is still in `src/command/types.ts`.
 - **`util/errors.ts`** has `errorMessage` (any thrown value to a string) and `isNodeError` (narrows to
   `NodeJS.ErrnoException`).
@@ -94,10 +93,11 @@ the module modal and `/modules list` prints each module as `loaded: <name>` or `
 ## Modules
 
 Feature modules live in `src/module/<name>/`, each with a design doc in `docs/modules/<name>.md`. A module's `index.ts`
-is its public surface: a class implementing `Module` (`src/core/types.ts`).
+is its public surface: a class that extends `BaseModule` (`src/module/base.ts`), which implements `Module`
+(`src/core/types.ts`).
 
 ```ts
-export type ModuleBase = new (session: Session) => Module;
+export type ModuleClass = new (session: Session) => Module;
 
 export interface Module {
   readonly session: Session;
@@ -107,7 +107,15 @@ export interface Module {
 }
 ```
 
-- `ModuleBase` is the constructor type, so every module is built the same way: `new Module(session)`.
+- `ModuleClass` is the constructor type, so every module is built the same way: `new Module(session)`.
+- **`BaseModule<State>`** is the module SDK: a module owns everything about itself, including its saved state, and
+  core never lists it. It gives defaults for `init()` (nothing) and `commands()` (none), so a module only writes what it
+  uses, and `info` is the one thing it must provide. `State` is the module's own state type, declared in its folder
+  (`class PlanBuildModule extends BaseModule<{ mode: Mode }>`). The protected `saveState(state)` and `loadState()`
+  store it as `mypi-module-<info.name>`, typed by `State`, so saving the wrong shape doesn't compile. The `module-`
+  prefix keeps modules apart from core's own entries, even for a module named `modules`. `loadState` trusts the file,
+  so check any field you rely on. Add helpers here when a module first needs them (event handlers, tools, prompt
+  sections), so the SDK only holds what's used.
 - `Module`, `ModuleInfo` and `ModuleLoadMode` live in `src/core/types.ts`. `loadType` is `ON_LOAD` (loaded by default),
   `ON_DEMAND` (loaded only when chosen in `/modules`), or `ALWAYS` (loaded on every `session_start` and can't be
   unloaded). `pickLoaded` always picks `ALWAYS` modules and `select` always keeps them;
@@ -115,11 +123,11 @@ export interface Module {
 - `src/module/index.ts` lists the module classes. `loadModules(session, reason)` builds each one and hands them to
   `session.moduleManager.start(modules, reason)`, which picks the ones to load and runs their `init()`.
   `registerCommand` then reads the commands from the manager.
-- A module reaches pi through `session.pi` and `session.ctx`, and keeps its own state as fields. Modules don't reach for
-  globals or import each other's internals.
+- A module reaches pi through `session.pi` and `session.ctx`, keeps its runtime state as fields, and saves what must
+  survive `/reload` with `saveState`. Modules don't reach for globals or import each other's internals.
 
-To add a module, create `src/module/<name>/index.ts` with a class implementing `Module`, then add the class to the list
-in `src/module/index.ts`.
+To add a module, create `src/module/<name>/index.ts` with a class extending `BaseModule`, then add the class to the
+list in `src/module/index.ts`.
 
 ## UI components
 
