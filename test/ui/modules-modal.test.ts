@@ -1,14 +1,9 @@
-import {
-  type ExtensionAPI,
-  type ExtensionContext,
-  initTheme,
-  type Theme,
-} from "@earendil-works/pi-coding-agent";
+import { type ExtensionContext, initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { Session } from "#core/session";
-import { type Module, ModuleLoadMode } from "#core/types";
+import { ModuleLoadMode } from "#core/types";
 import { openModulesModal } from "#ui/modules-modal";
+import { fakeSession as fakeFor, fakeModule } from "../fakes";
 
 const SPACE = " ";
 const ENTER = "\r";
@@ -20,37 +15,18 @@ const theme = {
   bg: (_color: string, text: string) => text,
 } as unknown as Theme;
 
-type Factory = (
-  tui: unknown,
-  theme: Theme,
-  keybindings: unknown,
-  done: (result: unknown) => void,
-) => Component;
-
-function fakeModule(name: string): Module {
-  return {
-    session: {} as Session,
-    info: {
-      name,
-      description: `${name} module`,
-      commands: [],
-      loadType: ModuleLoadMode.ON_LOAD,
-    },
-    init: () => {},
-    commands: () => [],
-  };
-}
+type Factory = (tui: unknown, theme: Theme, keybindings: unknown, done: (result: unknown) => void) => Component;
 
 // Modules a, b and c; a and c are running.
 function fakeSession() {
-  const ctx = {
-    hasUI: true,
-    ui: { notify: vi.fn() },
-  } as unknown as ExtensionContext;
-  const session = new Session(ctx, {} as ExtensionAPI);
+  const { session } = fakeFor();
   session.moduleManager.start(
-    [fakeModule("a"), fakeModule("b"), fakeModule("c")],
-    new Set(["a", "c"]),
+    [
+      fakeModule("a", ModuleLoadMode.ON_LOAD),
+      fakeModule("b", ModuleLoadMode.ON_DEMAND),
+      fakeModule("c", ModuleLoadMode.ON_LOAD),
+    ],
+    "startup",
   );
   return session;
 }
@@ -80,9 +56,7 @@ beforeAll(() => initTheme("dark"));
 describe("openModulesModal", () => {
   it("refuses to open outside TUI mode", async () => {
     const { ctx, custom } = fakeContext([], "print");
-    await expect(openModulesModal(ctx, fakeSession())).rejects.toThrow(
-      "/modules requires TUI mode",
-    );
+    await expect(openModulesModal(ctx, fakeSession())).rejects.toThrow("/modules requires TUI mode");
     expect(custom).not.toHaveBeenCalled();
   });
 

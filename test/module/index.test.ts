@@ -1,18 +1,16 @@
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
-import { Session } from "#core/session";
+import { describe, expect, it } from "vitest";
+import type { Session } from "#core/session";
 import { ModuleLoadMode } from "#core/types";
 import { loadModules } from "#module/index";
+import { customEntry, fakeSession as fake } from "../fakes";
 
-function fakeSession() {
-  const ctx = {
-    hasUI: true,
-    ui: { notify: vi.fn() },
-  } as unknown as ExtensionContext;
-  return new Session(ctx, {} as ExtensionAPI);
+const fakeSession = (branch: unknown[] = []): Session => fake(branch).session;
+
+/** A branch holding a save that selects every module. */
+function everyModuleSaved() {
+  const session = fakeSession();
+  loadModules(session, "startup");
+  return [customEntry("mypi-modules", { loaded: session.moduleManager.moduleInfos.map((m) => m.name) })];
 }
 
 // These run the real module list, so they check the rules, not any one module's load mode.
@@ -23,23 +21,32 @@ describe("loadModules", () => {
     expect(session.moduleManager.moduleInfos.length).toBeGreaterThan(0);
   });
 
-  it.each(["startup", "reload"] as const)(
-    "starts every module that isn't ON_DEMAND on %s",
-    (reason) => {
-      const session = fakeSession();
-      loadModules(session, reason);
-      for (const info of session.moduleManager.moduleInfos) {
-        expect(info.isLoaded).toBe(info.loadType !== ModuleLoadMode.ON_DEMAND);
-      }
-    },
-  );
+  it.each(["startup", "reload"] as const)("starts every module that isn't ON_DEMAND on %s", (reason) => {
+    const session = fakeSession();
+    loadModules(session, reason);
+    for (const info of session.moduleManager.moduleInfos) {
+      expect(info.isLoaded).toBe(info.loadType !== ModuleLoadMode.ON_DEMAND);
+    }
+  });
+
+  it("runs a saved selection on reload", () => {
+    const session = fakeSession(everyModuleSaved());
+    loadModules(session, "reload");
+    for (const info of session.moduleManager.moduleInfos) expect(info.isLoaded).toBe(true);
+  });
+
+  it("ignores a saved selection on startup", () => {
+    const session = fakeSession(everyModuleSaved());
+    loadModules(session, "startup");
+    for (const info of session.moduleManager.moduleInfos) {
+      expect(info.isLoaded).toBe(info.loadType !== ModuleLoadMode.ON_DEMAND);
+    }
+  });
 
   it("gives every command a name and description", () => {
     const session = fakeSession();
     loadModules(session, "startup");
-    const commands = session.moduleManager.moduleInfos.flatMap(
-      (info) => info.commands,
-    );
+    const commands = session.moduleManager.moduleInfos.flatMap((info) => info.commands);
     for (const command of commands) {
       expect(command.name).not.toBe("");
       expect(command.description).not.toBe("");

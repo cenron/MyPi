@@ -1,11 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import {
-  Box,
-  type Component,
-  Container,
-  truncateToWidth,
-  visibleWidth,
-} from "@earendil-works/pi-tui";
+import { Box, type Component, Container, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 /** Dialog settings. */
 type DialogOptions = {
@@ -28,17 +22,11 @@ export class Dialog extends Container {
   }
 
   render(width: number): string[] {
-    const title = truncateToWidth(
-      ` ${this.options.title} `,
-      width - 3,
-      this.theme.fg("accent", "…"),
-    );
+    const title = truncateToWidth(` ${this.options.title} `, width - 3, this.theme.fg("accent", "…"));
     const topFill = Math.max(0, width - visibleWidth(title) - 3);
     const bottomFill = Math.max(0, width - 2);
 
-    const top =
-      this.theme.fg("accent", `╭─${title}`) +
-      this.theme.fg("accent", `${"─".repeat(topFill)}╮`);
+    const top = this.theme.fg("accent", `╭─${title}`) + this.theme.fg("accent", `${"─".repeat(topFill)}╮`);
     const bottom = this.theme.fg("accent", `╰${"─".repeat(bottomFill)}╯`);
 
     return [top, ...super.render(width), bottom];

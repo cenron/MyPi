@@ -1,33 +1,6 @@
 import type { SessionStartEvent } from "@earendil-works/pi-coding-agent";
-import {
-  type Command,
-  type Module,
-  type ModuleInfo,
-  ModuleLoadMode,
-} from "./types";
-
-/**
- * Picks the modules to load: every `ALWAYS` module, plus the saved set on `reload`, or the `ON_LOAD` defaults when
- * the reason isn't `reload` or nothing was saved. Saved names that match no module drop out; the result keeps list order.
- */
-export function pickLoaded(
-  reason: SessionStartEvent["reason"],
-  saved: Set<string> | undefined,
-  modules: Pick<ModuleInfo, "name" | "loadType">[],
-): Set<string> {
-  const restore = reason === "reload" ? saved : undefined;
-  return new Set(
-    modules
-      .filter(
-        (m) =>
-          m.loadType === ModuleLoadMode.ALWAYS ||
-          (restore
-            ? restore.has(m.name)
-            : m.loadType === ModuleLoadMode.ON_LOAD),
-      )
-      .map((m) => m.name),
-  );
-}
+import type { Session } from "./session";
+import { type Command, type Module, type ModuleInfo, ModuleLoadMode } from "./types";
 
 /** Owns the session's modules: which ones are running, and which the user selected for the next `/reload`. */
 export class ModuleManager {
@@ -37,11 +10,19 @@ export class ModuleManager {
   /** The user's choice from `/modules`, applied on the next `/reload`. */
   private selected = new Set<string>();
 
-  /** Takes the session's modules and runs `init()` on the ones in `names`. */
-  start(modules: Module[], names: Set<string>) {
+  constructor(readonly session: Session) {}
+
+  /** Takes the session's modules, picks the ones to load for `reason`, and runs `init()` on them. */
+  start(modules: Module[], reason: SessionStartEvent["reason"]) {
     this.modules = modules;
-    this.running = new Set(names);
-    this.selected = new Set(names);
+
+    this.running = this.pickLoaded(
+      reason,
+      this.savedSelection(),
+      modules.map((module) => module.info),
+    );
+    this.selected = new Set(this.running);
+
     for (const module of modules) {
       if (this.running.has(module.info.name)) module.init();
     }
@@ -61,19 +42,47 @@ export class ModuleManager {
 
   /** Commands of the running modules only. */
   getCommands(): Command[] {
-    return this.modules
-      .filter((module) => this.running.has(module.info.name))
-      .flatMap((module) => module.commands());
+    return this.modules.filter((module) => this.running.has(module.info.name)).flatMap((module) => module.commands());
   }
 
   /** Stores the user's selection with every `ALWAYS` module added, and returns it in list order. */
   select(names: Set<string>): string[] {
     // Same rule as restoring a saved set on reload.
-    this.selected = pickLoaded(
+    this.selected = this.pickLoaded(
       "reload",
       names,
       this.modules.map((module) => module.info),
     );
+    this.session.save("modules", { loaded: [...this.selected] });
     return [...this.selected];
+  }
+
+  /** The last saved selection, or `undefined` (the defaults) when nothing valid was saved. */
+  private savedSelection(): Set<string> | undefined {
+    const saved = this.session.load("modules");
+    if (!Array.isArray(saved?.loaded)) return undefined;
+    return new Set(saved.loaded.filter((name) => typeof name === "string"));
+  }
+
+  /**
+   * Picks the modules to load: every `ALWAYS` module, plus the saved set on `reload`, or the `ON_LOAD` defaults when
+   * the reason isn't `reload` or nothing was saved. Saved names that match no module drop out; the result keeps list
+   * order.
+   */
+  private pickLoaded(
+    reason: SessionStartEvent["reason"],
+    saved: Set<string> | undefined,
+    modules: Pick<ModuleInfo, "name" | "loadType">[],
+  ): Set<string> {
+    const restore = reason === "reload" ? saved : undefined;
+    return new Set(
+      modules
+        .filter(
+          (m) =>
+            m.loadType === ModuleLoadMode.ALWAYS ||
+            (restore ? restore.has(m.name) : m.loadType === ModuleLoadMode.ON_LOAD),
+        )
+        .map((m) => m.name),
+    );
   }
 }

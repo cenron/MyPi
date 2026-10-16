@@ -1,7 +1,4 @@
-import {
-  getSettingsListTheme,
-  type Theme,
-} from "@earendil-works/pi-coding-agent";
+import { getSettingsListTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, SettingsList } from "@earendil-works/pi-tui";
 
 /** One row: `on` picks the starting circle. */
@@ -30,12 +27,7 @@ const APPLY_ID = "__apply__";
 export class ToggleList implements Component {
   private readonly list: SettingsList;
 
-  constructor(
-    theme: Theme,
-    items: ToggleItem[],
-    handlers: ToggleListHandlers,
-    maxVisible = 15,
-  ) {
+  constructor(theme: Theme, items: ToggleItem[], handlers: ToggleListHandlers, maxVisible = 15) {
     const on = theme.fg("success", "●");
     const off = theme.fg("dim", "○");
 
@@ -61,10 +53,7 @@ export class ToggleList implements Component {
       rows,
       Math.min(rows.length + 2, maxVisible),
       getSettingsListTheme(),
-      (id, value) =>
-        id === APPLY_ID
-          ? handlers.onAccept?.()
-          : handlers.onToggle(id, value === on),
+      (id, value) => (id === APPLY_ID ? handlers.onAccept?.() : handlers.onToggle(id, value === on)),
       handlers.onCancel,
     );
   }

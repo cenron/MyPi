@@ -24,7 +24,7 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 
 | Piece | pi hook | Notes |
 |---|---|---|
-| Mode state | `pi.appendEntry("mypi-mode", …)`, read back on `session_start` | Same as pi's `examples/extensions/plan-mode`. No state files. |
+| Mode state | `session.save("plan-build", …)` (a `mypi-plan-build` entry), read back with `session.load("plan-build")` in `init()` | Add a `"plan-build"` line to `SavedState` in `src/core/types.ts`; its comment already sketches `{ mode: Mode }`. Check the loaded shape, as `ModuleManager` does. Same idea as pi's `examples/extensions/plan-mode`. No state files. |
 | Telling the model | `before_agent_start`: `event.systemPromptOptions.sections` | Pi diffs sections and appends only the change, so the prompt cache stays warm. Leaving Plan replaces the section with a "no longer in plan mode" text instead of dropping it, as OpenCode does. |
 | Hiding tools | `pi.setActiveTools()` | Saves the tool list from before Plan and restores it on leaving. `submit_plan` is active only in Plan. |
 | Blocking | `tool_call` guard | The real enforcement. Codemode and deferred tools stay callable while inactive, and nested `ctx.executeTool` calls also pass through `tool_call`. Bash asks through `ctx.ui.confirm`; see `examples/extensions/permission-gate.ts`. |

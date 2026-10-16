@@ -1,7 +1,4 @@
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 import type { Session } from "#core/session";
 import type { Command } from "#core/types";
@@ -9,19 +6,15 @@ import { errorMessage } from "#core/util/errors";
 import { modulesCmd } from "./modules";
 import { myPiCmd } from "./mypi";
 
-/** Registers MyPi's own commands, then every module's, each wrapped in `runCommand`. */
+/** Registers MyPi's own commands, then the running modules', each wrapped in `runCommand`. */
 export function registerCommand(pi: ExtensionAPI, session: Session) {
   // Load the built-in commands, and only those from loaded modules.
-  const commandList = [
-    ...createCommand(session),
-    ...session.moduleManager.getCommands(),
-  ];
+  const commandList = [...createCommand(session), ...session.moduleManager.getCommands()];
 
   for (const cmd of commandList) {
     pi.registerCommand(cmd.info.name, {
       description: cmd.info.description,
-      handler: async (args: string, ctx: ExtensionCommandContext) =>
-        await runCommand(cmd, args, ctx),
+      handler: async (args: string, ctx: ExtensionCommandContext) => await runCommand(cmd, args, ctx),
     });
   }
 }
@@ -32,11 +25,7 @@ const createCommand = (session: Session): Command[] => {
 };
 
 /** Runs a command, shows its returned message as `info`, and turns a thrown error into an `error` notification. */
-const runCommand = async (
-  cmd: Command,
-  args: string,
-  ctx: ExtensionCommandContext,
-) => {
+const runCommand = async (cmd: Command, args: string, ctx: ExtensionCommandContext) => {
   try {
     const message = await cmd.execute(ctx, splitArgs(args));
     if (message) ctx.ui.notify(message, "info");
@@ -46,5 +35,4 @@ const runCommand = async (
 };
 
 /** Splits pi's raw argument string on whitespace, dropping empty parts. */
-const splitArgs = (args: string): string[] =>
-  args.trim().split(/\s+/).filter(Boolean);
+const splitArgs = (args: string): string[] => args.trim().split(/\s+/).filter(Boolean);

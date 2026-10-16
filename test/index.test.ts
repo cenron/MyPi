@@ -34,6 +34,7 @@ function fakeContext() {
   return {
     hasUI: true,
     ui: { notify: vi.fn() },
+    sessionManager: { getBranch: () => [] },
   } as unknown as ExtensionCommandContext;
 }
 
@@ -83,8 +84,6 @@ describe("mypi extension", () => {
       type: "session_shutdown",
       reason: "quit",
     };
-    expect(() =>
-      handlers.get("session_shutdown")?.(event, fakeContext()),
-    ).not.toThrow();
+    expect(() => handlers.get("session_shutdown")?.(event, fakeContext())).not.toThrow();
   });
 });

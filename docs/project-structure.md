@@ -22,7 +22,7 @@ MyPi/
 │   ├── command/           # Slash commands: types, registry, one file or folder per command   (#command/<file>)
 │   ├── module/            # Module list, loadModules, one folder per module   (#module/<file>)
 │   └── ui/                # Feature UI (modules-modal.ts); components/: Dialog, ToggleList   (#ui/<file>)
-├── test/                  # vitest tests, mirroring src/ (index.test.ts covers the wiring)
+├── test/                  # vitest tests, mirroring src/ (index.test.ts covers the wiring; fakes.ts: shared fakes)
 └── resources/
     ├── skills/            # <name>/SKILL.md
     ├── prompts/           # <name>.md prompt templates

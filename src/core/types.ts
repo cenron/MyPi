@@ -1,6 +1,12 @@
 import type { CommandExec } from "#command/types";
 import type { Session } from "./session";
 
+/** Everything MyPi saves in the session, by name; stored as `mypi-<name>`. */
+export type SavedState = {
+  modules: { loaded: string[] };
+  // "plan-build": { mode: Mode };
+};
+
 /**
  * When a module loads: `ALWAYS` every time and can't be unloaded, `ON_LOAD` by default, `ON_DEMAND` only when chosen
  * in `/modules`.
@@ -11,8 +17,7 @@ export const ModuleLoadMode = {
   ON_DEMAND: "on_demand",
 } as const;
 
-export type ModuleLoadMode =
-  (typeof ModuleLoadMode)[keyof typeof ModuleLoadMode];
+export type ModuleLoadMode = (typeof ModuleLoadMode)[keyof typeof ModuleLoadMode];
 
 /** A slash command's name (without the `/`) and the description pi shows for it. */
 export type CommandInfo = {

@@ -24,29 +24,21 @@ export function modulesCmd(session: Session): Command {
   };
 }
 
-/** Opens the module modal and reports the saved selection; Escape shows nothing. Needs TUI mode. */
-const openModal = async (
-  ctx: ExtensionCommandContext,
-  session: Session,
-): Promise<string | undefined> => {
+/** Opens the module modal. Save stores the selection and asks for `/reload`; Escape shows nothing. Needs TUI mode. */
+const openModal = async (ctx: ExtensionCommandContext, session: Session): Promise<string | undefined> => {
   const selected = await openModulesModal(ctx, session);
 
   if (selected === undefined) return undefined; // Escape: show nothing
 
   const loadedNames = session.moduleManager.select(selected);
 
-  session.logWarning(
-    `Need to /reload to enable/disable modules \n\t${loadedNames.join("\n\t")}`,
-  );
+  session.logWarning(`Need to /reload to enable/disable modules \n\t${loadedNames.join("\n\t")}`);
 
   return "";
 };
 
-/** One module name per line. */
+/** Every module, one per line, as `loaded: <name>` or `not loaded: <name>` (what's running, not the selection). */
 const listModules = (session: Session): string =>
   session.moduleManager.moduleInfos
-    .map(
-      (module) =>
-        `${module.isLoaded ? "loaded" : "not loaded"}: ${module.name}`,
-    )
+    .map((module) => `${module.isLoaded ? "loaded" : "not loaded"}: ${module.name}`)
     .join("\n");
