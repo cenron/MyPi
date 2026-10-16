@@ -12,10 +12,10 @@ import { registerCommand } from "./command";
 export class MyPi {
   constructor(readonly pi: ExtensionAPI) {}
 
-  onSessionStart(_ev: SessionStartEvent, ctx: ExtensionContext) {
+  onSessionStart(ev: SessionStartEvent, ctx: ExtensionContext) {
     const session = new Session(ctx, this.pi);
-    const modules = loadModules(session);
-    registerCommand(this.pi, session, modules);
+    loadModules(session, ev.reason);
+    registerCommand(this.pi, session);
   }
 
   onSessionEnd(_ev: SessionShutdownEvent, _ctx: ExtensionContext) {}

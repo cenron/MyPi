@@ -32,10 +32,21 @@ const openModal = async (
   const selected = await openModulesModal(ctx, session);
 
   if (selected === undefined) return undefined; // Escape: show nothing
-  return `Selected: ${selected.join(", ") || "none"}`; // Save
+
+  const loadedNames = session.moduleManager.select(selected);
+
+  session.logWarning(
+    `Need to /reload to enable/disable modules \n\t${loadedNames.join("\n\t")}`,
+  );
+
+  return "";
 };
 
 /** One module name per line. */
-const listModules = (session: Session): string => {
-  return session.modules.map((m) => m.name).join("\n");
-};
+const listModules = (session: Session): string =>
+  session.moduleManager.moduleInfos
+    .map(
+      (module) =>
+        `${module.isLoaded ? "loaded" : "not loaded"}: ${module.name}`,
+    )
+    .join("\n");

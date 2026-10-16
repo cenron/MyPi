@@ -6,19 +6,15 @@ import type {
 import type { Session } from "#core/session";
 import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
-import type { Module } from "#module/module";
-import { modulesCmd } from "./modules/index";
+import { modulesCmd } from "./modules";
 import { myPiCmd } from "./mypi";
 
 /** Registers MyPi's own commands, then every module's, each wrapped in `runCommand`. */
-export function registerCommand(
-  pi: ExtensionAPI,
-  session: Session,
-  modules: Module[],
-) {
+export function registerCommand(pi: ExtensionAPI, session: Session) {
+  // Load the built-in commands, and only those from loaded modules.
   const commandList = [
     ...createCommand(session),
-    ...modules.flatMap((module) => module.commands()),
+    ...session.moduleManager.getCommands(),
   ];
 
   for (const cmd of commandList) {

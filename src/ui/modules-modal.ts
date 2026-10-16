@@ -11,12 +11,12 @@ import { ToggleList } from "./components/toggle-list";
 export async function openModulesModal(
   ctx: ExtensionContext,
   session: Session,
-): Promise<string[] | undefined> {
+): Promise<Set<string> | undefined> {
   if (ctx.mode !== "tui") throw new Error("/modules requires TUI mode");
 
-  return await ctx.ui.custom<string[] | undefined>(
+  return await ctx.ui.custom<Set<string> | undefined>(
     (_tui, theme: Theme, _keybindings, done) =>
-      modal(theme, done, session.modules),
+      modal(theme, done, session.moduleManager.moduleInfos),
     {
       overlay: true,
       overlayOptions: {
@@ -28,17 +28,19 @@ export async function openModulesModal(
   );
 }
 
-/** Builds the dialog. Toggles edit a local copy of the loaded set, so nothing outside changes until Save. */
+/** Builds the dialog. Toggles edit a local copy of the selected set, so nothing outside changes until Save. */
 const modal = (
   theme: Theme,
-  done: (selected: string[] | undefined) => void,
+  done: (selected: Set<string> | undefined) => void,
   modules: ModuleInfo[],
 ) => {
   const container = new Dialog(theme, {
     title: "Modules",
   });
 
-  const loaded = new Set(modules.filter((m) => m.isLoaded).map((m) => m.name));
+  const loaded = new Set(
+    modules.filter((m) => m.isSelected).map((m) => m.name),
+  );
 
   const list = new ToggleList(
     theme,
@@ -51,7 +53,9 @@ const modal = (
     {
       onToggle: (id, on) => (on ? loaded.add(id) : loaded.delete(id)),
       onAccept: () =>
-        done(modules.filter((m) => loaded.has(m.name)).map((m) => m.name)),
+        done(
+          new Set(modules.filter((m) => loaded.has(m.name)).map((m) => m.name)),
+        ),
       onCancel: () => done(undefined),
     },
   );

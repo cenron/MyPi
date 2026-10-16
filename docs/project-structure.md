@@ -18,9 +18,9 @@ MyPi/
 │   └── modules/           # One doc per module, built or planned
 ├── src/
 │   ├── mypi.ts            # MyPi class: pi event handlers
-│   ├── core/              # Session, Notifier, shared types, util/   (#core/<file>)
+│   ├── core/              # Session, ModuleManager, Notifier, shared types (incl. Module), util/   (#core/<file>)
 │   ├── command/           # Slash commands: types, registry, one file or folder per command   (#command/<file>)
-│   ├── module/            # Module contract, module list, one folder per module   (#module/<file>)
+│   ├── module/            # Module list, loadModules, one folder per module   (#module/<file>)
 │   └── ui/                # Feature UI (modules-modal.ts); components/: Dialog, ToggleList   (#ui/<file>)
 ├── test/                  # vitest tests, mirroring src/ (index.test.ts covers the wiring)
 └── resources/

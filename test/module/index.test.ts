@@ -15,42 +15,34 @@ function fakeSession() {
   return new Session(ctx, {} as ExtensionAPI);
 }
 
+// These run the real module list, so they check the rules, not any one module's load mode.
 describe("loadModules", () => {
-  it("builds every module with the session", () => {
+  it("hands every module to the session's ModuleManager", () => {
     const session = fakeSession();
-    const modules = loadModules(session);
-    expect(modules.length).toBeGreaterThan(0);
-    for (const module of modules) expect(module.session).toBe(session);
+    loadModules(session, "startup");
+    expect(session.moduleManager.moduleInfos.length).toBeGreaterThan(0);
   });
 
-  // A module's info getter can return a new object on every read, so the flag must live on the session's copy.
-  it("marks every module that isn't ON_DEMAND as loaded in session.modules", () => {
-    const session = fakeSession();
-    const modules = loadModules(session);
-
-    expect(session.modules.map((m) => m.name)).toEqual(
-      modules.map((m) => m.info.name),
-    );
-    for (const info of session.modules) {
-      expect(info.isLoaded).toBe(info.loadType !== ModuleLoadMode.ON_DEMAND);
-    }
-  });
-
-  it("loads plan-build", () => {
-    const session = fakeSession();
-    loadModules(session);
-    expect(session.modules.find((m) => m.name === "plan-build")?.isLoaded).toBe(
-      true,
-    );
-  });
+  it.each(["startup", "reload"] as const)(
+    "starts every module that isn't ON_DEMAND on %s",
+    (reason) => {
+      const session = fakeSession();
+      loadModules(session, reason);
+      for (const info of session.moduleManager.moduleInfos) {
+        expect(info.isLoaded).toBe(info.loadType !== ModuleLoadMode.ON_DEMAND);
+      }
+    },
+  );
 
   it("gives every command a name and description", () => {
-    const commands = loadModules(fakeSession()).flatMap((module) =>
-      module.commands(),
+    const session = fakeSession();
+    loadModules(session, "startup");
+    const commands = session.moduleManager.moduleInfos.flatMap(
+      (info) => info.commands,
     );
     for (const command of commands) {
-      expect(command.info.name).not.toBe("");
-      expect(command.info.description).not.toBe("");
+      expect(command.name).not.toBe("");
+      expect(command.description).not.toBe("");
     }
   });
 });

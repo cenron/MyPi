@@ -7,7 +7,7 @@ import {
 import type { Component } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
-import { type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { type Module, ModuleLoadMode } from "#core/types";
 import { openModulesModal } from "#ui/modules-modal";
 
 const SPACE = " ";
@@ -27,27 +27,31 @@ type Factory = (
   done: (result: unknown) => void,
 ) => Component;
 
-function moduleInfo(name: string, isLoaded: boolean): ModuleInfo {
+function fakeModule(name: string): Module {
   return {
-    name,
-    description: `${name} module`,
-    commands: [],
-    loadType: ModuleLoadMode.ON_LOAD,
-    isLoaded,
+    session: {} as Session,
+    info: {
+      name,
+      description: `${name} module`,
+      commands: [],
+      loadType: ModuleLoadMode.ON_LOAD,
+    },
+    init: () => {},
+    commands: () => [],
   };
 }
 
+// Modules a, b and c; a and c are running.
 function fakeSession() {
   const ctx = {
     hasUI: true,
     ui: { notify: vi.fn() },
   } as unknown as ExtensionContext;
   const session = new Session(ctx, {} as ExtensionAPI);
-  session.modules = [
-    moduleInfo("a", true),
-    moduleInfo("b", false),
-    moduleInfo("c", true),
-  ];
+  session.moduleManager.start(
+    [fakeModule("a"), fakeModule("b"), fakeModule("c")],
+    new Set(["a", "c"]),
+  );
   return session;
 }
 
@@ -64,8 +68,10 @@ function fakeContext(keys: string[], mode = "tui") {
   return { ctx, custom };
 }
 
-function press(keys: string[]) {
-  return openModulesModal(fakeContext(keys).ctx, fakeSession());
+/** Opens the modal, presses the keys, and returns the saved names as an array, or `undefined` on Escape. */
+async function press(keys: string[], session = fakeSession()) {
+  const result = await openModulesModal(fakeContext(keys).ctx, session);
+  return result && [...result];
 }
 
 // getSettingsListTheme() reads pi's global theme, which tests have to set up.
@@ -86,12 +92,19 @@ describe("openModulesModal", () => {
     expect(custom.mock.calls[0]?.[1]).toMatchObject({ overlay: true });
   });
 
-  it("saves the loaded modules when nothing changed", async () => {
+  it("saves the selected modules when nothing changed", async () => {
     expect(await press([UP, ENTER])).toEqual(["a", "c"]);
   });
 
   it("saves the selection in list order, not toggle order", async () => {
     expect(await press([SPACE, SPACE, UP, ENTER])).toEqual(["a", "c"]);
+  });
+
+  // After a Save, the modal reopens on that choice even though /reload hasn't applied it yet.
+  it("starts from the selection, not what's running", async () => {
+    const session = fakeSession();
+    session.moduleManager.select(new Set(["b"]));
+    expect(await press([UP, ENTER], session)).toEqual(["b"]);
   });
 
   it("discards the selection on Escape", async () => {

@@ -1,4 +1,5 @@
 import type { CommandExec } from "#command/types";
+import type { Session } from "./session";
 
 /**
  * When a module loads: `ALWAYS` every time and can't be unloaded, `ON_LOAD` by default, `ON_DEMAND` only when chosen
@@ -25,11 +26,29 @@ export type Command = {
   execute: CommandExec;
 };
 
-/** What a module reports about itself; `isLoaded` is set by `loadModules`. */
+/** What a module reports about itself; `ModuleManager` sets `isLoaded` (running) and `isSelected` (next reload). */
 export type ModuleInfo = {
   name: string;
   description: string;
   commands: CommandInfo[];
   loadType: ModuleLoadMode;
   isLoaded?: boolean;
+  isSelected?: boolean;
 };
+
+/** A module class: every module is built as `new Module(session)`. */
+export type ModuleBase = new (session: Session) => Module;
+
+/** A feature module. Only loaded modules run `init()`. */
+export interface Module {
+  readonly session: Session;
+
+  /** Name, description, command infos, and load mode. */
+  get info(): ModuleInfo;
+
+  /** Registers event handlers and tools, and restores state. */
+  init(): void;
+
+  /** The module's slash commands, registered through `registerCommand`. */
+  commands(): Command[];
+}

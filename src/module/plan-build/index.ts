@@ -1,6 +1,10 @@
 import type { Session } from "#core/session";
-import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
-import type { Module } from "../module";
+import {
+  type Command,
+  type Module,
+  type ModuleInfo,
+  ModuleLoadMode,
+} from "#core/types";
 
 export class PlanBuildModule implements Module {
   constructor(readonly session: Session) {}
@@ -11,7 +15,7 @@ export class PlanBuildModule implements Module {
       description:
         "Plan changes in a restricted mode, then switch to Build to implement them.",
       commands: this.commands().flatMap((command) => command.info),
-      loadType: ModuleLoadMode.ON_LOAD,
+      loadType: ModuleLoadMode.ON_DEMAND,
     };
   }
 

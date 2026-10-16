@@ -63,15 +63,17 @@ describe("mypi extension", () => {
     }
   });
 
-  it("registers every module's commands", () => {
+  it("registers commands from running modules only", () => {
     const { pi, commands, handlers } = loadExtension();
     startSession(handlers);
+
     const session = new Session(fakeContext(), pi);
-    const names = loadModules(session).flatMap((module) =>
-      module.commands().map((command) => command.info.name),
-    );
-    expect(names.length).toBeGreaterThan(0);
-    for (const name of names) expect(commands.has(name)).toBe(true);
+    loadModules(session, "startup");
+    for (const info of session.moduleManager.moduleInfos) {
+      for (const command of info.commands) {
+        expect(commands.has(command.name)).toBe(info.isLoaded);
+      }
+    }
   });
 
   it("handles session shutdown without throwing", () => {
