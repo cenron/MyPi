@@ -6,10 +6,11 @@ import type {
   SessionShutdownEvent,
   SessionStartEvent,
 } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { Session } from "#core/session";
 import { loadModules } from "#module/index";
 import mypi from "../index";
+import { fakeUI } from "./fakes";
 
 type CommandOptions = Omit<RegisteredCommand, "name" | "sourceInfo">;
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
@@ -33,7 +34,7 @@ function loadExtension() {
 function fakeContext() {
   return {
     hasUI: true,
-    ui: { notify: vi.fn() },
+    ui: fakeUI(),
     sessionManager: { getBranch: () => [] },
   } as unknown as ExtensionCommandContext;
 }

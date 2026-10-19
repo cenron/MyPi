@@ -84,4 +84,13 @@ describe("openModulesModal", () => {
   it("discards the selection on Escape", async () => {
     expect(await press([SPACE, ESCAPE])).toBeUndefined();
   });
+
+  it("locks ALWAYS modules, so toggling them changes nothing", async () => {
+    const { session } = fakeFor();
+    session.moduleManager.start(
+      [fakeModule("core", ModuleLoadMode.ALWAYS), fakeModule("a", ModuleLoadMode.ON_LOAD)],
+      "startup",
+    );
+    expect(await press([SPACE, UP, ENTER], session)).toEqual(["core", "a"]);
+  });
 });

@@ -1,6 +1,6 @@
 # Plan / Build
 
-**Status:** planned
+**Status:** building (slice 1 done, slice 2 next)
 
 ## Goal
 
@@ -8,8 +8,11 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 
 ## Behavior
 
-- Sessions start in **Build**. The mode is per session and survives resume and fork.
-- A toggle switches modes at any time. The footer shows the current mode.
+- Sessions start in **Plan**. The mode is per session and survives resume and fork.
+- Three ways to switch, at any time: `/plan` toggles, `/plan plan` and `/plan build` pick a mode, and Shift+Tab
+  toggles. Any other mode is an error; words after the mode are ignored, as in `/modules`. Switching shows no
+  message, since the footer changes.
+- The footer always shows the mode: `BUILD` in dim, `PLAN` in the warning color.
 - In **Plan**:
   - `edit` and `write` are refused, except inside the project's plans folder, `.pi/plans/`.
   - `bash` runs commands on a read-only allowlist without asking, and asks me before running anything else.
@@ -24,7 +27,8 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 
 | Piece | pi hook | Notes |
 |---|---|---|
-| Mode state | `saveState({ mode })`, read back with `loadState()` in `init()` | `PlanBuildModule extends BaseModule<{ mode: Mode }>`, so the module owns its state type and core never lists it. Saved as `mypi-module-plan-build`. Check the loaded `mode` is a real `Mode` before using it. Same idea as pi's `examples/extensions/plan-mode`. No state files. |
+| Mode state | `saveState({ mode })`, read back with `loadState()` in `init()` | `Mode` is a const object plus a type, like `ModuleLoadMode`, in the module's `index.ts` for now. `PlanBuildModule extends BaseModule<{ mode: Mode }>`, so the module owns its state type and core never lists it. Saved as `mypi-module-plan-build`. Check the loaded `mode` with an `isMode` guard, else Plan. Every switch goes through one method that sets the mode, saves it, and updates the footer; `init()` restores and shows the footer without saving, so a `/reload` adds no entry. Same idea as pi's `examples/extensions/plan-mode`. No state files. |
+| Footer | `BaseModule.setFooter({ text, color })`, through MyPi's shared footer | See [Shared footer and editor](#shared-footer-and-editor). Pi clears every status on `/reload` and on each session switch (`resetExtensionUI` in `interactive-mode.js`), so `init()` sets it every time, and an unloaded module's label is gone with no cleanup. |
 | Telling the model | `before_agent_start`: `event.systemPromptOptions.sections` | Pi diffs sections and appends only the change, so the prompt cache stays warm. Leaving Plan replaces the section with a "no longer in plan mode" text instead of dropping it, as OpenCode does. |
 | Hiding tools | `pi.setActiveTools()` | Saves the tool list from before Plan and restores it on leaving. `submit_plan` is active only in Plan. |
 | Blocking | `tool_call` guard | The real enforcement. Codemode and deferred tools stay callable while inactive, and nested `ctx.executeTool` calls also pass through `tool_call`. Bash asks through `ctx.ui.confirm`; see `examples/extensions/permission-gate.ts`. |
@@ -32,7 +36,49 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 | Plan hand-off | `submit_plan` stores the plan and writes it to `.pi/plans/` | Structured text, no parsing of the reply. |
 | Dialog | `agent_settled`, when `aborted` is false and a plan was submitted this run | `agent_end` is too early: the run is still active and retries or follow-ups can follow. |
 | Clear context | A command that calls `ctx.newSession({ withSession })` | `newSession` exists only on a command's context. The choice sends the command with `pi.sendUserMessage(…, { expandPromptTemplates: true })`, which runs extension commands immediately, so it is only safe once the agent is idle. The new session reads the plan from its file. |
-| Toggle key | Shift+Tab | Pi reserves it for `app.thinking.cycle` and skips extension shortcuts on it. Either subclass `CustomEditor`, as radian does, or rebind thinking in `keybindings.json`. |
+| Toggle key | Shift+Tab, through `BaseModule.onKey` and MyPi's shared editor | Shift+Tab is bound to `app.thinking.cycle`, which pi reserves: `pi.registerShortcut("shift+tab")` is skipped with a "conflicts with built-in shortcut" warning (`RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS` in `runner.js`). The shared editor catches the key in `handleInput` before pi's own handling, so it works on any machine without a `keybindings.json` change. Thinking-cycle loses Shift+Tab unless it's rebound there. |
+
+## Shared footer and editor
+
+Plan-build is the first module to need a footer label and a key, and later modules will too, so both are shared MyPi
+UI in `src/ui/`, built per session by `Session` (like `Notifier`) and reached through `BaseModule` helpers.
+
+**Footer** (`src/ui/footer.ts`, built). `Session` builds it next to `Notifier` and exposes it as `session.footer`. A
+module calls `setFooter(item)`, where `FooterItem` is `{ text, color: FooterColor }`, or `setFooter(undefined)` to
+clear. Each module gets one slot, keyed by `info.name`.
+
+- `FooterColor` is a const object of the theme colors that suit the footer (`FooterColor.Warning`, `.Dim`, …), the same
+  pattern as `MessageType`. Pi exports `ThemeColor` only as a type (49 names, most for markdown, syntax, or borders),
+  so this gives modules dot-completion and a short list. `satisfies Record<string, ThemeColor>` checks every value
+  against pi, so a pi rename fails the typecheck in `footer.ts`, not in a module.
+
+- The footer keeps its own map of items and draws them. Today it draws with `ctx.ui.setStatus("mypi-<name>", …)`,
+  which pi merges into one line under its own footer, sorted by key, so MyPi's items sit together. No `hasUI` guard is
+  needed: print mode's `setStatus` does nothing.
+- Built to grow into a full custom footer, in the spirit of
+  [pi-powerline-footer](https://github.com/nicobailon/pi-powerline-footer): segments placed left or right, separators,
+  pi's own data (model, context, git). Modules only talk to MyPi's footer API, so only the drawing changes:
+  - Items keep text and color apart, and the color stays a `FooterColor` name until drawing. A custom footer can then
+    place, recolor, or put the text on a background. `setStatus` alone only takes strings with colors baked in.
+  - `FooterItem` is an object, so fields such as `position`, `icon` or `order` can be added later without touching
+    modules.
+  - `ctx.ui.setFooter(factory)` replaces pi's whole footer, so a custom one has to redraw what pi shows (cwd and branch,
+    tokens and cost, context %, model and thinking level).
+- While MyPi draws through `setStatus`, other footer extensions, pi-powerline-footer included, still show its items.
+
+**Editor** (`src/ui/editor.ts`, built). `Session` builds it next to the footer and exposes it as `session.editor`. A
+module calls `onKey(key, handler)`. The shared editor extends pi's `CustomEditor`,
+runs a registered handler for a matching key, and passes every other key to `super.handleInput`.
+
+- Pi has one editor slot (`ctx.ui.setEditorComponent`), and the last call wins. A powerline-style footer draws in the
+  editor too, so one shared editor avoids modules and the footer fighting over it.
+- Pi copies the default editor's text, border color, padding, autocomplete, and app action handlers onto a
+  `CustomEditor` subclass when it's installed (`setCustomEditorComponent` in `interactive-mode.js`), so nothing is
+  lost.
+- The editor calls a handler on its own, not as a method, so pass an arrow function (`() => this.toggleMode()`). A bare
+  method (`this.toggle`) loses `this` and throws on every key press; typecheck doesn't catch it.
+- It's installed only once a module registers a key, so pi keeps its own editor otherwise. Pi resets the editor on
+  `/reload` and on each session switch, so it's installed again from `init()`, and an unloaded module's keys are gone.
 
 ## Dialog choices
 
@@ -58,21 +104,21 @@ Taken from Codex:
 
 ## Slices
 
-1. `Mode` type, a toggle command, and the footer status.
+1. The `Mode` type, `/plan [plan|build]`, the footer label through the shared footer, saving the mode and restoring it
+   in `init()`, then Shift+Tab through the shared editor. **Done** (2026-10-19).
 2. Prompt sections for entering and leaving Plan.
 3. `tool_call` guard with the plans-folder exception and the bash allowlist plus ask, as a pure function with tests. `setActiveTools` alongside it.
-4. Saving the mode in the session and restoring it.
-5. `submit_plan` and the plan file.
-6. The dialog on `agent_settled`, with the choice list.
-7. The clear-context command.
-8. Shift+Tab.
-9. A question tool.
+4. `submit_plan` and the plan file.
+5. The dialog on `agent_settled`, with the choice list.
+6. The clear-context command.
+7. A question tool.
 
 ## Open questions
 
 - Should `.pi/plans/` be git-ignored or committed?
-- Which Shift+Tab approach: a custom editor or rebinding thinking?
-- What are the command names: `/plan` to toggle, and what for the clear-context command?
+- What's the clear-context command called?
+- Which load type when it's done? The mode survives resume and fork only if the module loads then, which `ON_DEMAND`
+  doesn't do (resume and fork start from the defaults). The code says `ALWAYS` right now.
 - What goes on the bash allowlist? pi's plan-mode example is a starting point, but its regexes let `find -delete`, `awk 'system(…)'`, and `curl -o` through.
 
 ## References
@@ -80,4 +126,5 @@ Taken from Codex:
 - Codex: `codex-rs/collaboration-mode-templates/templates/plan.md` and `codex-rs/tui/src/chatwidget/plan_implementation.rs` in openai/codex
 - OpenCode: `packages/core/src/plugin/plan.ts` in anomalyco/opencode
 - Claude Code: [permission modes, plan mode](https://code.claude.com/docs/en/permission-modes)
-- pi: `examples/extensions/plan-mode/` and `dist/core/agent-session.js` (`prompt`, `_emitAgentSettled`) in the installed package
+- pi: `examples/extensions/plan-mode/`, `examples/extensions/modal-editor.ts` (a `CustomEditor` subclass), and `dist/core/agent-session.js` (`prompt`, `_emitAgentSettled`) in the installed package
+- Footer: [pi-powerline-footer](https://github.com/nicobailon/pi-powerline-footer) (`types.ts` and `segments.ts` for the segment model)

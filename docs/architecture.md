@@ -118,8 +118,8 @@ export interface Module {
   sections), so the SDK only holds what's used.
 - `Module`, `ModuleInfo` and `ModuleLoadMode` live in `src/core/types.ts`. `loadType` is `ON_LOAD` (loaded by default),
   `ON_DEMAND` (loaded only when chosen in `/modules`), or `ALWAYS` (loaded on every `session_start` and can't be
-  unloaded). `pickLoaded` always picks `ALWAYS` modules and `select` always keeps them;
-  locking their row in the modal is still to come (see [Module loading](#module-loading)).
+  unloaded). `pickLoaded` always picks `ALWAYS` modules, `select` always keeps them, and the modal shows their row
+  locked (see [Module loading](#module-loading)).
 - `src/module/index.ts` lists the module classes. `loadModules(session, reason)` builds each one and hands them to
   `session.moduleManager.start(modules, reason)`, which picks the ones to load and runs their `init()`.
   `registerCommand` then reads the commands from the manager.
@@ -143,7 +143,10 @@ mode check lives with the UI, so every caller gets it.
   `Container` doesn't route input, so `Dialog.handleInput` passes every key to every child.
 - **`ToggleList`** wraps pi-tui's `SettingsList` as an on/off list: a green `●` (`theme.fg("success")`) or a grey `○`
   (`theme.fg("dim")`). Callers get `onToggle(id, on)` and never see the ANSI value strings. Passing `onAccept` adds a
-  Save row, and `onCancel` runs on Escape.
+  Save row, and `onCancel` runs on Escape. An item with `disabled: true` is locked: its row has one value, so Space or
+  Enter can't change it, `onToggle` never fires for it, and its label reads `<label> (locked)` in dim. The dim comes
+  from overriding `label` in the `SettingsList` theme. `SettingsList` pads every label to the longest before styling
+  it (`settings-list.js`), so the override matches on `text.trimEnd()`.
 
 Keys follow pi's own `SettingsList` screens, so MyPi feels like pi: Enter or Space changes a row, Escape cancels. When
 changes have to be saved or discarded, the list gets an Apply row, like pi's theme picker (`settings-selector.js`): a
@@ -156,8 +159,8 @@ Pi-tui re-renders right after every key it delivers, so a component doesn't call
 
 ## Module loading
 
-**Status:** built, except locked rows for `ALWAYS` modules (slice 6), which wait for the first `ALWAYS` module. The
-modal, the saved selection, restoring it on `reload`, and registering only running modules' commands all work.
+**Status:** done. The modal with locked rows for `ALWAYS` modules, the saved selection, restoring it on `reload`, and
+registering only running modules' commands all work.
 
 Which modules are loaded is decided once, on `session_start`. Loading and unloading go through `/reload`: `/modules`
 saves the set you want, and the next `/reload` builds MyPi again with that set.
@@ -178,8 +181,8 @@ saves the set you want, and the next `/reload` builds MyPi again with that set.
   the rest of MyPi depends on.
 - `/modules` opens a modal listing every module: a green `●` when loaded, a grey `○` when not, and a Save row last. Up
   and down move through the list, wrapping at the ends. Space or Enter toggles the selected module. Enter on Save saves
-  the set and closes the modal. Escape closes it and discards the changes. An `ALWAYS` module shows a locked `●`
-  that Space or Enter doesn't change, so the list still shows everything that's running.
+  the set and closes the modal. Escape closes it and discards the changes. An `ALWAYS` module's row is locked: a dim
+  `<name> (locked)` with a `●` that Space or Enter doesn't change, so the list still shows everything that's running.
 - Toggling changes nothing outside the modal. Save stores the new set as the selection and warns "Need to /reload to
   enable/disable modules", followed by the selected names. It also writes the selection to the session, so the next
   `/reload` runs it. What's running doesn't change until then.
@@ -198,7 +201,7 @@ saves the set you want, and the next `/reload` builds MyPi again with that set.
 | Applying      | The user runs `/reload`                                                                              | `AgentSession.reload` keeps the session and its history, rebuilds the extension, and sends `session_start` with `reason: "reload"`. It refuses while the agent is responding or compacting.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Modal         | `ctx.ui.custom<Set<string> \| undefined>(...)` as an overlay, with a `Dialog` holding a `ToggleList` | See [UI components](#ui-components). Save calls `done(names)` with a `Set` of the selected names in list order, Escape calls `done(undefined)`. The command passes it to `ModuleManager.select`. Only in `ctx.mode === "tui"`; other modes get an error notification.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Save row      | A `SettingsList` row with a single value                                                             | Pi's theme picker (`settings-selector.js`) saves the same way, so `SettingsList`'s built-in hint stays true.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Locked row    | A `SettingsList` row with one value (`[●]`)                                                          | For `ALWAYS` modules. The same trick as the Save row, so the hint stays true. `ToggleItem` gets `locked?: boolean`, which keeps `ToggleList` generic.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Locked row    | A `SettingsList` row with one value (`[●]`)                                                          | For `ALWAYS` modules: the modal passes `disabled: true` to `ToggleList`. The same one-value trick as the Save row, so the hint stays true, and `onChange` ignores disabled ids. The label gets ` (locked)` and is dimmed through a `label` override in the `SettingsList` theme, matched on `text.trimEnd()` because `SettingsList` pads labels. `ToggleItem.disabled` keeps `ToggleList` generic.                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Circles       | `theme.fg("success", "●")` and `theme.fg("dim", "○")`                                                | Both are `ThemeColor` names in pi 1.2.0.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ### What the code needs
@@ -223,7 +226,7 @@ The UI comes first, then the wiring.
    get their commands registered.
 5. **Done.** Save calls `ModuleManager.select`, which writes `{ loaded: [...selected] }` with `session.save`, and the
    command asks for `/reload`.
-6. Locked rows: `ToggleItem.locked`, and the modal locks `ALWAYS` modules.
+6. **Done.** Locked rows: `ToggleItem.disabled`, and the modal locks `ALWAYS` modules.
 
 ### Open questions
 

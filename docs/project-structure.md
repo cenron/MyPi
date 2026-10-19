@@ -21,7 +21,7 @@ MyPi/
 │   ├── core/              # Session, ModuleManager, Notifier, shared types (incl. Module), util/   (#core/<file>)
 │   ├── command/           # Slash commands: types, registry, one file or folder per command   (#command/<file>)
 │   ├── module/            # BaseModule (the module SDK), module list, loadModules, one folder per module   (#module/<file>)
-│   └── ui/                # Feature UI (modules-modal.ts); components/: Dialog, ToggleList   (#ui/<file>)
+│   └── ui/                # Feature UI (modules-modal.ts), shared footer.ts and editor.ts; components/: Dialog, ToggleList   (#ui/<file>)
 ├── test/                  # vitest tests, mirroring src/ (index.test.ts covers the wiring; fakes.ts: shared fakes)
 └── resources/
     ├── skills/            # <name>/SKILL.md

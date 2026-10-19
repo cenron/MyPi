@@ -1,4 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Editor } from "#ui/editor";
+import { Footer } from "#ui/footer";
 import { ModuleManager } from "./module-manager";
 import { Notifier } from "./notifier";
 
@@ -6,6 +8,8 @@ import { Notifier } from "./notifier";
 export class Session {
   private readonly _notifier: Notifier;
   private readonly _moduleManager: ModuleManager;
+  private readonly _footer: Footer;
+  private readonly _editor: Editor;
 
   constructor(
     readonly ctx: ExtensionContext,
@@ -13,6 +17,8 @@ export class Session {
   ) {
     this._notifier = new Notifier(this.ctx);
     this._moduleManager = new ModuleManager(this);
+    this._footer = new Footer(this.ctx);
+    this._editor = new Editor(this.ctx);
   }
 
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */
@@ -43,5 +49,13 @@ export class Session {
 
   get moduleManager(): ModuleManager {
     return this._moduleManager;
+  }
+
+  get footer(): Footer {
+    return this._footer;
+  }
+
+  get editor(): Editor {
+    return this._editor;
   }
 }

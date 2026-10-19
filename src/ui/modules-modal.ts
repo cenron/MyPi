@@ -1,6 +1,6 @@
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
-import type { ModuleInfo } from "#core/types";
+import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { Dialog } from "./components/dialog";
 import { ToggleList } from "./components/toggle-list";
 
@@ -39,6 +39,7 @@ const modal = (theme: Theme, done: (selected: Set<string> | undefined) => void, 
       label: m.name,
       description: m.description,
       on: loaded.has(m.name),
+      disabled: m.loadType === ModuleLoadMode.ALWAYS,
     })),
     {
       onToggle: (id, on) => (on ? loaded.add(id) : loaded.delete(id)),

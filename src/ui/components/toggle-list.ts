@@ -7,6 +7,7 @@ export type ToggleItem = {
   label: string;
   description?: string;
   on: boolean;
+  disabled?: boolean;
 };
 
 /** Callbacks for a `ToggleList`. Passing `onAccept` adds the Save row. */
@@ -31,13 +32,28 @@ export class ToggleList implements Component {
     const on = theme.fg("success", "●");
     const off = theme.fg("dim", "○");
 
-    const rows = items.map((item) => ({
-      id: item.id,
-      label: item.label,
-      description: item.description,
-      currentValue: item.on ? on : off,
-      values: [on, off],
-    }));
+    const disabledItems = this.getDisabledItems(items);
+    const disabledIds = new Set(disabledItems.map((item) => item.id));
+    const disabledLabels = new Set(disabledItems.map((item) => this.disabledLabel(item.label)));
+
+    // Set our theme for the label, so it can show disabled items in dim text
+    const settingsTheme = getSettingsListTheme();
+    const listTheme = {
+      ...settingsTheme,
+      label: (text: string, selected: boolean) =>
+        disabledLabels.has(text.trimEnd()) ? theme.fg("dim", text) : settingsTheme.label(text, selected),
+    };
+
+    const rows = items.map((item) => {
+      const currentValue = item.on ? on : off;
+      return {
+        id: item.id,
+        label: item.disabled ? this.disabledLabel(item.label) : item.label,
+        description: item.description,
+        currentValue: currentValue,
+        values: item.disabled ? [currentValue] : [on, off],
+      };
+    });
 
     if (handlers.onAccept) {
       rows.push({
@@ -52,8 +68,11 @@ export class ToggleList implements Component {
     this.list = new SettingsList(
       rows,
       Math.min(rows.length + 2, maxVisible),
-      getSettingsListTheme(),
-      (id, value) => (id === APPLY_ID ? handlers.onAccept?.() : handlers.onToggle(id, value === on)),
+      listTheme,
+      (id, value) => {
+        if (id === APPLY_ID) handlers.onAccept?.();
+        else if (!disabledIds.has(id)) handlers.onToggle(id, value === on);
+      },
       handlers.onCancel,
     );
   }
@@ -69,4 +88,8 @@ export class ToggleList implements Component {
   handleInput(data: string): void {
     this.list.handleInput(data);
   }
+
+  private disabledLabel = (label: string) => `${label} (locked)`;
+
+  private getDisabledItems = (items: ToggleItem[]): ToggleItem[] => items.filter((item) => item.disabled);
 }

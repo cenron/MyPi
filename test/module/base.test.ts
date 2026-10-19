@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Session } from "#core/session";
 import { ModuleLoadMode } from "#core/types";
 import { BaseModule } from "#module/base";
+import { FooterColor, type FooterItem } from "#ui/footer";
 import { customEntry, fakeSession } from "../fakes";
 
 /** A module with a counter as its state; `save` and `load` expose the protected state methods. */
@@ -23,6 +24,10 @@ class Counter extends BaseModule<{ count: number }> {
 
   load() {
     return this.loadState();
+  }
+
+  footer(item: FooterItem | undefined) {
+    this.setFooter(item);
   }
 }
 
@@ -64,5 +69,17 @@ describe("BaseModule", () => {
     new Counter(session, "modules").save(1);
     expect(appendEntry).toHaveBeenCalledWith("mypi-module-modules", { count: 1 });
     expect(session.load("modules")).toBeUndefined();
+  });
+
+  it("gives each module one footer slot, keyed by its name", () => {
+    const { session, setStatus } = fakeSession();
+    new Counter(session).footer({ text: "1", color: FooterColor.Accent });
+    new Counter(session, "other").footer({ text: "2", color: FooterColor.Dim });
+    new Counter(session).footer(undefined);
+    expect(setStatus.mock.calls).toEqual([
+      ["mypi-counter", "<accent>1"],
+      ["mypi-other", "<dim>2"],
+      ["mypi-counter", undefined],
+    ]);
   });
 });

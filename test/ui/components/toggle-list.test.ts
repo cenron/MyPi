@@ -9,7 +9,7 @@ const ESCAPE = "\x1b";
 const UP = "\x1b[A";
 const DOWN = "\x1b[B";
 
-// Plain-text colours, so the circles compare as "●" and "○".
+// Plain-text colors, so the circles compare as "●" and "○".
 const theme = {
   fg: (_color: string, text: string) => text,
 } as unknown as Theme;
@@ -85,5 +85,30 @@ describe("ToggleList", () => {
   it("shows the selected row's description", () => {
     const lines = renderText(new ToggleList(theme, items, fakeHandlers()));
     expect(lines.join("\n")).toContain("first");
+  });
+
+  describe("a disabled row", () => {
+    const locked: ToggleItem[] = [
+      { id: "a", label: "a", on: true, disabled: true },
+      { id: "b", label: "a much longer label", on: false },
+    ];
+
+    it("ignores Space and Enter", () => {
+      const handlers = fakeHandlers();
+      const list = new ToggleList(theme, locked, handlers);
+
+      list.handleInput(SPACE);
+      list.handleInput(ENTER);
+
+      expect(handlers.onToggle).not.toHaveBeenCalled();
+      expect(renderText(list)[0]).toMatch(/a \(locked\)\s+●/);
+    });
+
+    // SettingsList pads every label to the longest before styling it, so the disabled one must still match.
+    it("stays dim next to a longer label", () => {
+      const tagDim = { fg: (color: string, text: string) => (color === "dim" ? `<dim>${text}</dim>` : text) };
+      const lines = renderText(new ToggleList(tagDim as unknown as Theme, locked, fakeHandlers()));
+      expect(lines[0]).toMatch(/<dim>a \(locked\)\s*<\/dim>/);
+    });
   });
 });

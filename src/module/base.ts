@@ -1,5 +1,8 @@
+import type { KeyId } from "@earendil-works/pi-tui";
 import type { Session } from "#core/session";
 import type { Command, Module, ModuleInfo } from "#core/types";
+import type { KeyHandler } from "#ui/editor";
+import type { FooterItem } from "#ui/footer";
 
 /**
  * What every module extends: defaults for `init()` and `commands()`, and the module's own saved state. `State` is the
@@ -24,6 +27,14 @@ export abstract class BaseModule<State = never> implements Module {
   /** The module's last saved state, or undefined. It trusts the session file, so check any field you rely on. */
   protected loadState(): State | undefined {
     return this.session.load(this.stateName) as State | undefined;
+  }
+
+  protected setFooter(item: FooterItem | undefined) {
+    this.session.footer.set(this.info.name, item);
+  }
+
+  protected onKey(key: KeyId, handler: KeyHandler) {
+    this.session.editor.onKey(key, handler);
   }
 
   private get stateName() {
