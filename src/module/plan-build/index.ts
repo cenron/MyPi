@@ -2,6 +2,7 @@ import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
 import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
+import { planRule } from "./rule";
 
 const Mode = {
   PLAN: "plan",
@@ -38,6 +39,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.setFooter(this.footerItems[this.mode]);
     this.setPrompt(this.prompts[this.mode]);
     this.onKey("shift+tab", () => this.toggleMode());
+    // Reads this.mode on every call, so a switch applies to the very next tool call, even mid-run.
+    this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
     return;
   }
 

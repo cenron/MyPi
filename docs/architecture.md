@@ -95,8 +95,12 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     cheap and side-effect free to all run first.
   - Only the guard asks: `ctx.ui.confirm(title, questions, { signal: ctx.signal })` with the asking modules named in the
     title, so Esc or an abort dismisses it and blocks. Without a UI an `ask` blocks. Modules never call `confirm`
-    themselves, so dialogs don't stack and the `hasUI` check lives in one place. A later "allow for this session" option
-    would be added here without touching modules.
+    themselves, so dialogs don't stack and the `hasUI` check lives in one place.
+  - "Allow for this session" (planned, after plan-build's slice 4) lives here too, without touching modules. The
+    dialog becomes `ctx.ui.select` with Yes, No, and Allow for this session. Allowing remembers each listed ask line
+    (`<module>: <question>`) as an exact string in an in-memory `Set`, so `/reload` forgets it. Later asks whose line
+    is remembered are skipped, the dialog lists only the rest, and with none left nothing is asked. Exact strings keep
+    it safe (`npm install` asks after `npm test` was allowed), and a remembered ask never overrides a block.
   - Rules don't change `input`, though pi allows it, so rule order never matters.
   - Each rule writes its own reason ("Plan mode is on: …"); the guard passes it through unchanged.
   - How pi runs `tool_call` (pi 1.2.0): the event is `{ toolName, toolCallId, parentToolCallId?, input }`, and
@@ -108,10 +112,17 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     `ctx.executeTool()` (codemode scripts, for example) pass through `tool_call` too, under the inner tool's name with
     `parentToolCallId` set (`_executeNestedToolCall` in `dist/core/agent-session.js`). They can reach the active
     `direct` tools plus every `codemode` or `deferred` tool, active or not, so the guard is the only gate for those.
-  - Shared helpers for rules, in `util/` (planned): `shell.ts` (a quote-aware tokenizer and `isReadOnlyCommand`) and
-    `paths.ts` (`resolveToolPath`, which mirrors pi's unexported `resolveToCwd`: strip a leading `@`, expand `~`,
-    resolve against `cwd`; and `isInside(dir, path)`, a `path.relative` check, since `startsWith` lets
-    `.pi/plans-evil/` through).
+  - Shared helpers for rules, in `util/`, all pure:
+    - `shell.ts`: `tokenize(command)` splits a bash command into segments of unquoted words, or returns `undefined`
+      on syntax that can run or write something the words don't show (`$(`, backticks, `$'…'`, brace expansion,
+      most redirects). `isReadOnlyCommand(command)` is an allowlist on top of it; plan-build's
+      [Plan rule](modules/plan-build.md#plan-rule) lists what it allows.
+    - `paths.ts`: `resolveToolPath(path, cwd, home)` mirrors pi's unexported `resolveToCwd`, the resolver `edit` and
+      `write` use (`dist/utils/paths.js`), step for step: Unicode spaces to plain spaces, strip one leading `@`,
+      expand `~` and `~/` (not `~user`), convert `file://` URLs, then resolve against `cwd`. A test compares it with
+      pi's own function, so a pi upgrade that changes resolution fails there. `isInside(dir, path)` is a
+      `path.relative` check, since `startsWith` lets `.pi/plans-evil/` through. It's true for `dir` itself, and it
+      compares text only: a symlink under `dir` that points outside counts as inside.
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
   `enum`.

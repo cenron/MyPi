@@ -1,3 +1,4 @@
+import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import type { Session } from "#core/session";
 import { PlanBuildModule } from "#module/plan-build/index";
@@ -119,6 +120,40 @@ describe("PlanBuildModule", () => {
       expect(promptSection(session)).toBe(BUILD_PROMPT);
       await run();
       expect(promptSection(session)).toBe(PLAN_PROMPT);
+    });
+  });
+
+  describe("tool rule", () => {
+    // No UI, so an ask comes back as a block that lists the question.
+    const ctx = { cwd: "/project", hasUI: false } as ExtensionContext;
+    const call = (toolName: string, input: Record<string, unknown>) =>
+      ({ type: "tool_call", toolCallId: "call-1", toolName, input }) as ToolCallEvent;
+    const writeSrc = call("write", { path: "src/a.ts", content: "" });
+
+    it("applies the Plan rule in Plan", async () => {
+      const { session } = startPlanBuild();
+      await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toMatchObject({ block: true });
+      await expect(session.toolGuard.check(call("write", { path: ".pi/plans/a.md" }), ctx)).resolves.toBeUndefined();
+      await expect(session.toolGuard.check(call("bash", { command: "ls" }), ctx)).resolves.toBeUndefined();
+      await expect(session.toolGuard.check(call("bash", { command: "npm test" }), ctx)).resolves.toMatchObject({
+        block: true,
+        reason: expect.stringContaining("plan-build: Plan mode is on. Run this command?\nnpm test"),
+      });
+    });
+
+    it("objects to nothing in Build", async () => {
+      const { session } = startPlanBuild([saved("build")]);
+      await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toBeUndefined();
+      await expect(session.toolGuard.check(call("bash", { command: "npm test" }), ctx)).resolves.toBeUndefined();
+    });
+
+    // The rule reads the mode on each call, so a switch mid-run reaches the next tool call.
+    it("follows each switch on the next call", async () => {
+      const { session, run } = startPlanBuild();
+      await run("build");
+      await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toBeUndefined();
+      await run("plan");
+      await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toMatchObject({ block: true });
     });
   });
 
