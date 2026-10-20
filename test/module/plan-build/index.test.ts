@@ -200,25 +200,25 @@ describe("PlanBuildModule", () => {
     });
   });
 
-  describe("submit_plan", () => {
-    it("is registered on init", () => {
+  describe("Plan tools", () => {
+    it("registers submit_plan and ask_user on init", () => {
       const { tools } = startPlanBuild();
-      expect(tools.has("submit_plan")).toBe(true);
+      expect([...tools.keys()]).toEqual(["submit_plan", "ask_user"]);
     });
 
-    it("is active on init in Plan, and only then", () => {
-      expect(startPlanBuild().activeTools()).toEqual(["read", "bash", "edit", "write", "submit_plan"]);
+    it("are active on init in Plan, and only then", () => {
+      expect(startPlanBuild().activeTools()).toEqual(["read", "bash", "edit", "write", "submit_plan", "ask_user"]);
       expect(startPlanBuild([saved("build")]).activeTools()).toEqual(["read", "bash", "edit", "write"]);
     });
 
-    // Leaving Plan removes only submit_plan, so tools the user turned on or off in the meantime stay as they are.
-    it("is added on entering Plan and removed on leaving, leaving other tools alone", async () => {
+    // Leaving Plan removes only Plan's tools, so tools the user turned on or off in the meantime stay as they are.
+    it("are added on entering Plan and removed on leaving, leaving other tools alone", async () => {
       const { session, run, activeTools } = startPlanBuild();
-      session.pi.setActiveTools(["read", "submit_plan", "mcp_search"]);
+      session.pi.setActiveTools(["read", "submit_plan", "ask_user", "mcp_search"]);
       await run("build");
       expect(activeTools()).toEqual(["read", "mcp_search"]);
       await run("plan");
-      expect(activeTools()).toEqual(["read", "mcp_search", "submit_plan"]);
+      expect(activeTools()).toEqual(["read", "mcp_search", "submit_plan", "ask_user"]);
     });
 
     // On resume and /reload pi has already restored it from the transcript.

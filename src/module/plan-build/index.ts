@@ -8,6 +8,7 @@ import { findPlan, implementInNewSession } from "./implement";
 import type { SubmittedPlan } from "./plan-file";
 import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
 import { planRule } from "./rule";
+import { ASK_USER, askUserTool } from "./tools/ask-user";
 import { SUBMIT_PLAN, submitPlanTool } from "./tools/submit-plan";
 
 const Mode = {
@@ -17,6 +18,9 @@ const Mode = {
 
 type Mode = (typeof Mode)[keyof typeof Mode];
 const isMode = (value: unknown): value is Mode => (Object.values(Mode) as unknown[]).includes(value);
+
+/** Tools active only in Plan: entering Plan adds them, leaving removes them. */
+const PLAN_TOOLS = [SUBMIT_PLAN, ASK_USER];
 
 export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   private mode: Mode = Mode.PLAN;
@@ -47,10 +51,11 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.setFooter(this.footerItems[this.mode]);
     this.setPrompt(this.prompts[this.mode]);
     this.registerTool(submitPlanTool((plan) => (this._submittedPlan = plan)));
+    this.registerTool(askUserTool());
     this.initEventHandlers();
 
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
-    this.setToolActive(SUBMIT_PLAN, this.mode === Mode.PLAN);
+    this.applyPlanTools();
     this.onKey("shift+tab", () => this.toggleMode());
     // Reads this.mode on every call, so a switch applies to the very next tool call, even mid-run.
     this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
@@ -129,6 +134,10 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.saveState({ mode: this.mode });
     this.setFooter(this.footerItems[this.mode]);
     this.setPrompt(this.prompts[this.mode]);
-    this.setToolActive(SUBMIT_PLAN, this.mode === Mode.PLAN);
+    this.applyPlanTools();
+  }
+
+  private applyPlanTools() {
+    for (const tool of PLAN_TOOLS) this.setToolActive(tool, this.mode === Mode.PLAN);
   }
 }
