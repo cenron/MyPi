@@ -4,6 +4,8 @@ import type {
   ExtensionContext,
   SessionShutdownEvent,
   SessionStartEvent,
+  ToolCallEvent,
+  ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 
 import { Session } from "#core/session";
@@ -23,6 +25,10 @@ export class MyPi {
 
   onBeforeAgentStart(ev: BeforeAgentStartEvent, _ctx: ExtensionContext) {
     this._session.promptManager.apply(ev.systemPromptOptions.sections);
+  }
+
+  async onToolCall(ev: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> {
+    return this._session.toolGuard.check(ev, ctx);
   }
 
   onSessionEnd(_ev: SessionShutdownEvent, _ctx: ExtensionContext) {}

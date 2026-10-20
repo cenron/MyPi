@@ -21,12 +21,13 @@ Pi supplies the host packages (`@earendil-works/pi-coding-agent`, `@earendil-wor
 ## Startup flow
 
 ```
-index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "before_agent_start" | "session_shutdown", …)
+index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "before_agent_start" | "tool_call" | "session_shutdown", …)
 └─ src/mypi.ts         MyPi.onSessionStart(ev, ctx)
    ├─ new Session(ctx, pi)                       src/core/session.ts: builds its ModuleManager, Footer, Editor, PromptManager
    ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start()
    └─ registerCommand(pi, session)               src/command/index.ts: MyPi's commands + the running modules
    MyPi.onBeforeAgentStart(ev)                   before every run: promptManager.apply(ev.systemPromptOptions.sections)
+   MyPi.onToolCall(ev, ctx)                      before every tool call: returns toolGuard.check(ev, ctx) to pi
 ```
 
 `index.ts` at the repo root is the single extension entry point. It creates the `MyPi` object and routes pi events to
@@ -34,7 +35,7 @@ its methods. It holds no logic.
 
 `MyPi` (`src/mypi.ts`) owns the event handlers. On `session_start` it builds a `Session` for that session's context,
 keeps it, loads the modules, and registers the commands, its own and the modules'. On `before_agent_start` it writes
-the modules' prompt sections (see `PromptManager` below).
+the modules' prompt sections (see `PromptManager` below), and on `tool_call` it returns the `ToolGuard`'s result.
 
 Each extension instance sees exactly one `session_start`. New, resume, fork, and `/reload` tear the extension down and
 load it fresh (`agent-session-runtime.js` builds new services for each session, and `AgentSession.reload` replaces the
@@ -48,7 +49,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`Session`** wraps the `ExtensionContext` from `session_start` and the `ExtensionAPI`. It's the handle passed to
   commands and modules. It logs through `log`, `logWarning`, and `logError`, keeps state in the session through `save`
   and `load`, and owns the session's `ModuleManager` as `moduleManager`, plus the shared `footer`, `editor`, and
-  `promptManager`.
+  `promptManager`, and `toolGuard`.
 - **Saved state.** `session.save(name, data)` writes a `mypi-<name>` custom entry with `pi.appendEntry`, which pi keeps
   out of the model's context. `session.load(name)` returns the data of the last `mypi-<name>` entry on the current
   branch (`ctx.sessionManager.getBranch()`), or `undefined`, typed `unknown` because the file can hold anything. This is
@@ -81,6 +82,36 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   - The sections are fixed for a whole run, so a change made mid-run reaches the model on the next prompt.
   - Pi rejects names outside `^[a-z][a-z0-9_-]*$` when it builds the prompt, outside the handler's try/catch, so a bad
     name fails every prompt. Module names already fit.
+- **`ToolGuard`** (`tool-guard.ts`) lets modules object to tool calls. It's
+  `session.toolGuard`, and modules add one rule each with `BaseModule.onToolCall(rule)`, keyed by `info.name`.
+  `MyPi.onToolCall` is MyPi's only `tool_call` handler and hands each call to the guard.
+  - A rule is pure: `(call: { toolName, input, annotations? }, env: { cwd, home }) => Verdict`, where `Verdict` is
+    `allow`, `block` with a `reason`, or `ask` with a `question`. A module reads its own state (plan-build's mode) in
+    the closure. The guard fills `annotations` (`readOnlyHint`, `destructiveHint`, …) from `pi.getAllTools()`, so rules
+    never touch pi; they're set by the tool's author (MCP tools carry them, pi's built-ins don't) and unverified.
+  - A verdict is an objection, never a grant: `allow` means "no objection from me" and can't override another rule.
+    The guard runs every rule, then any `block` wins (its reason goes to the model, nothing is asked), else any `ask`
+    shows one confirm listing every question, else the call runs. Pi itself stops at the first block, so rules must be
+    cheap and side-effect free to all run first.
+  - Only the guard asks: `ctx.ui.confirm(title, questions, { signal: ctx.signal })` with the asking modules named in the
+    title, so Esc or an abort dismisses it and blocks. Without a UI an `ask` blocks. Modules never call `confirm`
+    themselves, so dialogs don't stack and the `hasUI` check lives in one place. A later "allow for this session" option
+    would be added here without touching modules.
+  - Rules don't change `input`, though pi allows it, so rule order never matters.
+  - Each rule writes its own reason ("Plan mode is on: …"); the guard passes it through unchanged.
+  - How pi runs `tool_call` (pi 1.2.0): the event is `{ toolName, toolCallId, parentToolCallId?, input }`, and
+    `isToolCallEventType(name, ev)` narrows `input`. Handlers of every extension run in load order, and the first
+    `{ block: true }` wins (`emitToolCall` in `dist/core/extensions/runner.js`). A block, or a handler that throws,
+    becomes an error tool result whose text is `reason` (`prepareToolCall` in pi-agent-core's `agent-loop.js`). An
+    inactive tool fails with `Tool X not found` before any hook runs. In a parallel batch each call is prepared, hook
+    included, one after another before any runs, so confirms never overlap. Calls a tool makes through
+    `ctx.executeTool()` (codemode scripts, for example) pass through `tool_call` too, under the inner tool's name with
+    `parentToolCallId` set (`_executeNestedToolCall` in `dist/core/agent-session.js`). They can reach the active
+    `direct` tools plus every `codemode` or `deferred` tool, active or not, so the guard is the only gate for those.
+  - Shared helpers for rules, in `util/` (planned): `shell.ts` (a quote-aware tokenizer and `isReadOnlyCommand`) and
+    `paths.ts` (`resolveToolPath`, which mirrors pi's unexported `resolveToCwd`: strip a leading `@`, expand `~`,
+    resolve against `cwd`; and `isInside(dir, path)`, a `path.relative` check, since `startsWith` lets
+    `.pi/plans-evil/` through).
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
   `enum`.
@@ -133,9 +164,10 @@ export interface Module {
   (`class PlanBuildModule extends BaseModule<{ mode: Mode }>`). The protected `saveState(state)` and `loadState()`
   store it as `mypi-module-<info.name>`, typed by `State`, so saving the wrong shape doesn't compile. The `module-`
   prefix keeps modules apart from core's own entries, even for a module named `modules`. `loadState` trusts the file,
-  so check any field you rely on. The UI helpers are `setFooter(item)`, `onKey(key, handler)`, and `setPrompt(text)`, each
-  one slot per module keyed by `info.name`. Add helpers here when a module first needs them (event handlers, tools),
-  so the SDK only holds what's used.
+  so check any field you rely on. The helpers `setFooter(item)`, `onKey(key, handler)`, `setPrompt(text)`, and
+  `onToolCall(rule)` each give the module one slot keyed by `info.name`: a footer item, a key handler, a prompt section,
+  and a `ToolGuard` rule. Add helpers here when a module first needs them (event handlers, tools), so the SDK only
+  holds what's used.
 - `Module`, `ModuleInfo` and `ModuleLoadMode` live in `src/core/types.ts`. `loadType` is `ON_LOAD` (loaded by default),
   `ON_DEMAND` (loaded only when chosen in `/modules`), or `ALWAYS` (loaded on every `session_start` and can't be
   unloaded). `pickLoaded` always picks `ALWAYS` modules, `select` always keeps them, and the modal shows their row

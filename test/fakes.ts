@@ -33,7 +33,7 @@ export function fakeSession(branch: unknown[] = []) {
     ui,
     sessionManager: { getBranch: () => branch },
   } as unknown as ExtensionContext;
-  const session = new Session(ctx, { appendEntry } as unknown as ExtensionAPI);
+  const session = new Session(ctx, { appendEntry, getAllTools: () => [] } as unknown as ExtensionAPI);
   return { session, notify: ui.notify, setStatus: ui.setStatus, appendEntry, branch };
 }
 

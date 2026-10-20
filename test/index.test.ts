@@ -5,9 +5,11 @@ import type {
   RegisteredCommand,
   SessionShutdownEvent,
   SessionStartEvent,
+  ToolCallEvent,
 } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
+import { ToolGuard } from "#core/tool-guard";
 import { loadModules } from "#module/index";
 import mypi from "../index";
 import { fakeUI } from "./fakes";
@@ -26,6 +28,7 @@ function loadExtension() {
     registerCommand: (name: string, options: CommandOptions) => {
       commands.set(name, options);
     },
+    getAllTools: () => [],
   } as unknown as ExtensionAPI;
   mypi(pi);
   return { pi, commands, handlers };
@@ -35,6 +38,7 @@ function fakeContext() {
   return {
     hasUI: true,
     ui: fakeUI(),
+    cwd: "/project",
     sessionManager: { getBranch: () => [] },
   } as unknown as ExtensionCommandContext;
 }
@@ -44,7 +48,16 @@ function startSession(handlers: Map<string, Handler>) {
   handlers.get("session_start")?.(event, fakeContext());
 }
 
+const bashCall = {
+  type: "tool_call",
+  toolCallId: "call-1",
+  toolName: "bash",
+  input: { command: "ls" },
+} as ToolCallEvent;
+
 describe("mypi extension", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("registers no commands before a session starts", () => {
     const { commands, handlers } = loadExtension();
     expect(handlers.has("session_start")).toBe(true);
@@ -85,6 +98,21 @@ describe("mypi extension", () => {
     const event = { type: "before_agent_start", messageType, systemPromptOptions: { sections: {} } };
     handlers.get("before_agent_start")?.(event, fakeContext());
     expect(Object.keys(event.systemPromptOptions.sections)).toContain("mypi-plan-build");
+  });
+
+  it("lets a tool call run when no module objects", async () => {
+    const { handlers } = loadExtension();
+    startSession(handlers);
+    await expect(handlers.get("tool_call")?.(bashCall, fakeContext())).resolves.toBeUndefined();
+  });
+
+  // Pi reads the handler's return value; a handler that awaited the guard without returning would let every call run.
+  it("returns the tool guard's result to pi", async () => {
+    const blocked = { block: true, reason: "no" };
+    vi.spyOn(ToolGuard.prototype, "check").mockResolvedValue(blocked);
+    const { handlers } = loadExtension();
+    startSession(handlers);
+    await expect(handlers.get("tool_call")?.(bashCall, fakeContext())).resolves.toEqual(blocked);
   });
 
   it("handles session shutdown without throwing", () => {

@@ -1,5 +1,7 @@
+import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import type { Session } from "#core/session";
+import type { ToolRule } from "#core/tool-guard";
 import { ModuleLoadMode } from "#core/types";
 import { BaseModule } from "#module/base";
 import { FooterColor, type FooterItem } from "#ui/footer";
@@ -33,7 +35,18 @@ class Counter extends BaseModule<{ count: number }> {
   prompt(text: string | undefined) {
     this.setPrompt(text);
   }
+
+  guard(rule: ToolRule) {
+    this.onToolCall(rule);
+  }
 }
+
+const bashCall = {
+  type: "tool_call",
+  toolCallId: "call-1",
+  toolName: "bash",
+  input: { command: "ls" },
+} as ToolCallEvent;
 
 describe("BaseModule", () => {
   it("gives a module no-op init() and no commands by default", () => {
@@ -96,5 +109,14 @@ describe("BaseModule", () => {
     const sections: Record<string, string> = {};
     session.promptManager.apply(sections);
     expect(sections).toEqual({ "mypi-counter": "three" });
+  });
+
+  it("gives each module one tool rule, keyed by its name", async () => {
+    const { session } = fakeSession();
+    const ctx = { cwd: "/project", hasUI: false } as ExtensionContext;
+    new Counter(session).guard(() => ({ kind: "block", reason: "old" }));
+    new Counter(session, "other").guard(() => ({ kind: "allow" }));
+    new Counter(session).guard(() => ({ kind: "block", reason: "new" }));
+    await expect(session.toolGuard.check(bashCall, ctx)).resolves.toEqual({ block: true, reason: "new" });
   });
 });

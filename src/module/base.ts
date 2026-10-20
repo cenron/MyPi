@@ -1,5 +1,6 @@
 import type { KeyId } from "@earendil-works/pi-tui";
 import type { Session } from "#core/session";
+import type { ToolRule } from "#core/tool-guard";
 import type { Command, Module, ModuleInfo } from "#core/types";
 import type { KeyHandler } from "#ui/editor";
 import type { FooterItem } from "#ui/footer";
@@ -35,6 +36,10 @@ export abstract class BaseModule<State = never> implements Module {
 
   protected onKey(key: KeyId, handler: KeyHandler) {
     this.session.editor.onKey(key, handler);
+  }
+
+  protected onToolCall(rule: ToolRule) {
+    this.session.toolGuard.set(this.info.name, rule);
   }
 
   protected setPrompt(prompt: string | undefined) {

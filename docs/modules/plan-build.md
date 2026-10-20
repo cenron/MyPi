@@ -1,6 +1,6 @@
 # Plan / Build
 
-**Status:** building (slices 1 and 2 done, slice 3 next)
+**Status:** building (slices 1 and 2 done; slice 3a's guard built, its helpers next)
 
 ## Goal
 
@@ -16,6 +16,9 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 - In **Plan**:
   - `edit` and `write` are refused, except inside the project's plans folder, `.pi/plans/`.
   - `bash` runs commands on a read-only allowlist without asking, and asks me before running anything else.
+  - `powershell` always asks.
+  - Other tools (MCP, other extensions') run without asking only when they're known readers or marked read-only;
+    anything else asks.
   - The agent works in three phases, adapted from Codex's plan prompt. It explores before asking, asks about intent, then asks about the implementation until the plan is decision complete. It asks with a question tool and submits the finished plan with `submit_plan`.
 - When a run that submitted a plan settles, a dialog asks **"Implement this plan?"**:
   1. **Implement**: switch to Build and send "Implement the plan."
@@ -30,8 +33,8 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 | Mode state | `saveState({ mode })`, read back with `loadState()` in `init()` | `Mode` is a const object plus a type, like `ModuleLoadMode`, in the module's `index.ts` for now. `PlanBuildModule extends BaseModule<{ mode: Mode }>`, so the module owns its state type and core never lists it. Saved as `mypi-module-plan-build`. Check the loaded `mode` with an `isMode` guard, else Plan. Every switch goes through one method that sets the mode, saves it, and updates the footer; `init()` restores and shows the footer without saving, so a `/reload` adds no entry. Same idea as pi's `examples/extensions/plan-mode`. No state files. |
 | Footer | `BaseModule.setFooter({ text, color })`, through MyPi's shared footer | See [Shared footer and editor](#shared-footer-and-editor). Pi clears every status on `/reload` and on each session switch (`resetExtensionUI` in `interactive-mode.js`), so `init()` sets it every time, and an unloaded module's label is gone with no cleanup. |
 | Telling the model | `BaseModule.setPrompt(text)`, through MyPi's `PromptManager` and `before_agent_start` | One section, `mypi-plan-build`, always present: `PLAN_PROMPT` in Plan, `BUILD_PROMPT` in Build (`prompts.ts`), set in `init()` and on every switch. Leaving Plan replaces the text instead of dropping it, as OpenCode does: a drop only tells the model `Removed system prompt section`, and on models without mid-conversation system messages not even that. The Build text reads fine in a session that never saw Plan, so no transcript check. The Plan text covers only what exists now; slices 4 and 7 add `submit_plan` and the question tool to it. A switch mid-run reaches the model on the next prompt; the `tool_call` guard enforces the live mode, so its refusal should say why. Pi diffs sections, so the cache stays warm on models that take mid-conversation system messages; see `PromptManager` in [architecture](../architecture.md#core). |
-| Hiding tools | `pi.setActiveTools()` | Saves the tool list from before Plan and restores it on leaving. `submit_plan` is active only in Plan. |
-| Blocking | `tool_call` guard | The real enforcement. Codemode and deferred tools stay callable while inactive, and nested `ctx.executeTool` calls also pass through `tool_call`. Bash asks through `ctx.ui.confirm`; see `examples/extensions/permission-gate.ts`. |
+| Hiding tools | `pi.setActiveTools()`, symmetric: entering Plan adds the Plan-only tools, leaving removes them | Nothing is hidden in Plan: `write` must stay active or the `.pi/plans/` exception is unreachable (an inactive tool fails with "not found" before `tool_call`). So no tool list is saved. That matters because pi restores the active tools from the transcript on resume, `/reload`, and tree moves, before `session_start` (`_restoreToolsFromTranscript` in `dist/core/agent-session.js`), so a pre-Plan list kept in memory would be lost on `/reload` in Plan; with add/remove, pi's restored loadout is already right. The first Plan-only tool is `submit_plan` (slice 4), so `setActiveTools` starts there. |
+| Blocking | A rule on MyPi's shared `ToolGuard`, through `BaseModule.onToolCall` | The real enforcement. See `ToolGuard` in [architecture](../architecture.md#core) for how pi runs `tool_call` and how rules combine. In Build the rule has no objection. In Plan, see [Plan rule](#plan-rule). The rule reads the live mode, so a mid-run switch applies on the next tool call. Block reasons start with "Plan mode is on:" and tell the model to ask for Build (`/plan build` or Shift+Tab). The guard does the asking; the module never calls `confirm`. |
 | Questions | Question tool | See `examples/extensions/question.ts` and `questionnaire.ts`. |
 | Plan hand-off | `submit_plan` stores the plan and writes it to `.pi/plans/` | Structured text, no parsing of the reply. |
 | Dialog | `agent_settled`, when `aborted` is false and a plan was submitted this run | `agent_end` is too early: the run is still active and retries or follow-ups can follow. |
@@ -102,13 +105,49 @@ Taken from Codex:
 
 > A previous agent produced the plan below to accomplish the user's task. Implement the plan in a fresh context. Treat the plan as the source of user intent, re-read files as needed, and carry the work through implementation and verification.
 
+## Plan rule
+
+What plan-build's `ToolGuard` rule returns in Plan, by tool:
+
+| Tool | Verdict |
+|---|---|
+| `edit`, `write` | Allow when `isInside(<cwd>/.pi/plans, resolveToolPath(input.path, cwd, home))`, else block. |
+| `bash` | Allow when `isReadOnlyCommand(input.command)`, else ask. |
+| `powershell` | Always ask. |
+| `read`, `grep`, `find`, `ls`, `tool_search` | Allow: known readers. Pi's built-in tools carry no annotations, so they're listed by name. |
+| `codemode` | Allow. Its nested calls each pass through the guard under their own tool name. |
+| Anything else | Allow when its `annotations.readOnlyHint` is true, else ask. Annotations come from the tool's author and aren't verified, the same trust pi gives them. |
+
+`isReadOnlyCommand` (`src/core/util/shell.ts`) is strict, because a miss only costs a confirm. Pi's plan-mode example
+checks only the first word plus a denylist, so `ls; node …` and the 3a test cases run unasked.
+
+- Split on `|`, `&&`, `||`, `;` and newlines outside quotes. Ask on `$(`, backticks, `<(`, `>(`, `&`, `(`, or any `>` /
+  `>>` except `2>&1` and `/dev/null`. Ask when a segment starts with a wrapper (`env`, `xargs`, `sh`, `bash`, `eval`,
+  `exec`, `command`, `nice`, `timeout`, `time`, `sudo`).
+- Plain readers: `cat head tail wc ls pwd tree file stat du df which type whoami id date uname echo printf cut tr nl
+  basename dirname realpath readlink cmp comm diff jq grep`.
+- Allowed except: `find` (`-delete`, `-exec*`, `-ok*`, `-fprint*`, `-fls`), `fd` (`-x`, `-X`, `--exec*`), `rg`
+  (`--pre`), `sort` (`-o`, `--output`), `uniq` (more than one file), `sed` (only `sed -n 'Np'` or `'N,Mp'`), `git` (read
+  subcommands only: `status log show diff blame ls-files ls-tree rev-parse describe shortlog grep`; no `-c` or
+  `--output`; `branch`/`tag`/`remote`/`stash` in list forms; `config` with `--get`/`--list`), `npm` (`ls`, `list`,
+  `view`, `info`, `outdated`).
+- Everything else asks: `awk`, `curl`, `wget`, `node`, `python`, `npx`, `npm run`/`test`, `make`, `tee`, ….
+
 ## Slices
 
 1. The `Mode` type, `/plan [plan|build]`, the footer label through the shared footer, saving the mode and restoring it
    in `init()`, then Shift+Tab through the shared editor. **Done** (2026-10-19).
 2. Prompt sections for entering and leaving Plan, through the shared `PromptManager`. **Done** (2026-10-19).
-3. `tool_call` guard with the plans-folder exception and the bash allowlist plus ask, as a pure function with tests. `setActiveTools` alongside it. The refusal reason says plan mode is on, since a mid-run switch only reaches the prompt section on the next prompt.
-4. `submit_plan` and the plan file.
+3. The `tool_call` guard, in two parts, since the guard is shared with later modules:
+   - **3a (core).** `ToolGuard`, `BaseModule.onToolCall`, and `MyPi.onToolCall` wired in `index.ts`: **built**
+     (2026-10-20), tested, and checked live (tool calls still run after `/reload`). Next: the pure helpers
+     `util/shell.ts` and `util/paths.ts`, with tests in `test/core/util/`. The `shell.ts` tests include the cases pi's
+     plan-mode example lets through (`find -delete`, `awk 'BEGIN{system(…)}'`, `curl -o`, `sort -o`,
+     `git diff --output=`, `sed -n '1w …'`, `rg --pre`, `$(…)`, `xargs sh -c`, `env node`, `ls; node …`,
+     `git branch <name>`); each must ask.
+   - **3b (plan-build).** The [Plan rule](#plan-rule). The refusal reason says plan mode is on, since a mid-run switch
+     only reaches the prompt section on the next prompt.
+4. `submit_plan` and the plan file, with `setActiveTools` adding it in Plan and removing it on leaving.
 5. The dialog on `agent_settled`, with the choice list.
 6. The clear-context command.
 7. A question tool.
@@ -119,7 +158,7 @@ Taken from Codex:
 - What's the clear-context command called?
 - Which load type when it's done? The mode survives resume and fork only if the module loads then, which `ON_DEMAND`
   doesn't do (resume and fork start from the defaults). The code says `ALWAYS` right now.
-- What goes on the bash allowlist? pi's plan-mode example is a starting point, but its regexes let `find -delete`, `awk 'system(…)'`, and `curl -o` through.
+- "Allow for this session" in the guard's confirm: deferred.
 
 ## References
 

@@ -4,6 +4,7 @@ import { Footer } from "#ui/footer";
 import { ModuleManager } from "./module-manager";
 import { Notifier } from "./notifier";
 import { PromptManager } from "./prompt-manager";
+import { ToolGuard } from "./tool-guard";
 
 /** Per-session handle passed to commands and modules: pi's context and API, logging, saved state, and the modules. */
 export class Session {
@@ -12,6 +13,7 @@ export class Session {
   private readonly _footer: Footer;
   private readonly _editor: Editor;
   private readonly _promptManager: PromptManager;
+  private readonly _toolGuard: ToolGuard;
 
   constructor(
     readonly ctx: ExtensionContext,
@@ -22,6 +24,7 @@ export class Session {
     this._footer = new Footer(this.ctx);
     this._editor = new Editor(this.ctx);
     this._promptManager = new PromptManager(this.ctx);
+    this._toolGuard = new ToolGuard(this.pi);
   }
 
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */
@@ -64,5 +67,9 @@ export class Session {
 
   get promptManager(): PromptManager {
     return this._promptManager;
+  }
+
+  get toolGuard(): ToolGuard {
+    return this._toolGuard;
   }
 }
