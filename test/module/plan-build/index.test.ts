@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Session } from "#core/session";
 import { PlanBuildModule } from "#module/plan-build/index";
+import { BUILD_PROMPT, PLAN_PROMPT } from "#module/plan-build/prompts";
 import { customEntry, fakeSession } from "../../fakes";
 
 const saved = (mode: unknown) => customEntry("mypi-module-plan-build", { mode });
+
+/** The module's prompt section, as the next run would send it. */
+function promptSection(session: Session) {
+  const sections: Record<string, string> = {};
+  session.promptManager.apply(sections);
+  return sections["mypi-plan-build"];
+}
 
 /** A started module and a way to run `/plan <args>`; the command ignores its context. */
 function startPlanBuild(branch: unknown[] = []) {
@@ -88,6 +97,28 @@ describe("PlanBuildModule", () => {
     it("shows no message, since the footer shows the change", async () => {
       const { run } = startPlanBuild();
       await expect(run()).resolves.toBeUndefined();
+    });
+  });
+
+  describe("prompt section", () => {
+    it("is the Plan text on init when nothing is saved", () => {
+      const { session } = startPlanBuild();
+      expect(promptSection(session)).toBe(PLAN_PROMPT);
+    });
+
+    // A resumed session or a /reload builds a new, empty PromptManager, so init() must set the text again.
+    it("is the Build text on init when Build is saved", () => {
+      const { session } = startPlanBuild([saved("build")]);
+      expect(promptSection(session)).toBe(BUILD_PROMPT);
+    });
+
+    // Leaving Plan replaces the text instead of dropping it, so the model is told the restrictions are gone.
+    it("follows each switch, and is never dropped", async () => {
+      const { session, run } = startPlanBuild();
+      await run("build");
+      expect(promptSection(session)).toBe(BUILD_PROMPT);
+      await run();
+      expect(promptSection(session)).toBe(PLAN_PROMPT);
     });
   });
 

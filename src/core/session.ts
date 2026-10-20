@@ -3,6 +3,7 @@ import { Editor } from "#ui/editor";
 import { Footer } from "#ui/footer";
 import { ModuleManager } from "./module-manager";
 import { Notifier } from "./notifier";
+import { PromptManager } from "./prompt-manager";
 
 /** Per-session handle passed to commands and modules: pi's context and API, logging, saved state, and the modules. */
 export class Session {
@@ -10,6 +11,7 @@ export class Session {
   private readonly _moduleManager: ModuleManager;
   private readonly _footer: Footer;
   private readonly _editor: Editor;
+  private readonly _promptManager: PromptManager;
 
   constructor(
     readonly ctx: ExtensionContext,
@@ -19,6 +21,7 @@ export class Session {
     this._moduleManager = new ModuleManager(this);
     this._footer = new Footer(this.ctx);
     this._editor = new Editor(this.ctx);
+    this._promptManager = new PromptManager(this.ctx);
   }
 
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */
@@ -57,5 +60,9 @@ export class Session {
 
   get editor(): Editor {
     return this._editor;
+  }
+
+  get promptManager(): PromptManager {
+    return this._promptManager;
   }
 }

@@ -29,6 +29,10 @@ class Counter extends BaseModule<{ count: number }> {
   footer(item: FooterItem | undefined) {
     this.setFooter(item);
   }
+
+  prompt(text: string | undefined) {
+    this.setPrompt(text);
+  }
 }
 
 describe("BaseModule", () => {
@@ -81,5 +85,16 @@ describe("BaseModule", () => {
       ["mypi-other", "<dim>2"],
       ["mypi-counter", undefined],
     ]);
+  });
+
+  it("gives each module one prompt section, keyed by its name", () => {
+    const { session } = fakeSession();
+    new Counter(session).prompt("one");
+    new Counter(session, "other").prompt("two");
+    new Counter(session).prompt("three");
+    new Counter(session, "other").prompt(undefined);
+    const sections: Record<string, string> = {};
+    session.promptManager.apply(sections);
+    expect(sections).toEqual({ "mypi-counter": "three" });
   });
 });

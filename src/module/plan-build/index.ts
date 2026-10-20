@@ -1,6 +1,7 @@
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
+import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
 
 const Mode = {
   PLAN: "plan",
@@ -17,6 +18,11 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     [Mode.BUILD]: { text: "BUILD", color: FooterColor.Dim },
   };
 
+  private prompts: Record<Mode, string> = {
+    [Mode.PLAN]: PLAN_PROMPT,
+    [Mode.BUILD]: BUILD_PROMPT,
+  };
+
   get info(): ModuleInfo {
     return {
       name: "plan-build",
@@ -30,7 +36,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     const savedMode = this.loadState()?.mode;
     this.mode = isMode(savedMode) ? savedMode : Mode.PLAN;
     this.setFooter(this.footerItems[this.mode]);
-
+    this.setPrompt(this.prompts[this.mode]);
     this.onKey("shift+tab", () => this.toggleMode());
     return;
   }
@@ -61,7 +67,9 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   }
   private setMode(mode: Mode): void {
     this.mode = isMode(mode) ? mode : Mode.PLAN;
+
     this.saveState({ mode: this.mode });
     this.setFooter(this.footerItems[this.mode]);
+    this.setPrompt(this.prompts[this.mode]);
   }
 }

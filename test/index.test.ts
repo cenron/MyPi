@@ -78,6 +78,15 @@ describe("mypi extension", () => {
     }
   });
 
+  // Each run's sections start empty, so a run that skipped them would make pi remove the section, then add it back.
+  it.each([["user"], ["custom"]])("writes the modules' prompt sections on a %s run", (messageType) => {
+    const { handlers } = loadExtension();
+    startSession(handlers);
+    const event = { type: "before_agent_start", messageType, systemPromptOptions: { sections: {} } };
+    handlers.get("before_agent_start")?.(event, fakeContext());
+    expect(Object.keys(event.systemPromptOptions.sections)).toContain("mypi-plan-build");
+  });
+
   it("handles session shutdown without throwing", () => {
     const { handlers } = loadExtension();
     startSession(handlers);

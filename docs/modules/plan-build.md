@@ -1,6 +1,6 @@
 # Plan / Build
 
-**Status:** building (slice 1 done, slice 2 next)
+**Status:** building (slices 1 and 2 done, slice 3 next)
 
 ## Goal
 
@@ -29,7 +29,7 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 |---|---|---|
 | Mode state | `saveState({ mode })`, read back with `loadState()` in `init()` | `Mode` is a const object plus a type, like `ModuleLoadMode`, in the module's `index.ts` for now. `PlanBuildModule extends BaseModule<{ mode: Mode }>`, so the module owns its state type and core never lists it. Saved as `mypi-module-plan-build`. Check the loaded `mode` with an `isMode` guard, else Plan. Every switch goes through one method that sets the mode, saves it, and updates the footer; `init()` restores and shows the footer without saving, so a `/reload` adds no entry. Same idea as pi's `examples/extensions/plan-mode`. No state files. |
 | Footer | `BaseModule.setFooter({ text, color })`, through MyPi's shared footer | See [Shared footer and editor](#shared-footer-and-editor). Pi clears every status on `/reload` and on each session switch (`resetExtensionUI` in `interactive-mode.js`), so `init()` sets it every time, and an unloaded module's label is gone with no cleanup. |
-| Telling the model | `before_agent_start`: `event.systemPromptOptions.sections` | Pi diffs sections and appends only the change, so the prompt cache stays warm. Leaving Plan replaces the section with a "no longer in plan mode" text instead of dropping it, as OpenCode does. |
+| Telling the model | `BaseModule.setPrompt(text)`, through MyPi's `PromptManager` and `before_agent_start` | One section, `mypi-plan-build`, always present: `PLAN_PROMPT` in Plan, `BUILD_PROMPT` in Build (`prompts.ts`), set in `init()` and on every switch. Leaving Plan replaces the text instead of dropping it, as OpenCode does: a drop only tells the model `Removed system prompt section`, and on models without mid-conversation system messages not even that. The Build text reads fine in a session that never saw Plan, so no transcript check. The Plan text covers only what exists now; slices 4 and 7 add `submit_plan` and the question tool to it. A switch mid-run reaches the model on the next prompt; the `tool_call` guard enforces the live mode, so its refusal should say why. Pi diffs sections, so the cache stays warm on models that take mid-conversation system messages; see `PromptManager` in [architecture](../architecture.md#core). |
 | Hiding tools | `pi.setActiveTools()` | Saves the tool list from before Plan and restores it on leaving. `submit_plan` is active only in Plan. |
 | Blocking | `tool_call` guard | The real enforcement. Codemode and deferred tools stay callable while inactive, and nested `ctx.executeTool` calls also pass through `tool_call`. Bash asks through `ctx.ui.confirm`; see `examples/extensions/permission-gate.ts`. |
 | Questions | Question tool | See `examples/extensions/question.ts` and `questionnaire.ts`. |
@@ -106,8 +106,8 @@ Taken from Codex:
 
 1. The `Mode` type, `/plan [plan|build]`, the footer label through the shared footer, saving the mode and restoring it
    in `init()`, then Shift+Tab through the shared editor. **Done** (2026-10-19).
-2. Prompt sections for entering and leaving Plan.
-3. `tool_call` guard with the plans-folder exception and the bash allowlist plus ask, as a pure function with tests. `setActiveTools` alongside it.
+2. Prompt sections for entering and leaving Plan, through the shared `PromptManager`. **Done** (2026-10-19).
+3. `tool_call` guard with the plans-folder exception and the bash allowlist plus ask, as a pure function with tests. `setActiveTools` alongside it. The refusal reason says plan mode is on, since a mid-run switch only reaches the prompt section on the next prompt.
 4. `submit_plan` and the plan file.
 5. The dialog on `agent_settled`, with the choice list.
 6. The clear-context command.

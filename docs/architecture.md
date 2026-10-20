@@ -21,18 +21,20 @@ Pi supplies the host packages (`@earendil-works/pi-coding-agent`, `@earendil-wor
 ## Startup flow
 
 ```
-index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "session_shutdown", …)
+index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "before_agent_start" | "session_shutdown", …)
 └─ src/mypi.ts         MyPi.onSessionStart(ev, ctx)
-   ├─ new Session(ctx, pi)                       src/core/session.ts: builds its ModuleManager
+   ├─ new Session(ctx, pi)                       src/core/session.ts: builds its ModuleManager, Footer, Editor, PromptManager
    ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start()
    └─ registerCommand(pi, session)               src/command/index.ts: MyPi's commands + the running modules
+   MyPi.onBeforeAgentStart(ev)                   before every run: promptManager.apply(ev.systemPromptOptions.sections)
 ```
 
 `index.ts` at the repo root is the single extension entry point. It creates the `MyPi` object and routes pi events to
 its methods. It holds no logic.
 
 `MyPi` (`src/mypi.ts`) owns the event handlers. On `session_start` it builds a `Session` for that session's context,
-loads the modules, and registers the commands, its own and the modules'.
+keeps it, loads the modules, and registers the commands, its own and the modules'. On `before_agent_start` it writes
+the modules' prompt sections (see `PromptManager` below).
 
 Each extension instance sees exactly one `session_start`. New, resume, fork, and `/reload` tear the extension down and
 load it fresh (`agent-session-runtime.js` builds new services for each session, and `AgentSession.reload` replaces the
@@ -45,7 +47,8 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 
 - **`Session`** wraps the `ExtensionContext` from `session_start` and the `ExtensionAPI`. It's the handle passed to
   commands and modules. It logs through `log`, `logWarning`, and `logError`, keeps state in the session through `save`
-  and `load`, and owns the session's `ModuleManager` as `moduleManager`.
+  and `load`, and owns the session's `ModuleManager` as `moduleManager`, plus the shared `footer`, `editor`, and
+  `promptManager`.
 - **Saved state.** `session.save(name, data)` writes a `mypi-<name>` custom entry with `pi.appendEntry`, which pi keeps
   out of the model's context. `session.load(name)` returns the data of the last `mypi-<name>` entry on the current
   branch (`ctx.sessionManager.getBranch()`), or `undefined`, typed `unknown` because the file can hold anything. This is
@@ -62,6 +65,22 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   `test/fakes.ts`. See [Module loading](#module-loading).
 - **`Notifier`** sends those messages to `ctx.ui.notify` and skips them when `ctx.hasUI` is false (print and JSON
   modes).
+- **`PromptManager`** (`prompt-manager.ts`) holds one system prompt section per module, keyed by `info.name`, and is
+  `session.promptManager`. Modules set theirs with `BaseModule.setPrompt(text)`; `undefined` clears it. `apply(sections)`
+  writes each as `mypi-<name>` into `event.systemPromptOptions.sections`, and `MyPi` calls it on every
+  `before_agent_start`, user and custom runs alike. How pi uses the sections:
+  - Each run's sections start empty (pi copies its base options per run), so they're written every run, not on change.
+    A run that skipped them would make pi remove the section, then add it back on the next run.
+  - Pi wraps each section as `<name>…</name>`, rebuilds the prompt, and diffs it against the sections the transcript
+    already has. A changed section goes out as an `Updated system prompt section "<name>"` system message before the
+    prompt; an unchanged one sends nothing; a missing one sends `Removed system prompt section "<name>"`
+    (`diffSystemPromptSections` in `dist/core/system-prompt.js`, `_prepareRun` in `dist/core/agent-session.js`).
+  - The earlier request stays byte-identical, so the cache stays warm, but only on models whose
+    `compat.supportsMidConvoSystemMessages` is set (in pi 1.2.0: claude-opus-4-8 and the 5.x Claude models, gpt-5.4 and
+    later). Other models get the change folded into the leading prompt: one cache miss per change.
+  - The sections are fixed for a whole run, so a change made mid-run reaches the model on the next prompt.
+  - Pi rejects names outside `^[a-z][a-z0-9_-]*$` when it builds the prompt, outside the handler's try/catch, so a bad
+    name fails every prompt. Module names already fit.
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
   `enum`.
@@ -114,8 +133,9 @@ export interface Module {
   (`class PlanBuildModule extends BaseModule<{ mode: Mode }>`). The protected `saveState(state)` and `loadState()`
   store it as `mypi-module-<info.name>`, typed by `State`, so saving the wrong shape doesn't compile. The `module-`
   prefix keeps modules apart from core's own entries, even for a module named `modules`. `loadState` trusts the file,
-  so check any field you rely on. Add helpers here when a module first needs them (event handlers, tools, prompt
-  sections), so the SDK only holds what's used.
+  so check any field you rely on. The UI helpers are `setFooter(item)`, `onKey(key, handler)`, and `setPrompt(text)`, each
+  one slot per module keyed by `info.name`. Add helpers here when a module first needs them (event handlers, tools),
+  so the SDK only holds what's used.
 - `Module`, `ModuleInfo` and `ModuleLoadMode` live in `src/core/types.ts`. `loadType` is `ON_LOAD` (loaded by default),
   `ON_DEMAND` (loaded only when chosen in `/modules`), or `ALWAYS` (loaded on every `session_start` and can't be
   unloaded). `pickLoaded` always picks `ALWAYS` modules, `select` always keeps them, and the modal shows their row

@@ -1,4 +1,5 @@
 import type {
+  BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
   SessionShutdownEvent,
@@ -10,12 +11,18 @@ import { loadModules } from "#module/index";
 import { registerCommand } from "./command";
 
 export class MyPi {
+  private _session!: Session;
+
   constructor(readonly pi: ExtensionAPI) {}
 
   onSessionStart(ev: SessionStartEvent, ctx: ExtensionContext) {
-    const session = new Session(ctx, this.pi);
-    loadModules(session, ev.reason);
-    registerCommand(this.pi, session);
+    this._session = new Session(ctx, this.pi);
+    loadModules(this._session, ev.reason);
+    registerCommand(this.pi, this._session);
+  }
+
+  onBeforeAgentStart(ev: BeforeAgentStartEvent, _ctx: ExtensionContext) {
+    this._session.promptManager.apply(ev.systemPromptOptions.sections);
   }
 
   onSessionEnd(_ev: SessionShutdownEvent, _ctx: ExtensionContext) {}

@@ -37,6 +37,10 @@ export abstract class BaseModule<State = never> implements Module {
     this.session.editor.onKey(key, handler);
   }
 
+  protected setPrompt(prompt: string | undefined) {
+    this.session.promptManager.set(this.info.name, prompt);
+  }
+
   private get stateName() {
     return `module-${this.info.name}`;
   }
