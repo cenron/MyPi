@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
@@ -86,7 +86,7 @@ describe("PlanBuildModule", () => {
 
     it("throws on an unknown mode and leaves the mode alone", async () => {
       const { run, setStatus, appendEntry } = startPlanBuild();
-      await expect(run("foo")).rejects.toThrow("Unknown mode: foo");
+      await expect(run("foo")).rejects.toThrow("Unknown mode: foo (use plan, build, or implement)");
       expect(appendEntry).not.toHaveBeenCalled();
       expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<warning>PLAN");
     });
@@ -101,6 +101,46 @@ describe("PlanBuildModule", () => {
     it("shows no message, since the footer shows the change", async () => {
       const { run } = startPlanBuild();
       await expect(run()).resolves.toBeUndefined();
+    });
+  });
+
+  describe("/plan implement", () => {
+    it("starts a new session in Build with the given plan", async () => {
+      const { module } = startPlanBuild();
+      const cwd = await mkdtemp(join(tmpdir(), "mypi-plan-implement-"));
+      try {
+        await mkdir(join(cwd, ".pi", "plans"), { recursive: true });
+        await writeFile(join(cwd, ".pi", "plans", "p.md"), "# P\n");
+        const appendCustomEntry = vi.fn();
+        const sendUserMessage = vi.fn(() => new Promise<void>(() => {}));
+        const ctx = {
+          cwd,
+          waitForIdle: async () => {},
+          sessionManager: { getSessionFile: () => undefined },
+          newSession: async (options: {
+            setup: (m: unknown) => Promise<void>;
+            withSession: (c: unknown) => Promise<void>;
+          }) => {
+            await options.setup({ appendCustomEntry });
+            await options.withSession({ hasUI: true, sendUserMessage });
+            return { cancelled: false };
+          },
+        };
+        const plan = module.commands().find((command) => command.info.name === "plan");
+        await expect(plan?.execute(ctx as never, ["implement", ".pi/plans/p.md"])).resolves.toBeUndefined();
+        // The new session's init() reads this entry, so it starts in Build.
+        expect(appendCustomEntry).toHaveBeenCalledWith("mypi-module-plan-build", { mode: "build" });
+        expect(sendUserMessage).toHaveBeenCalledWith(expect.stringContaining("# P"));
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+
+    // The current session keeps its mode; only the new one starts in Build.
+    it("leaves this session's mode alone", async () => {
+      const { run, appendEntry } = startPlanBuild();
+      await expect(run("implement")).rejects.toThrow();
+      expect(appendEntry).not.toHaveBeenCalled();
     });
   });
 
@@ -230,7 +270,7 @@ describe("PlanBuildModule", () => {
       expect(select).toHaveBeenCalledTimes(1);
       const [title, options] = select.mock.calls[0] ?? [];
       expect(title).toMatch(/^Implement this plan\?\nAdd it \(\.pi\/plans\/\d{4}-\d\d-\d\d-\d{6}-add-it\.md\)$/);
-      expect(options).toEqual(["Implement", "Stay in plan mode"]);
+      expect(options).toEqual(["Implement", "Clear context and implement", "Stay in plan mode"]);
     });
 
     it("Implement switches to Build, then asks the model to implement", async () => {
@@ -243,6 +283,18 @@ describe("PlanBuildModule", () => {
       expect(sendUserMessage).toHaveBeenCalledWith("Implement the plan.");
       // The message runs under Build's prompt, so the switch must come first.
       expect(setStatus.mock.invocationCallOrder.at(-1)).toBeLessThan(sendUserMessage.mock.invocationCallOrder[0] ?? 0);
+    });
+
+    // Only a command's context can start a session, so the choice runs /plan implement with the plan's file.
+    it("Clear context and implement runs /plan implement with the plan's file, staying in Plan here", async () => {
+      const { emit, ctx, select, sendUserMessage, setStatus } = await submitted();
+      select.mockResolvedValueOnce("Clear context and implement");
+      await emit("agent_settled", settled(), ctx);
+      expect(sendUserMessage).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/plan implement \.pi\/plans\/\d{4}-\d\d-\d\d-\d{6}-add-it\.md$/),
+        { expandPromptTemplates: true },
+      );
+      expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<warning>PLAN");
     });
 
     it.each([["Stay in plan mode"], [undefined]])("%j keeps planning and sends nothing", async (answer) => {

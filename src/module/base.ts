@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { SessionManager, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
 import type { TSchema } from "typebox";
 import type { Session } from "#core/session";
@@ -25,6 +25,11 @@ export abstract class BaseModule<State = never> implements Module {
   /** Saves the module's state in the session; the last save on the branch wins. */
   protected saveState(state: State) {
     this.session.save(this.stateName, state);
+  }
+
+  /** Saves the module's state into another session, such as a new one in `ctx.newSession({ setup })`. */
+  protected saveStateTo(sessionManager: SessionManager, state: State) {
+    this.session.saveTo(sessionManager, this.stateName, state);
   }
 
   /** The module's last saved state, or undefined. It trusts the session file, so check any field you rely on. */

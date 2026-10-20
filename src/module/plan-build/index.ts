@@ -1,8 +1,10 @@
+import { relative } from "node:path";
 import type { AgentSettledEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
 import { offerPlan, PLAN_CHOICES, type PlanActions } from "./dialog";
+import { findPlan, implementInNewSession } from "./implement";
 import type { SubmittedPlan } from "./plan-file";
 import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
 import { planRule } from "./rule";
@@ -64,16 +66,23 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
       {
         info: {
           name: "plan",
-          description: "Toggle Plan/Build mode (plan|build: pick one)",
+          description: "Toggle Plan/Build mode (plan|build: pick one; implement [plan file]: in a new session)",
         },
-        execute: async (_ctx, args) => {
-          const [arg] = args;
+        execute: async (ctx, args) => {
+          const [arg, file] = args;
+          if (arg === "implement") {
+            const path = await findPlan(ctx.cwd, file);
+            return implementInNewSession(ctx, path, (sessionManager) =>
+              this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
+            );
+          }
+
           if (arg === undefined) {
             this.toggleMode();
             return;
           }
 
-          if (!isMode(arg)) throw new Error(`Unknown mode: ${arg} (use plan or build)`);
+          if (!isMode(arg)) throw new Error(`Unknown mode: ${arg} (use plan, build, or implement)`);
           this.setMode(arg);
         },
       },
@@ -100,6 +109,12 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     const actions: PlanActions = {
       switchToBuild: () => this.setMode(Mode.BUILD),
       sendUserMessage: (text) => this.session.pi.sendUserMessage(text),
+      // Only a command's context can start a session, so go through /plan implement. The path is relative to the
+      // cwd, which may hold spaces; the plan's own name never does.
+      implementInNewSession: (plan) =>
+        this.session.pi.sendUserMessage(`/plan implement ${relative(ctx.cwd, plan.path)}`, {
+          expandPromptTemplates: true,
+        }),
     };
     await offerPlan(ctx, plan, PLAN_CHOICES, actions);
   }

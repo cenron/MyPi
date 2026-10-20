@@ -1,6 +1,6 @@
-import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, SessionManager, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Session } from "#core/session";
 import type { ToolRule } from "#core/tool-guard";
 import { ModuleLoadMode } from "#core/types";
@@ -23,6 +23,10 @@ class Counter extends BaseModule<{ count: number }> {
 
   save(count: number) {
     this.saveState({ count });
+  }
+
+  saveTo(sessionManager: SessionManager, count: number) {
+    this.saveStateTo(sessionManager, { count });
   }
 
   load() {
@@ -74,6 +78,13 @@ describe("BaseModule", () => {
     const { session, appendEntry } = fakeSession();
     new Counter(session).save(1);
     expect(appendEntry).toHaveBeenCalledWith("mypi-module-counter", { count: 1 });
+  });
+
+  // A new session's modules load it on their first init(), so it uses the same entry name.
+  it("saves the module's state into another session as mypi-module-<name>", () => {
+    const appendCustomEntry = vi.fn();
+    new Counter(fakeSession().session).saveTo({ appendCustomEntry } as unknown as SessionManager, 3);
+    expect(appendCustomEntry).toHaveBeenCalledWith("mypi-module-counter", { count: 3 });
   });
 
   it("loads the module's last saved state", () => {

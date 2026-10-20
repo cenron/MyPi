@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { planFileName, savePlan, slugify } from "#module/plan-build/plan-file";
+import { latestPlan, planFileName, savePlan, slugify } from "#module/plan-build/plan-file";
 
 const now = new Date("2026-10-20T14:32:05.123Z");
 
@@ -91,5 +91,39 @@ describe("savePlan", () => {
     } finally {
       await chmod(plansDir(), 0o700);
     }
+  });
+});
+
+describe("latestPlan", () => {
+  let cwd: string;
+  beforeEach(async () => {
+    cwd = await mkdtemp(join(tmpdir(), "mypi-latest-"));
+  });
+  afterEach(async () => {
+    await rm(cwd, { recursive: true, force: true });
+  });
+
+  it("is undefined when there's no plans folder", async () => {
+    await expect(latestPlan(cwd)).resolves.toBeUndefined();
+  });
+
+  it("is undefined when the folder holds no plan, only its .gitignore", async () => {
+    await mkdir(join(cwd, ".pi", "plans"), { recursive: true });
+    await writeFile(join(cwd, ".pi", "plans", ".gitignore"), "*\n");
+    await expect(latestPlan(cwd)).resolves.toBeUndefined();
+  });
+
+  it("is the newest plan, by its timestamp", async () => {
+    await savePlan(cwd, "b", "x", new Date("2026-10-20T09:00:00Z"));
+    const newest = await savePlan(cwd, "a", "x", new Date("2026-10-21T08:00:00Z"));
+    await savePlan(cwd, "c", "x", new Date("2026-10-19T23:00:00Z"));
+    await writeFile(join(cwd, ".pi", "plans", "zz-notes.txt"), "");
+    await expect(latestPlan(cwd)).resolves.toBe(newest);
+  });
+
+  it("passes on a read error other than a missing folder", async () => {
+    await mkdir(join(cwd, ".pi"), { recursive: true });
+    await writeFile(join(cwd, ".pi", "plans"), "not a folder");
+    await expect(latestPlan(cwd)).rejects.toMatchObject({ code: "ENOTDIR" });
   });
 });

@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isNodeError } from "#core/util/errors";
 import { PLANS_DIR } from "./rule";
 
 /** A plan the model submitted with `submit_plan`, and where it was saved. */
@@ -33,11 +34,28 @@ export function planFileName(title: string, now: Date): string {
 export async function savePlan(cwd: string, title: string, plan: string, now: Date): Promise<string> {
   const dir = join(cwd, PLANS_DIR);
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, ".gitignore"), "*\n", { flag: "wx" }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "EEXIST") throw error;
+  await writeFile(join(dir, ".gitignore"), "*\n", { flag: "wx" }).catch((error: unknown) => {
+    if (!isNodeError(error) || error.code !== "EEXIST") throw error;
   });
 
   const path = join(dir, planFileName(title, now));
   await writeFile(path, `# ${title}\n\n${plan.trim()}\n`, { flag: "wx" });
   return path;
+}
+
+/**
+ * The newest plan in `<cwd>/.pi/plans/`, or undefined when there is none. Names start with a UTC timestamp, so the
+ * last by name is the newest.
+ */
+export async function latestPlan(cwd: string): Promise<string | undefined> {
+  const dir = join(cwd, PLANS_DIR);
+  const names = await readdir(dir).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return [];
+    throw error;
+  });
+  const latest = names
+    .filter((name) => name.endsWith(".md"))
+    .sort()
+    .at(-1);
+  return latest === undefined ? undefined : join(dir, latest);
 }

@@ -54,7 +54,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   out of the model's context. `session.load(name)` returns the data of the last `mypi-<name>` entry on the current
   branch (`ctx.sessionManager.getBranch()`), or `undefined`, typed `unknown` because the file can hold anything. This is
   the low-level pair: core uses it directly (`ModuleManager` saves `mypi-modules`), and modules use the typed
-  `saveState`/`loadState` on `BaseModule` instead (see [Modules](#modules)).
+  `saveState`/`loadState` on `BaseModule` instead (see [Modules](#modules)). `session.saveTo(sessionManager, name,
+  data)` writes the same entry into another session, such as a new one in `ctx.newSession({ setup })`, which runs
+  before that session's `session_start`, so its modules see the entry in `init()`.
 - **`ModuleManager`** (`module-manager.ts`) holds the session's module instances and two sets of names: `running`,
   decided on `session_start` and fixed until `/reload`, and `selected`, what `/modules` saved for the next `/reload`.
   `start(modules, reason)` reads the saved selection, picks the modules to load, and runs their `init()`.
@@ -177,8 +179,9 @@ export interface Module {
   uses, and `info` is the one thing it must provide. `State` is the module's own state type, declared in its folder
   (`class PlanBuildModule extends BaseModule<{ mode: Mode }>`). The protected `saveState(state)` and `loadState()`
   store it as `mypi-module-<info.name>`, typed by `State`, so saving the wrong shape doesn't compile. The `module-`
-  prefix keeps modules apart from core's own entries, even for a module named `modules`. `loadState` trusts the file,
-  so check any field you rely on. The helpers `setFooter(item)`, `onKey(key, handler)`, `setPrompt(text)`, and
+  prefix keeps modules apart from core's own entries, even for a module named `modules`. `saveStateTo(sessionManager,
+  state)` saves it into another session (plan-build starts `/plan implement`'s new session in Build this way).
+  `loadState` trusts the file, so check any field you rely on. The helpers `setFooter(item)`, `onKey(key, handler)`, `setPrompt(text)`, and
   `onToolCall(rule)` each give the module one slot keyed by `info.name`: a footer item, a key handler, a prompt section,
   and a `ToolGuard` rule. `registerTool(def)` passes a tool to `pi.registerTool`, and `setToolActive(name, active)` adds
   one tool to pi's active tools or removes it, leaving the rest alone (and doing nothing when it's already in that

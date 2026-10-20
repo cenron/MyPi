@@ -6,6 +6,7 @@ import type { SubmittedPlan } from "./plan-file";
 export type PlanActions = {
   switchToBuild: () => void;
   sendUserMessage: (text: string) => void;
+  implementInNewSession: (plan: SubmittedPlan) => void;
 };
 
 /** One choice in the "Implement this plan?" dialog. `label` is shown by `ctx.ui.select` and must be unique. */
@@ -25,6 +26,7 @@ export const PLAN_CHOICES: PlanChoice[] = [
       actions.sendUserMessage(IMPLEMENT_MESSAGE);
     },
   },
+  { label: "Clear context and implement", run: (plan, actions) => actions.implementInNewSession(plan) },
   { label: "Stay in plan mode", run: () => {} },
 ];
 

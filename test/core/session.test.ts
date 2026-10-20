@@ -80,4 +80,12 @@ describe("Session", () => {
     session.save("modules", { loaded: ["a"] });
     expect(session.load("modules")).toEqual({ loaded: ["a"] });
   });
+
+  it("saves into another session as a mypi-<name> custom entry", () => {
+    const appendCustomEntry = vi.fn();
+    const { session, appendEntry } = fakeSession();
+    session.saveTo({ appendCustomEntry } as never, "x", { a: 1 });
+    expect(appendCustomEntry).toHaveBeenCalledWith("mypi-x", { a: 1 });
+    expect(appendEntry).not.toHaveBeenCalled();
+  });
 });

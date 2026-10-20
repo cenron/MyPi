@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Editor } from "#ui/editor";
 import { Footer } from "#ui/footer";
 import { ModuleManager } from "./module-manager";
@@ -30,6 +30,14 @@ export class Session {
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */
   save(name: string, data: unknown) {
     this.pi.appendEntry(`mypi-${name}`, data);
+  }
+
+  /**
+   * Like `save`, but into another session, such as a new one in `ctx.newSession({ setup })`, which runs before that
+   * session's `session_start`, so its modules load the entry in `init()`.
+   */
+  saveTo(sessionManager: SessionManager, name: string, data: unknown) {
+    sessionManager.appendCustomEntry(`mypi-${name}`, data);
   }
 
   /** The last `mypi-<name>` entry's data on the current branch, or undefined. The file can hold anything. */

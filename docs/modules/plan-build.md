@@ -1,6 +1,6 @@
 # Plan / Build
 
-**Status:** building (slices 1–3 done; 4 `submit_plan`, 5 "Allow for this session", and 6 the dialog built, live check pending)
+**Status:** building (slices 1–6 done; 7, `/plan implement`, built, live check pending; 8, the question tool, next)
 
 ## Goal
 
@@ -12,6 +12,9 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 - Three ways to switch, at any time: `/plan` toggles, `/plan plan` and `/plan build` pick a mode, and Shift+Tab
   toggles. Any other mode is an error; words after the mode are ignored, as in `/modules`. Switching shows no
   message, since the footer changes.
+- `/plan implement [plan file]` starts a new session in Build, seeded with the plan; with no file, the latest plan in
+  `.pi/plans/`. The file is resolved the way the file tools resolve paths (relative to the cwd, `~`, a leading `@`).
+  This session keeps its mode.
 - The footer always shows the mode: `BUILD` in dim, `PLAN` in the warning color.
 - In **Plan**:
   - `edit` and `write` are refused, except inside the project's plans folder, `.pi/plans/`.
@@ -38,7 +41,7 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 | Questions | Question tool | See `examples/extensions/question.ts` and `questionnaire.ts`. |
 | Plan hand-off | `submit_plan({ title, plan })` (`tools/submit-plan.ts`) writes the plan to `.pi/plans/` and keeps it as the module's `submittedPlan` | Structured text, no parsing of the reply. The file is `<UTC timestamp>-<slug>.md` (`2026-10-20-143205-add-submit-plan.md`, from `planFileName` in `plan-file.ts`): UTC so names sort by time across DST, seconds so two plans a minute apart don't collide, and the slug is the title lowercased with runs of other characters turned into `-`, capped at 50, or `plan` when empty. The file starts with `# <title>`. Creating the folder also writes `.gitignore` containing `*`; neither file is ever overwritten (`wx`), so a name clash comes back to the model as an error. `submittedPlan` is in memory only; slice 6 decides when it's cleared. Plan's rule allows the tool by name. |
 | Dialog | `agent_settled`, when `aborted` is false and a plan was submitted this run | `agent_end` is too early: the run is still active and retries or follow-ups can follow. The module subscribes with `session.pi.on` in `init()` (modules never unload within an extension instance, so there's nothing to unsubscribe). "This run" is reset on `before_agent_start`, which fires once per run (`_prepareRun`); `agent_start` fires again on each continuation (`agent-loop.js`). It also asks only with a UI and while still in Plan: a user who switched to Build mid-run is already driving. Pi awaits `agent_settled` handlers, and a `sendUserMessage` made meanwhile is deferred until the settle is done (`prompt` checks `_isEmittingAgentSettled` in `agent-session.js`), so Implement's message starts a fresh run. The dialog takes the plan, so it asks once per plan. |
-| Clear context | `/plan implement [plan file]`, which calls `ctx.newSession({ withSession })` | `newSession` exists only on a command's context (`ExtensionCommandContext`), not in event handlers like `agent_settled`, so the dialog choice goes through the command. The choice sends the command with `pi.sendUserMessage(…, { expandPromptTemplates: true })`, which runs extension commands immediately, so it is only safe once the agent is idle. The new session reads the plan from its file. |
+| Clear context | `/plan implement [plan file]` (`implement.ts`), which calls `ctx.newSession({ parentSession, setup, withSession })` | `newSession` exists only on a command's context (`ExtensionCommandContext`), not in event handlers like `agent_settled`, so the dialog choice goes through the command: `pi.sendUserMessage("/plan implement <path relative to the cwd>", { expandPromptTemplates: true })`. Sent during the settle, it's deferred until the settle is done, then runs the command at once. The path is relative because the arguments are split on whitespace; the cwd may hold spaces, a plan's name never does. The command reads the plan first (a missing file fails before leaving the session), then `await ctx.waitForIdle()` for a command typed mid-run (it returns at once on the dialog's path, since pi clears the run flag before `agent_settled`). `setup` runs before the new session's `session_start` (`newSession` in `agent-session-runtime.js`), so it saves `{ mode: "build" }` there with `BaseModule.saveStateTo`, and the new session's `init()` starts in Build; `submit_plan` stays inactive since nothing restores it. `withSession` sends the seed text with the new context's `sendUserMessage`, without awaiting it: it resolves only when the run ends. After the switch the old `ctx` is stale, so the command returns no message; a cancelled `newSession` says so. |
 | Toggle key | Shift+Tab, through `BaseModule.onKey` and MyPi's shared editor | Shift+Tab is bound to `app.thinking.cycle`, which pi reserves: `pi.registerShortcut("shift+tab")` is skipped with a "conflicts with built-in shortcut" warning (`RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS` in `runner.js`). The shared editor catches the key in `handleInput` before pi's own handling, so it works on any machine without a `keybindings.json` change. Thinking-cycle loses Shift+Tab unless it's rebound there. |
 
 ## Shared footer and editor
@@ -85,12 +88,16 @@ runs a registered handler for a matching key, and passes every other key to `sup
 
 ## Dialog choices
 
-The dialog is a list of choices, `PLAN_CHOICES` in `dialog.ts` (built in slice 6): Implement and Stay in plan mode.
-Slice 7 adds Clear context and implement with its command. Other modules adding choices waits until one needs it,
-along with `isAvailable` for hiding a choice.
+The dialog is a list of choices, `PLAN_CHOICES` in `dialog.ts`: Implement, Clear context and implement (slice 7), and
+Stay in plan mode. Other modules adding choices waits until one needs it, along with `isAvailable` for hiding a
+choice.
 
 ```ts
-type PlanActions = { switchToBuild: () => void; sendUserMessage: (text: string) => void };
+type PlanActions = {
+  switchToBuild: () => void;
+  sendUserMessage: (text: string) => void;
+  implementInNewSession: (plan: SubmittedPlan) => void; // runs /plan implement with the plan's file
+};
 type PlanChoice = {
   label: string; // shown by ctx.ui.select; unique
   run: (plan: SubmittedPlan, actions: PlanActions) => void;
@@ -106,7 +113,7 @@ type PlanChoice = {
 
 ## Seed text for a fresh session
 
-Taken from Codex:
+Taken from Codex, then the plan file's path and its contents (`implementMessage` in `prompts.ts`):
 
 > A previous agent produced the plan below to accomplish the user's task. Implement the plan in a fresh context. Treat the plan as the source of user intent, re-read files as needed, and carry the work through implementation and verification.
 
@@ -187,6 +194,9 @@ helpers stay pure.
    `PLAN_CHOICES`), wired in `init()` with `session.pi.on`; tests in `test/module/plan-build/index.test.ts`. Live check
    pending.
 7. `/plan implement [plan file]`, the clear-context command; with no file, the latest plan in `.pi/plans/`.
+   **Built** (2026-10-20): `implement.ts` (`findPlan`, `implementInNewSession`), `latestPlan` in `plan-file.ts`, the
+   dialog's Clear context and implement, `Session.saveTo` and `BaseModule.saveStateTo`; tests in
+   `test/module/plan-build/`. Live check pending.
 8. A question tool.
 
 ## Open questions
