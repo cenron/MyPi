@@ -91,16 +91,19 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     never touch pi; they're set by the tool's author (MCP tools carry them, pi's built-ins don't) and unverified.
   - A verdict is an objection, never a grant: `allow` means "no objection from me" and can't override another rule.
     The guard runs every rule, then any `block` wins (its reason goes to the model, nothing is asked), else any `ask`
-    shows one confirm listing every question, else the call runs. Pi itself stops at the first block, so rules must be
+    shows one dialog listing every question, else the call runs. Pi itself stops at the first block, so rules must be
     cheap and side-effect free to all run first.
-  - Only the guard asks: `ctx.ui.confirm(title, questions, { signal: ctx.signal })` with the asking modules named in the
-    title, so Esc or an abort dismisses it and blocks. Without a UI an `ask` blocks. Modules never call `confirm`
-    themselves, so dialogs don't stack and the `hasUI` check lives in one place.
-  - "Allow for this session" (planned, after plan-build's slice 4) lives here too, without touching modules. The
-    dialog becomes `ctx.ui.select` with Yes, No, and Allow for this session. Allowing remembers each listed ask line
-    (`<module>: <question>`) as an exact string in an in-memory `Set`, so `/reload` forgets it. Later asks whose line
-    is remembered are skipped, the dialog lists only the rest, and with none left nothing is asked. Exact strings keep
-    it safe (`npm install` asks after `npm test` was allowed), and a remembered ask never overrides a block.
+  - Only the guard asks: `ctx.ui.select("Permission required\n<lines>", ["Yes", "No", "Allow for this session"], {
+    signal: ctx.signal })`, one line per ask, `<module>: <question>`. Pi's own `confirm` is the same selector with Yes
+    and No (`showExtensionConfirm` in `interactive-mode.js`), so the dialog looks the same plus the third choice. No,
+    Esc, and an abort (select resolves `undefined`) block with `The user declined this call.` Without a UI an `ask`
+    blocks. Modules never ask themselves, so dialogs don't stack and the `hasUI` check lives in one place.
+  - "Allow for this session" lives here too, without touching modules. Picking it lets the call run and remembers each
+    listed ask line as an exact string in an in-memory `Set` on the guard. `Session` builds a new guard, so `/reload`,
+    resume, and a new session forget it. Later asks whose line is remembered are skipped, the dialog lists only the
+    rest, and with none left nothing is asked. Exact strings keep it safe (`npm install` asks after `npm test` was
+    allowed), the module name keeps modules apart, and a remembered ask never overrides a block, since a block returns
+    before the asks are looked at.
   - Rules don't change `input`, though pi allows it, so rule order never matters.
   - Each rule writes its own reason ("Plan mode is on: …"); the guard passes it through unchanged.
   - How pi runs `tool_call` (pi 1.2.0): the event is `{ toolName, toolCallId, parentToolCallId?, input }`, and
@@ -108,7 +111,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     `{ block: true }` wins (`emitToolCall` in `dist/core/extensions/runner.js`). A block, or a handler that throws,
     becomes an error tool result whose text is `reason` (`prepareToolCall` in pi-agent-core's `agent-loop.js`). An
     inactive tool fails with `Tool X not found` before any hook runs. In a parallel batch each call is prepared, hook
-    included, one after another before any runs, so confirms never overlap. Calls a tool makes through
+    included, one after another before any runs, so dialogs never overlap. Calls a tool makes through
     `ctx.executeTool()` (codemode scripts, for example) pass through `tool_call` too, under the inner tool's name with
     `parentToolCallId` set (`_executeNestedToolCall` in `dist/core/agent-session.js`). They can reach the active
     `direct` tools plus every `codemode` or `deferred` tool, active or not, so the guard is the only gate for those.
@@ -177,7 +180,9 @@ export interface Module {
   prefix keeps modules apart from core's own entries, even for a module named `modules`. `loadState` trusts the file,
   so check any field you rely on. The helpers `setFooter(item)`, `onKey(key, handler)`, `setPrompt(text)`, and
   `onToolCall(rule)` each give the module one slot keyed by `info.name`: a footer item, a key handler, a prompt section,
-  and a `ToolGuard` rule. Add helpers here when a module first needs them (event handlers, tools), so the SDK only
+  and a `ToolGuard` rule. `registerTool(def)` passes a tool to `pi.registerTool`, and `setToolActive(name, active)` adds
+  one tool to pi's active tools or removes it, leaving the rest alone (and doing nothing when it's already in that
+  state), since pi restores the active tools from the transcript. Add helpers here when a module first needs them (event handlers, tools), so the SDK only
   holds what's used.
 - `Module`, `ModuleInfo` and `ModuleLoadMode` live in `src/core/types.ts`. `loadType` is `ON_LOAD` (loaded by default),
   `ON_DEMAND` (loaded only when chosen in `/modules`), or `ALWAYS` (loaded on every `session_start` and can't be
@@ -188,6 +193,10 @@ export interface Module {
   `registerCommand` then reads the commands from the manager.
 - A module reaches pi through `session.pi` and `session.ctx`, keeps its runtime state as fields, and saves what must
   survive `/reload` with `saveState`. Modules don't reach for globals or import each other's internals.
+- A module that needs a pi event MyPi doesn't route subscribes in `init()` with `session.pi.on(event, handler)`
+  (plan-build's `before_agent_start` and `agent_settled`). The set of running modules is fixed until `/reload`, which
+  builds a new extension instance, so there's nothing to unsubscribe. Handlers run after MyPi's own, which `index.ts`
+  registers at load.
 
 To add a module, create `src/module/<name>/index.ts` with a class extending `BaseModule`, then add the class to the
 list in `src/module/index.ts`.

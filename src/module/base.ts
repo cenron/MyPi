@@ -1,4 +1,6 @@
+import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
+import type { TSchema } from "typebox";
 import type { Session } from "#core/session";
 import type { ToolRule } from "#core/tool-guard";
 import type { Command, Module, ModuleInfo } from "#core/types";
@@ -44,6 +46,21 @@ export abstract class BaseModule<State = never> implements Module {
 
   protected setPrompt(prompt: string | undefined) {
     this.session.promptManager.set(this.info.name, prompt);
+  }
+
+  protected registerTool<TParams extends TSchema, TDetails>(tool: ToolDefinition<TParams, TDetails>) {
+    this.session.pi.registerTool(tool);
+  }
+
+  /**
+   * Adds the tool to the active tools (the ones declared to the model) or removes it, leaving the rest alone. Pi
+   * restores the active tools from the transcript, so a module adds and removes its own instead of saving a list. Does
+   * nothing when the tool is already in that state.
+   */
+  protected setToolActive(name: string, active: boolean) {
+    const tools = this.session.pi.getActiveTools();
+    if (tools.includes(name) === active) return;
+    this.session.pi.setActiveTools(active ? [...tools, name] : tools.filter((tool) => tool !== name));
   }
 
   private get stateName() {

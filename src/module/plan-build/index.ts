@@ -1,8 +1,12 @@
+import type { AgentSettledEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
+import { offerPlan, PLAN_CHOICES, type PlanActions } from "./dialog";
+import type { SubmittedPlan } from "./plan-file";
 import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
 import { planRule } from "./rule";
+import { SUBMIT_PLAN, submitPlanTool } from "./tools/submit-plan";
 
 const Mode = {
   PLAN: "plan",
@@ -14,6 +18,8 @@ const isMode = (value: unknown): value is Mode => (Object.values(Mode) as unknow
 
 export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   private mode: Mode = Mode.PLAN;
+  private _submittedPlan: SubmittedPlan | undefined;
+
   private footerItems: Record<Mode, FooterItem> = {
     [Mode.PLAN]: { text: "PLAN", color: FooterColor.Warning },
     [Mode.BUILD]: { text: "BUILD", color: FooterColor.Dim },
@@ -38,10 +44,19 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.mode = isMode(savedMode) ? savedMode : Mode.PLAN;
     this.setFooter(this.footerItems[this.mode]);
     this.setPrompt(this.prompts[this.mode]);
+    this.registerTool(submitPlanTool((plan) => (this._submittedPlan = plan)));
+    this.initEventHandlers();
+
+    // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
+    this.setToolActive(SUBMIT_PLAN, this.mode === Mode.PLAN);
     this.onKey("shift+tab", () => this.toggleMode());
     // Reads this.mode on every call, so a switch applies to the very next tool call, even mid-run.
     this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
-    return;
+  }
+
+  /** The plan `submit_plan` saved in this run, until the dialog takes it or the next run starts. In memory only. */
+  get submittedPlan(): SubmittedPlan | undefined {
+    return this._submittedPlan;
   }
 
   commands(): Command[] {
@@ -65,14 +80,40 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     ];
   }
 
+  private initEventHandlers() {
+    // before_agent_start fires once per run; agent_start fires again on each retry or continuation within it.
+    this.session.pi.on("before_agent_start", () => {
+      this._submittedPlan = undefined;
+    });
+    this.session.pi.on("agent_settled", (ev, ctx) => this.onAgentSettled(ev, ctx));
+  }
+
+  /**
+   * Once a run that submitted a plan settles, asks what to do with it. pi awaits this, and defers a message sent
+   * meanwhile until the settle is done, so Implement's message starts a new run instead of joining this one.
+   */
+  private async onAgentSettled(ev: AgentSettledEvent, ctx: ExtensionContext) {
+    const plan = this._submittedPlan;
+    if (ev.aborted || !plan || !ctx.hasUI || this.mode !== Mode.PLAN) return;
+
+    this._submittedPlan = undefined;
+    const actions: PlanActions = {
+      switchToBuild: () => this.setMode(Mode.BUILD),
+      sendUserMessage: (text) => this.session.pi.sendUserMessage(text),
+    };
+    await offerPlan(ctx, plan, PLAN_CHOICES, actions);
+  }
+
   private toggleMode() {
     this.setMode(this.mode === Mode.PLAN ? Mode.BUILD : Mode.PLAN);
   }
+
   private setMode(mode: Mode): void {
-    this.mode = isMode(mode) ? mode : Mode.PLAN;
+    this.mode = mode;
 
     this.saveState({ mode: this.mode });
     this.setFooter(this.footerItems[this.mode]);
     this.setPrompt(this.prompts[this.mode]);
+    this.setToolActive(SUBMIT_PLAN, this.mode === Mode.PLAN);
   }
 }

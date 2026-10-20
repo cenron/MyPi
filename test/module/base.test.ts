@@ -1,4 +1,5 @@
 import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import type { Session } from "#core/session";
 import type { ToolRule } from "#core/tool-guard";
@@ -38,6 +39,20 @@ class Counter extends BaseModule<{ count: number }> {
 
   guard(rule: ToolRule) {
     this.onToolCall(rule);
+  }
+
+  tool(name: string) {
+    this.registerTool({
+      name,
+      label: name,
+      description: "",
+      parameters: Type.Object({}),
+      execute: async () => ({ content: [], details: undefined }),
+    });
+  }
+
+  toolActive(name: string, active: boolean) {
+    this.setToolActive(name, active);
   }
 }
 
@@ -118,5 +133,29 @@ describe("BaseModule", () => {
     new Counter(session, "other").guard(() => ({ kind: "allow" }));
     new Counter(session).guard(() => ({ kind: "block", reason: "new" }));
     await expect(session.toolGuard.check(bashCall, ctx)).resolves.toEqual({ block: true, reason: "new" });
+  });
+
+  it("registers a module's tool with pi", () => {
+    const { session, tools } = fakeSession();
+    new Counter(session).tool("count");
+    expect(tools.has("count")).toBe(true);
+  });
+
+  it("adds a tool to the active tools and removes it, leaving the rest in order", () => {
+    const { session, activeTools } = fakeSession();
+    const module = new Counter(session);
+    module.toolActive("count", true);
+    expect(activeTools()).toEqual(["read", "bash", "edit", "write", "count"]);
+    module.toolActive("bash", false);
+    expect(activeTools()).toEqual(["read", "edit", "write", "count"]);
+  });
+
+  // Setting the same list again would still move the tool to the end, so an unchanged state sets nothing.
+  it("leaves the active tools alone when the tool is already in that state", () => {
+    const { session, setActiveTools } = fakeSession();
+    const module = new Counter(session);
+    module.toolActive("read", true);
+    module.toolActive("count", false);
+    expect(setActiveTools).not.toHaveBeenCalled();
   });
 });

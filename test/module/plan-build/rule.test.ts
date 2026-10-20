@@ -7,7 +7,7 @@ const verdict = (toolName: string, input: Record<string, unknown> = {}, annotati
   planRule({ toolName, input, annotations }, env);
 
 describe("planRule", () => {
-  it.each(["read", "grep", "find", "ls", "tool_search", "codemode"])("allows %s", (tool) => {
+  it.each(["read", "grep", "find", "ls", "tool_search", "codemode", "submit_plan"])("allows %s", (tool) => {
     expect(verdict(tool)).toEqual({ kind: "allow" });
   });
 

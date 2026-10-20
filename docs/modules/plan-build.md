@@ -1,6 +1,6 @@
 # Plan / Build
 
-**Status:** building (slices 1–3 done; slice 4, `submit_plan`, next)
+**Status:** building (slices 1–3 done; 4 `submit_plan`, 5 "Allow for this session", and 6 the dialog built, live check pending)
 
 ## Goal
 
@@ -32,12 +32,12 @@ Two modes, the way Claude Code, Codex, and OpenCode work. In **Plan** the agent 
 |---|---|---|
 | Mode state | `saveState({ mode })`, read back with `loadState()` in `init()` | `Mode` is a const object plus a type, like `ModuleLoadMode`, in the module's `index.ts` for now. `PlanBuildModule extends BaseModule<{ mode: Mode }>`, so the module owns its state type and core never lists it. Saved as `mypi-module-plan-build`. Check the loaded `mode` with an `isMode` guard, else Plan. Every switch goes through one method that sets the mode, saves it, and updates the footer; `init()` restores and shows the footer without saving, so a `/reload` adds no entry. Same idea as pi's `examples/extensions/plan-mode`. No state files. |
 | Footer | `BaseModule.setFooter({ text, color })`, through MyPi's shared footer | See [Shared footer and editor](#shared-footer-and-editor). Pi clears every status on `/reload` and on each session switch (`resetExtensionUI` in `interactive-mode.js`), so `init()` sets it every time, and an unloaded module's label is gone with no cleanup. |
-| Telling the model | `BaseModule.setPrompt(text)`, through MyPi's `PromptManager` and `before_agent_start` | One section, `mypi-plan-build`, always present: `PLAN_PROMPT` in Plan, `BUILD_PROMPT` in Build (`prompts.ts`), set in `init()` and on every switch. Leaving Plan replaces the text instead of dropping it, as OpenCode does: a drop only tells the model `Removed system prompt section`, and on models without mid-conversation system messages not even that. The Build text reads fine in a session that never saw Plan, so no transcript check. The Plan text covers only what exists now; slices 4 and 8 add `submit_plan` and the question tool to it. It says "don't edit files", so the model won't even write to `.pi/plans/`, which the guard allows; slice 4 changes that. With it on, the model refuses to call `write` at all, so the guard's block is a backstop. A switch mid-run reaches the model on the next prompt; the `tool_call` guard enforces the live mode, so its refusal should say why. Pi diffs sections, so the cache stays warm on models that take mid-conversation system messages; see `PromptManager` in [architecture](../architecture.md#core). |
-| Hiding tools | `pi.setActiveTools()`, symmetric: entering Plan adds the Plan-only tools, leaving removes them | Nothing is hidden in Plan: `write` must stay active or the `.pi/plans/` exception is unreachable (an inactive tool fails with "not found" before `tool_call`). So no tool list is saved. That matters because pi restores the active tools from the transcript on resume, `/reload`, and tree moves, before `session_start` (`_restoreToolsFromTranscript` in `dist/core/agent-session.js`), so a pre-Plan list kept in memory would be lost on `/reload` in Plan; with add/remove, pi's restored loadout is already right. The first Plan-only tool is `submit_plan` (slice 4), so `setActiveTools` starts there. |
-| Blocking | A rule on MyPi's shared `ToolGuard`, through `BaseModule.onToolCall` | The real enforcement. `planRule` (`rule.ts`) is pure; `init()` registers `(call, env) => mode is Plan ? planRule(call, env) : allow`, so in Build the module has no objection. In Plan, see [Plan rule](#plan-rule). See `ToolGuard` in [architecture](../architecture.md#core) for how pi runs `tool_call` and how rules combine. The rule reads the live mode, so a mid-run switch applies on the next tool call. Block reasons start with "Plan mode is on", name the path, and tell the model not to try another way: it keeps planning, and the user switches to Build. Questions start with "Plan mode is on." and show the command or tool. The guard does the asking; the module never calls `confirm`. |
+| Telling the model | `BaseModule.setPrompt(text)`, through MyPi's `PromptManager` and `before_agent_start` | One section, `mypi-plan-build`, always present: `PLAN_PROMPT` in Plan, `BUILD_PROMPT` in Build (`prompts.ts`), set in `init()` and on every switch. Leaving Plan replaces the text instead of dropping it, as OpenCode does: a drop only tells the model `Removed system prompt section`, and on models without mid-conversation system messages not even that. The Build text reads fine in a session that never saw Plan, so no transcript check. The Plan text covers only what exists now; slice 8 adds the question tool to it. It allows writing plan notes in `.pi/plans/` and tells the model to call `submit_plan` with a title and the full plan once it's settled, and to submit again if the plan changes. Before slice 4 it said "don't edit files", and the model then refused to call `write` at all, so the guard's block is a backstop. A switch mid-run reaches the model on the next prompt; the `tool_call` guard enforces the live mode, so its refusal should say why. Pi diffs sections, so the cache stays warm on models that take mid-conversation system messages; see `PromptManager` in [architecture](../architecture.md#core). |
+| Hiding tools | `pi.setActiveTools()`, symmetric: entering Plan adds the Plan-only tools, leaving removes them | Nothing is hidden in Plan: `write` must stay active or the `.pi/plans/` exception is unreachable (an inactive tool fails with "not found" before `tool_call`). So no tool list is saved. That matters because pi restores the active tools from the transcript on resume, `/reload`, and tree moves, before `session_start` (`_restoreToolsFromTranscript` in `dist/core/agent-session.js`), so a pre-Plan list kept in memory would be lost on `/reload` in Plan; with add/remove, pi's restored loadout is already right. `submit_plan` is registered with `defaultActive: false` (a `direct` tool is otherwise active on registration, so Build would see it), and `init()` and every switch call `BaseModule.setToolActive(SUBMIT_PLAN, mode is Plan)`. On `/reload` pi marks the active tools pending before `session_start` (`reload` in `agent-session.js`), and on resume the transcript restore keeps unknown names pending, so registering in `init()` brings it back; the call in `init()` only fixes up a new session. A `/plan build` mid-run makes a later `submit_plan` fail with pi's `Tool submit_plan not found`, like any inactive tool. |
+| Blocking | A rule on MyPi's shared `ToolGuard`, through `BaseModule.onToolCall` | The real enforcement. `planRule` (`rule.ts`) is pure; `init()` registers `(call, env) => mode is Plan ? planRule(call, env) : allow`, so in Build the module has no objection. In Plan, see [Plan rule](#plan-rule). See `ToolGuard` in [architecture](../architecture.md#core) for how pi runs `tool_call` and how rules combine. The rule reads the live mode, so a mid-run switch applies on the next tool call. Block reasons start with "Plan mode is on", name the path, and tell the model not to try another way: it keeps planning, and the user switches to Build. Questions start with "Plan mode is on." and show the command or tool. The guard does the asking, with "Allow for this session" for each ask line; the module never asks itself. |
 | Questions | Question tool | See `examples/extensions/question.ts` and `questionnaire.ts`. |
-| Plan hand-off | `submit_plan` stores the plan and writes it to `.pi/plans/` | Structured text, no parsing of the reply. |
-| Dialog | `agent_settled`, when `aborted` is false and a plan was submitted this run | `agent_end` is too early: the run is still active and retries or follow-ups can follow. |
+| Plan hand-off | `submit_plan({ title, plan })` (`tools/submit-plan.ts`) writes the plan to `.pi/plans/` and keeps it as the module's `submittedPlan` | Structured text, no parsing of the reply. The file is `<UTC timestamp>-<slug>.md` (`2026-10-20-143205-add-submit-plan.md`, from `planFileName` in `plan-file.ts`): UTC so names sort by time across DST, seconds so two plans a minute apart don't collide, and the slug is the title lowercased with runs of other characters turned into `-`, capped at 50, or `plan` when empty. The file starts with `# <title>`. Creating the folder also writes `.gitignore` containing `*`; neither file is ever overwritten (`wx`), so a name clash comes back to the model as an error. `submittedPlan` is in memory only; slice 6 decides when it's cleared. Plan's rule allows the tool by name. |
+| Dialog | `agent_settled`, when `aborted` is false and a plan was submitted this run | `agent_end` is too early: the run is still active and retries or follow-ups can follow. The module subscribes with `session.pi.on` in `init()` (modules never unload within an extension instance, so there's nothing to unsubscribe). "This run" is reset on `before_agent_start`, which fires once per run (`_prepareRun`); `agent_start` fires again on each continuation (`agent-loop.js`). It also asks only with a UI and while still in Plan: a user who switched to Build mid-run is already driving. Pi awaits `agent_settled` handlers, and a `sendUserMessage` made meanwhile is deferred until the settle is done (`prompt` checks `_isEmittingAgentSettled` in `agent-session.js`), so Implement's message starts a fresh run. The dialog takes the plan, so it asks once per plan. |
 | Clear context | `/plan implement [plan file]`, which calls `ctx.newSession({ withSession })` | `newSession` exists only on a command's context (`ExtensionCommandContext`), not in event handlers like `agent_settled`, so the dialog choice goes through the command. The choice sends the command with `pi.sendUserMessage(…, { expandPromptTemplates: true })`, which runs extension commands immediately, so it is only safe once the agent is idle. The new session reads the plan from its file. |
 | Toggle key | Shift+Tab, through `BaseModule.onKey` and MyPi's shared editor | Shift+Tab is bound to `app.thinking.cycle`, which pi reserves: `pi.registerShortcut("shift+tab")` is skipped with a "conflicts with built-in shortcut" warning (`RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS` in `runner.js`). The shared editor catches the key in `handleInput` before pi's own handling, so it works on any machine without a `keybindings.json` change. Thinking-cycle loses Shift+Tab unless it's rebound there. |
 
@@ -85,19 +85,24 @@ runs a registered handler for a matching key, and passes every other key to `sup
 
 ## Dialog choices
 
-The dialog is a list of choices. The plan-build module adds the three above, and other modules can add their own.
+The dialog is a list of choices, `PLAN_CHOICES` in `dialog.ts` (built in slice 6): Implement and Stay in plan mode.
+Slice 7 adds Clear context and implement with its command. Other modules adding choices waits until one needs it,
+along with `isAvailable` for hiding a choice.
 
 ```ts
+type PlanActions = { switchToBuild: () => void; sendUserMessage: (text: string) => void };
 type PlanChoice = {
-  label: string;                         // shown by ctx.ui.select; unique
-  isAvailable?: (plan: Plan) => boolean; // hidden when false
-  run: (plan: Plan, ctx: ExtensionContext) => Promise<void> | void;
+  label: string; // shown by ctx.ui.select; unique
+  run: (plan: SubmittedPlan, actions: PlanActions) => void;
 };
 ```
 
-- `ctx.ui.select` returns the chosen label, or `undefined` on Escape. Map the label back to its choice. `undefined` means stay.
+- The title is `Implement this plan?` and, on the next line, the plan's title and file relative to the cwd.
+- `ctx.ui.select` returns the chosen label, or `undefined` on Escape or an abort. Map the label back to its choice.
+  `undefined` means stay.
 - The first choice is highlighted by default, so Implement goes first.
-- Give `run` a narrow interface (set the mode, the plan, send a message) rather than all of `MyPi`.
+- `run` gets the narrow `PlanActions`, not the module. Implement calls `switchToBuild()` first, so the message runs
+  under Build's prompt and rule, then sends `Implement the plan.`
 
 ## Seed text for a fresh session
 
@@ -116,6 +121,7 @@ What plan-build's `ToolGuard` rule returns in Plan, by tool:
 | `powershell` | Always ask. |
 | `read`, `grep`, `find`, `ls`, `tool_search` | Allow: known readers. Pi's built-in tools carry no annotations, so they're listed by name. |
 | `codemode` | Allow. Its nested calls each pass through the guard under their own tool name. |
+| `submit_plan` | Allow. It writes only its own file in `.pi/plans/`, so it's listed by name rather than marked read-only. |
 | Anything else | Allow when its `annotations.readOnlyHint` is true, else ask. Annotations come from the tool's author and aren't verified, the same trust pi gives them. |
 
 `isReadOnlyCommand` (`src/core/util/shell.ts`) is strict, because a miss only costs a confirm. Pi's plan-mode example
@@ -172,8 +178,14 @@ helpers stay pure.
 4. `submit_plan` and the plan file, with `setActiveTools` adding it in Plan and removing it on leaving. Creating
    `.pi/plans/` also writes `.pi/plans/.gitignore` containing `*`, so plans stay out of git in any project without
    touching its own `.gitignore`. `PLAN_PROMPT` changes to allow writing the plan there and to mention `submit_plan`.
+   **Built** (2026-10-20): `tools/submit-plan.ts`, `plan-file.ts`, `BaseModule.registerTool` and `setToolActive`, with
+   tests. Live check pending.
 5. "Allow for this session" in the guard's confirm (core, `ToolGuard`; see [architecture](../architecture.md#core)).
-6. The dialog on `agent_settled`, with the choice list.
+   **Built** (2026-10-20): the dialog is `ctx.ui.select` with Yes, No, and Allow for this session; allowed ask lines
+   live in a `Set` on the guard. Tests in `test/core/tool-guard.test.ts`. Live check pending.
+6. The dialog on `agent_settled`, with the choice list. **Built** (2026-10-20): `dialog.ts` (`offerPlan`,
+   `PLAN_CHOICES`), wired in `init()` with `session.pi.on`; tests in `test/module/plan-build/index.test.ts`. Live check
+   pending.
 7. `/plan implement [plan file]`, the clear-context command; with no file, the latest plan in `.pi/plans/`.
 8. A question tool.
 
@@ -188,8 +200,10 @@ None right now.
   today throws `Unknown mode` for anything but `plan` and `build`.
 - The load type stays `ALWAYS`, so the mode survives resume and fork (`ON_DEMAND` modules start from the defaults
   there).
+- Plan files are named `<UTC timestamp>-<title slug>.md`, and `submit_plan` is allowed by name in the Plan rule.
+- Module tools live in a `tools/` folder inside the module.
 - "Allow for this session" is matched on the exact ask line, `<module>: <question>`, and kept in memory, so `/reload`
-  forgets it. Built after slice 4.
+  forgets it. Built in slice 5.
 
 ## References
 

@@ -1,5 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "#core/session";
 import { PlanBuildModule } from "#module/plan-build/index";
 import { BUILD_PROMPT, PLAN_PROMPT } from "#module/plan-build/prompts";
@@ -154,6 +157,141 @@ describe("PlanBuildModule", () => {
       await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toBeUndefined();
       await run("plan");
       await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toMatchObject({ block: true });
+    });
+  });
+
+  describe("submit_plan", () => {
+    it("is registered on init", () => {
+      const { tools } = startPlanBuild();
+      expect(tools.has("submit_plan")).toBe(true);
+    });
+
+    it("is active on init in Plan, and only then", () => {
+      expect(startPlanBuild().activeTools()).toEqual(["read", "bash", "edit", "write", "submit_plan"]);
+      expect(startPlanBuild([saved("build")]).activeTools()).toEqual(["read", "bash", "edit", "write"]);
+    });
+
+    // Leaving Plan removes only submit_plan, so tools the user turned on or off in the meantime stay as they are.
+    it("is added on entering Plan and removed on leaving, leaving other tools alone", async () => {
+      const { session, run, activeTools } = startPlanBuild();
+      session.pi.setActiveTools(["read", "submit_plan", "mcp_search"]);
+      await run("build");
+      expect(activeTools()).toEqual(["read", "mcp_search"]);
+      await run("plan");
+      expect(activeTools()).toEqual(["read", "mcp_search", "submit_plan"]);
+    });
+
+    // On resume and /reload pi has already restored it from the transcript.
+    it("doesn't touch the active tools when they're already right", async () => {
+      const { run, setActiveTools } = startPlanBuild();
+      setActiveTools.mockClear();
+      await run("plan");
+      expect(setActiveTools).not.toHaveBeenCalled();
+    });
+
+    it("keeps the plan it saved as the submitted plan", async () => {
+      const { module, tools } = startPlanBuild();
+      expect(module.submittedPlan).toBeUndefined();
+      const cwd = await mkdtemp(join(tmpdir(), "mypi-plan-build-"));
+      try {
+        await tools.get("submit_plan")?.execute("call-1", { title: "T", plan: "P" }, undefined, undefined, {
+          cwd,
+        } as never);
+        expect(module.submittedPlan).toMatchObject({ title: "T", plan: "P", path: expect.stringContaining(cwd) });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("plan dialog", () => {
+    const settled = (aborted = false) => ({ type: "agent_settled", aborted });
+
+    /** A started module whose submit_plan ran in `cwd`, as during a run. */
+    async function submitted(branch: unknown[] = []) {
+      const fake = startPlanBuild(branch);
+      const cwd = await mkdtemp(join(tmpdir(), "mypi-dialog-"));
+      cleanups.push(() => rm(cwd, { recursive: true, force: true }));
+      await fake.emit("before_agent_start", {});
+      await fake.tools
+        .get("submit_plan")
+        ?.execute("call-1", { title: "Add it", plan: "Steps." }, undefined, undefined, { cwd } as never);
+      const ctx = { cwd, hasUI: true, ui: { select: fake.select }, signal: undefined } as unknown as ExtensionContext;
+      return { ...fake, cwd, ctx };
+    }
+    const cleanups: (() => Promise<void>)[] = [];
+    afterEach(async () => {
+      for (const cleanup of cleanups.splice(0)) await cleanup();
+    });
+
+    it("asks once a run that submitted a plan settles, naming the plan and its file", async () => {
+      const { emit, ctx, select } = await submitted();
+      await emit("agent_settled", settled(), ctx);
+      expect(select).toHaveBeenCalledTimes(1);
+      const [title, options] = select.mock.calls[0] ?? [];
+      expect(title).toMatch(/^Implement this plan\?\nAdd it \(\.pi\/plans\/\d{4}-\d\d-\d\d-\d{6}-add-it\.md\)$/);
+      expect(options).toEqual(["Implement", "Stay in plan mode"]);
+    });
+
+    it("Implement switches to Build, then asks the model to implement", async () => {
+      const { emit, ctx, select, sendUserMessage, setStatus, appendEntry, activeTools } = await submitted();
+      select.mockResolvedValueOnce("Implement");
+      await emit("agent_settled", settled(), ctx);
+      expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<dim>BUILD");
+      expect(appendEntry).toHaveBeenLastCalledWith("mypi-module-plan-build", { mode: "build" });
+      expect(activeTools()).not.toContain("submit_plan");
+      expect(sendUserMessage).toHaveBeenCalledWith("Implement the plan.");
+      // The message runs under Build's prompt, so the switch must come first.
+      expect(setStatus.mock.invocationCallOrder.at(-1)).toBeLessThan(sendUserMessage.mock.invocationCallOrder[0] ?? 0);
+    });
+
+    it.each([["Stay in plan mode"], [undefined]])("%j keeps planning and sends nothing", async (answer) => {
+      const { emit, ctx, select, sendUserMessage, setStatus } = await submitted();
+      select.mockResolvedValueOnce(answer);
+      await emit("agent_settled", settled(), ctx);
+      expect(sendUserMessage).not.toHaveBeenCalled();
+      expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<warning>PLAN");
+    });
+
+    it("asks only once per submitted plan", async () => {
+      const { emit, ctx, select } = await submitted();
+      await emit("agent_settled", settled(), ctx);
+      await emit("agent_settled", settled(), ctx);
+      expect(select).toHaveBeenCalledTimes(1);
+    });
+
+    it("doesn't ask when the run didn't submit a plan", async () => {
+      const { emit, select } = startPlanBuild();
+      await emit("agent_settled", settled());
+      expect(select).not.toHaveBeenCalled();
+    });
+
+    // A plan from an earlier run belongs to that run; the next run starts without one.
+    it("doesn't ask about a plan submitted in an earlier run", async () => {
+      const { emit, ctx, select } = await submitted();
+      await emit("before_agent_start", {});
+      await emit("agent_settled", settled(), ctx);
+      expect(select).not.toHaveBeenCalled();
+    });
+
+    it("doesn't ask when the run was aborted", async () => {
+      const { emit, ctx, select } = await submitted();
+      await emit("agent_settled", settled(true), ctx);
+      expect(select).not.toHaveBeenCalled();
+    });
+
+    it("doesn't ask without a UI", async () => {
+      const { emit, ctx, select } = await submitted();
+      await emit("agent_settled", settled(), { ...ctx, hasUI: false });
+      expect(select).not.toHaveBeenCalled();
+    });
+
+    // The user switched to Build during the run, so they're already driving.
+    it("doesn't ask when the mode is already Build", async () => {
+      const { emit, ctx, select, run } = await submitted();
+      await run("build");
+      await emit("agent_settled", settled(), ctx);
+      expect(select).not.toHaveBeenCalled();
     });
   });
 

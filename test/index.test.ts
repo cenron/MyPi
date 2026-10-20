@@ -21,14 +21,19 @@ function loadExtension() {
   const commands = new Map<string, CommandOptions>();
   const handlers = new Map<string, Handler>();
   const pi = {
+    // Keeps the entry point's own handler: modules subscribe later, from init(), and would replace it here.
     on: (event: string, handler: Handler) => {
-      handlers.set(event, handler);
+      if (!handlers.has(event)) handlers.set(event, handler);
       return () => {};
     },
     registerCommand: (name: string, options: CommandOptions) => {
       commands.set(name, options);
     },
     getAllTools: () => [],
+    registerTool: () => {},
+    sendUserMessage: () => {},
+    getActiveTools: () => [],
+    setActiveTools: () => {},
   } as unknown as ExtensionAPI;
   mypi(pi);
   return { pi, commands, handlers };

@@ -12,19 +12,28 @@ export type ToolCall = { toolName: string; input: Record<string, unknown>; annot
 export type ToolEnv = { cwd: string; home: string };
 export type ToolRule = (call: ToolCall, env: ToolEnv) => Verdict;
 
-type AskType = { name: string; question: string };
-const returnBlock = (r: string): ToolCallEventResult => {
-  return { block: true, reason: r };
+type ToolApprovalRequest = { name: string; question: string };
+
+/** The guard's dialog choices; pi's own `confirm` is a select with Yes and No, so the dialog looks the same. */
+const Choice = {
+  YES: "Yes",
+  NO: "No",
+  ALLOW_SESSION: "Allow for this session",
+} as const;
+
+const returnBlock = (reason: string): ToolCallEventResult => {
+  return { block: true, reason };
 };
 
 export class ToolGuard {
   private readonly rules: Map<string, ToolRule> = new Map<string, ToolRule>();
+  /** Ask lines (`<module>: <question>`) allowed for this session. In memory, so `/reload` forgets them. */
+  private readonly allowed = new Set<string>();
 
   constructor(readonly pi: ExtensionAPI) {}
 
   public set(name: string, rule: ToolRule | undefined) {
     if (rule === undefined) return this.rules.delete(name);
-
     return this.rules.set(name, rule);
   }
 
@@ -33,7 +42,7 @@ export class ToolGuard {
     const toolCall: ToolCall = { toolName: ev.toolName, input: ev.input, annotations: toolInfo?.annotations };
     const toolEnv: ToolEnv = { cwd: ctx.cwd, home: os.homedir() };
 
-    const asks: AskType[] = [];
+    const asks: ToolApprovalRequest[] = [];
     for (const [name, rule] of this.rules) {
       const verdict = rule(toolCall, toolEnv);
       if (verdict.kind === "block") return returnBlock(verdict.reason);
@@ -43,13 +52,30 @@ export class ToolGuard {
     return this.confirmToolRequests(ctx, asks);
   }
 
-  private async confirmToolRequests(ctx: ExtensionContext, asks: AskType[]): Promise<ToolCallEventResult | undefined> {
-    if (asks.length === 0) return undefined;
+  private async confirmToolRequests(
+    ctx: ExtensionContext,
+    asks: ToolApprovalRequest[],
+  ): Promise<ToolCallEventResult | undefined> {
+    // Exact lines, so allowing `npm test` doesn't allow `npm install`. Only asks reach here; a block never does.
+    const lines = asks.map(({ name, question }) => `${name}: ${question}`).filter((line) => !this.allowed.has(line));
+    if (lines.length === 0) return undefined;
 
-    const details = asks.map(({ name, question }) => `${name}: ${question}`).join("\n\n");
+    const details = lines.join("\n\n");
     if (!ctx.hasUI) return returnBlock(`Confirmation needed, no UI to ask:\n ${details}`);
 
-    const ok = await ctx.ui.confirm("Permission required", details, { signal: ctx.signal });
-    return ok ? undefined : returnBlock("The user declined this call.");
+    // Esc and an abort resolve undefined, which declines like No.
+    const choice = await ctx.ui.select(`Permission required\n${details}`, Object.values(Choice), {
+      signal: ctx.signal,
+    });
+
+    switch (choice) {
+      case Choice.ALLOW_SESSION:
+        for (const line of lines) this.allowed.add(line);
+        return undefined;
+      case Choice.YES:
+        return undefined;
+      default: // No, Esc, or an abort
+        return returnBlock("The user declined this call.");
+    }
   }
 }

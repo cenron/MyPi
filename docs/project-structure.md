@@ -38,6 +38,7 @@ MyPi/
 | A reusable TUI component | `src/ui/components/<name>.ts`, implementing pi-tui's `Component` | No feature logic; tests in `test/ui/components/` |
 | A feature's UI | `src/ui/<name>.ts`, opening it through `ctx.ui.custom` | Built from `src/ui/components/`; tests in `test/ui/` |
 | Module code | `src/module/<name>/index.ts`, a class extending `BaseModule` (its state type is its own) | Add it to the list in `src/module/index.ts`; tests in `test/module/<name>/` |
+| A module's tool | `src/module/<name>/tools/<tool>.ts`, returning a `ToolDefinition` | Register it from `init()` with `BaseModule.registerTool`; tests in `test/module/<name>/tools/` |
 | A shared service or helper | `src/core/` (helpers in `src/core/util/`) | Only once more than one place needs it; tests in `test/core/` |
 | A skill | `resources/skills/<name>/SKILL.md` | |
 | A prompt template | `resources/prompts/<name>.md` | |

@@ -8,9 +8,10 @@ export const PLANS_DIR = join(".pi", "plans");
 
 /**
  * Tools Plan never objects to. Pi's built-in readers carry no annotations, so they're listed by name; `codemode`'s
- * nested calls each pass through the guard under their own tool name.
+ * nested calls each pass through the guard under their own tool name. `submit_plan` writes only its own file in
+ * `.pi/plans/`, so it's listed rather than marked read-only.
  */
-const ALLOWED = new Set(["read", "grep", "find", "ls", "tool_search", "codemode"]);
+const ALLOWED = new Set(["read", "grep", "find", "ls", "tool_search", "codemode", "submit_plan"]);
 
 const ALLOW: Verdict = { kind: "allow" };
 
