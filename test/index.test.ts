@@ -6,6 +6,7 @@ import type {
   SessionShutdownEvent,
   SessionStartEvent,
   ToolCallEvent,
+  ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
@@ -17,9 +18,15 @@ import { fakeUI } from "./fakes";
 type CommandOptions = Omit<RegisteredCommand, "name" | "sourceInfo">;
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
 
+/**
+ * Loads the extension into a fake pi. Like pi, a registered tool is active unless `defaultActive: false`, and
+ * `setActiveTools` drops names that aren't registered; `activeTools` reads the active set.
+ */
 function loadExtension() {
   const commands = new Map<string, CommandOptions>();
   const handlers = new Map<string, Handler>();
+  const registered = new Set(["read", "bash", "edit", "write"]);
+  let active = [...registered];
   const pi = {
     // Keeps the entry point's own handler: modules subscribe later, from init(), and would replace it here.
     on: (event: string, handler: Handler) => {
@@ -30,13 +37,18 @@ function loadExtension() {
       commands.set(name, options);
     },
     getAllTools: () => [],
-    registerTool: () => {},
+    registerTool: (tool: ToolDefinition) => {
+      registered.add(tool.name);
+      if (tool.defaultActive !== false) active.push(tool.name);
+    },
     sendUserMessage: () => {},
-    getActiveTools: () => [],
-    setActiveTools: () => {},
+    getActiveTools: () => [...active],
+    setActiveTools: (names: string[]) => {
+      active = names.filter((name) => registered.has(name));
+    },
   } as unknown as ExtensionAPI;
   mypi(pi);
-  return { pi, commands, handlers };
+  return { pi, commands, handlers, activeTools: () => active };
 }
 
 function fakeContext() {
@@ -94,6 +106,13 @@ describe("mypi extension", () => {
         expect(commands.has(command.name)).toBe(info.isLoaded);
       }
     }
+  });
+
+  // A module's init() turns its tools on, which pi ignores for tools it doesn't have yet.
+  it("registers the tools before the modules' init(), so a new session in Plan has Plan's tools on", () => {
+    const { handlers, activeTools } = loadExtension();
+    startSession(handlers);
+    expect(activeTools()).toEqual(expect.arrayContaining(["web_search", "web_fetch", "submit_plan", "ask_user"]));
   });
 
   // Each run's sections start empty, so a run that skipped them would make pi remove the section, then add it back.

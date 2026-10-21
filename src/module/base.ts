@@ -1,6 +1,5 @@
 import type { SessionManager, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
-import type { TSchema } from "typebox";
 import type { Session } from "#core/session";
 import type { ToolRule } from "#core/tool-guard";
 import type { Command, Module, ModuleInfo } from "#core/types";
@@ -8,8 +7,9 @@ import type { KeyHandler } from "#ui/editor";
 import type { FooterItem } from "#ui/footer";
 
 /**
- * What every module extends: defaults for `init()` and `commands()`, and the module's own saved state. `State` is the
- * module's state type; it's saved as `mypi-module-<info.name>`, so modules never collide with each other or with core.
+ * What every module extends: defaults for `init()`, `commands()`, and `tools()`, and the module's own saved state.
+ * `State` is the module's state type; it's saved as `mypi-module-<info.name>`, so modules never collide with each other
+ * or with core.
  */
 export abstract class BaseModule<State = never> implements Module {
   constructor(readonly session: Session) {}
@@ -19,6 +19,11 @@ export abstract class BaseModule<State = never> implements Module {
   init(): void {}
 
   commands(): Command[] {
+    return [];
+  }
+
+  /** None by default. Runs before `init()`, so a tool reads module state in `execute`, not when it's built. */
+  tools(): ToolDefinition[] {
     return [];
   }
 
@@ -51,10 +56,6 @@ export abstract class BaseModule<State = never> implements Module {
 
   protected setPrompt(prompt: string | undefined) {
     this.session.promptManager.set(this.info.name, prompt);
-  }
-
-  protected registerTool<TParams extends TSchema, TDetails>(tool: ToolDefinition<TParams, TDetails>) {
-    this.session.pi.registerTool(tool);
   }
 
   /**

@@ -16,6 +16,7 @@
   "imports": {
     "#core/*": "./src/core/*.ts",
     "#command/*": "./src/command/*.ts",
+    "#tool/*": "./src/tool/*.ts",
     "#module/*": "./src/module/*.ts",
     "#ui/*": "./src/ui/*.ts"
   },

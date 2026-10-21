@@ -9,12 +9,14 @@ machine-specific paths out of tracked files.
 | Where                       | What                                                                                                                                                                                                   |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `index.ts`                  | Extension entry point at the repo root, so pi labels it `MyPi`. Creates `MyPi` and wires pi events to it; no logic.                                                                                    |
-| `src/mypi.ts`               | `MyPi` class. Handles pi events; on `session_start` it builds a `Session`, loads the modules, and registers commands.                                                                                  |
+| `src/mypi.ts`               | `MyPi` class. Handles pi events; on `session_start` it builds a `Session`, picks the modules, registers tools, runs the modules' `init()`, and registers commands.                                                                                  |
 | `src/core/`                 | Per-session services (`Session`, `ModuleManager`, `Notifier`, `PromptManager`), shared types (`types.ts`: `Command`, `Module`, `ModuleInfo`, `ModuleLoadMode`), and `util/`. Imported as `#core/<file>`.                |
 | `src/command/`              | Slash commands: one file (or folder) per command, listed in `createCommand` in `index.ts`. Imported as `#command/<file>`.                                                                              |
+| `src/tool/`                 | Built-in tools: one file (or folder) per tool, listed in `createTools` in `index.ts`; `registerTools` adds the running modules' `tools()`. Imported as `#tool/<file>`.                                 |
 | `src/ui/`                   | Feature UI (`modules-modal.ts`), the shared `footer.ts` and `editor.ts`, and `components/`: reusable TUI components (`Dialog`, `ToggleList`). Imported as `#ui/<file>`.                                                                         |
 | `src/module/`               | Feature modules: `BaseModule`, the SDK every module extends (`base.ts`), the module list and `loadModules` (`index.ts`), and one folder per module, named after its doc. Imported as `#module/<file>`. |
 | `docs/modules/<name>.md`    | Module design or idea, with a status. Index: `docs/modules/README.md`.                                                                                                                                 |
+| `docs/tools/<name>.md`      | Built-in tool design or idea (tools that belong to no module), with a status. Index: `docs/tools/README.md`.                                                                                           |
 | `docs/architecture.md`      | How pi loads MyPi and how modules plug in.                                                                                                                                                             |
 | `docs/principles.md`        | Design principles. Read before adding code.                                                                                                                                                            |
 | `docs/project-structure.md` | Layout and where new things go.                                                                                                                                                                        |
@@ -52,7 +54,8 @@ Check that `pi --version` matches the pinned devDependency. If the docs and sour
   types. Never `dependencies`.
 - Send notifications through `Session` (`log`, `logWarning`, `logError`), which already guards `ctx.hasUI`. Guard
   dialogs and other UI calls with `ctx.hasUI` yourself.
-- Import across folders with `#core/<file>`, `#command/<file>`, `#module/<file>`, and `#ui/<file>` (the `imports` in
-  `package.json`), never tsconfig `paths`, because pi doesn't apply them. Use relative imports inside a folder. Leave
-  `.ts` off import paths.
-- Update the module's doc in `docs/modules/` when its design or status changes.
+- Import across folders with `#core/<file>`, `#command/<file>`, `#tool/<file>`, `#module/<file>`, and `#ui/<file>`
+  (the `imports` in `package.json`), never tsconfig `paths`, because pi doesn't apply them. Use relative imports inside
+  a folder. Leave `.ts` off import paths.
+- Wrap every tool in pi's `defineTool` where it's built; without it `execute`'s arguments are silently `any`.
+- Update the module's doc in `docs/modules/`, or the tool's doc in `docs/tools/`, when its design or status changes.

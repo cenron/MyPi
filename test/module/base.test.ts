@@ -1,5 +1,4 @@
-import type { ExtensionContext, SessionManager, ToolCallEvent } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import type { ExtensionContext, SessionManager, ToolCallEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import type { Session } from "#core/session";
 import type { ToolRule } from "#core/tool-guard";
@@ -43,16 +42,6 @@ class Counter extends BaseModule<{ count: number }> {
 
   guard(rule: ToolRule) {
     this.onToolCall(rule);
-  }
-
-  tool(name: string) {
-    this.registerTool({
-      name,
-      label: name,
-      description: "",
-      parameters: Type.Object({}),
-      execute: async () => ({ content: [], details: undefined }),
-    });
   }
 
   toolActive(name: string, active: boolean) {
@@ -146,14 +135,13 @@ describe("BaseModule", () => {
     await expect(session.toolGuard.check(bashCall, ctx)).resolves.toEqual({ block: true, reason: "new" });
   });
 
-  it("registers a module's tool with pi", () => {
-    const { session, tools } = fakeSession();
-    new Counter(session).tool("count");
-    expect(tools.has("count")).toBe(true);
+  it("has no tools by default", () => {
+    expect(new Counter(fakeSession().session).tools()).toEqual([]);
   });
 
   it("adds a tool to the active tools and removes it, leaving the rest in order", () => {
     const { session, activeTools } = fakeSession();
+    session.pi.registerTool({ name: "count" } as ToolDefinition);
     const module = new Counter(session);
     module.toolActive("count", true);
     expect(activeTools()).toEqual(["read", "bash", "edit", "write", "count"]);

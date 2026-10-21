@@ -69,10 +69,19 @@ describe("ModuleManager.start", () => {
     expect(start("reload", { loaded: ["notes"] }).selected).toEqual(["core", "notes"]);
   });
 
-  it("runs init() only on the running modules", () => {
+  // MyPi registers the modules' tools in between, so init() can turn them on.
+  it("doesn't run init() itself", () => {
     const { session } = fakeSession();
     const modules = fakeModules();
     session.moduleManager.start(modules, "startup");
+    expect(modules.map((m) => m.init.mock.calls.length)).toEqual([0, 0, 0]);
+  });
+
+  it("runs init() on the running modules only, once init() is called", () => {
+    const { session } = fakeSession();
+    const modules = fakeModules();
+    session.moduleManager.start(modules, "startup");
+    session.moduleManager.init();
     expect(modules.map((m) => m.init.mock.calls.length)).toEqual([1, 1, 0]);
   });
 
@@ -80,6 +89,12 @@ describe("ModuleManager.start", () => {
     const { session } = fakeSession();
     session.moduleManager.start(fakeModules(), "startup");
     expect(session.moduleManager.getCommands().map((c) => c.info.name)).toEqual(["core-cmd", "plan-cmd"]);
+  });
+
+  it("returns tools from running modules only", () => {
+    const { session } = fakeSession();
+    session.moduleManager.start(fakeModules(), "startup");
+    expect(session.moduleManager.getTools().map((t) => t.name)).toEqual(["core-tool", "plan-tool"]);
   });
 });
 

@@ -14,7 +14,10 @@ Each module has a doc here, named after its folder in `src/module/`. Start a doc
 | Module | Status | Summary |
 |---|---|---|
 | [lm-studio](lm-studio.md) | idea | LM Studio as a provider, with models read live from a local or remote server |
+| [lsp](lsp.md) | idea | Language-server diagnostics after edits, plus definition, references, and hover |
+| [notifications](notifications.md) | idea | A desktop notification when the agent is done or a dialog is waiting |
 | [pair-programmer](pair-programmer.md) | idea | A pair-programming mode where the agent navigates and I drive |
 | [plan-build](plan-build.md) | done | Plan and Build modes with an "Implement this plan?" dialog |
-| [subagents](subagents.md) | idea | A `subagent` tool on pi-durable: a task in its own context that survives restarts |
-| [web-search](web-search.md) | idea | `web_search` and `web_fetch` tools that work with any model |
+| [subagents](subagents.md) | idea (deferred) | A `subagent` tool on pi-durable: a task in its own context that survives restarts. `ON_LOAD`, can be turned off |
+
+Built-in tools that don't belong to a module are documented in [`docs/tools/`](../tools/README.md).

@@ -25,7 +25,8 @@ export function fakeUI() {
 /**
  * A `Session` over a fake pi. `branch` stands in for the session's current branch, and `appendEntry` adds to it like
  * pi does, so whatever a test saves can be loaded back. `activeTools` holds the active tool names, starting with
- * pi's defaults, and `tools` what was registered. `emit` runs the handlers registered with `pi.on`, with the session's
+ * pi's defaults, and `tools` what was registered. Like pi, `setActiveTools` drops names that aren't registered (pi's
+ * defaults count as registered). `emit` runs the handlers registered with `pi.on`, with the session's
  * own context unless one is given.
  */
 export function fakeSession(branch: unknown[] = []) {
@@ -33,7 +34,8 @@ export function fakeSession(branch: unknown[] = []) {
   const appendEntry = vi.fn((customType: string, data: unknown) => {
     branch.push(customEntry(customType, data));
   });
-  let activeTools = ["read", "bash", "edit", "write"];
+  const builtins = ["read", "bash", "edit", "write"];
+  let activeTools = [...builtins];
   const tools = new Map<string, ToolDefinition>();
   const handlers = new Map<string, ((ev: unknown, ctx: ExtensionContext) => unknown)[]>();
   const pi = {
@@ -47,7 +49,7 @@ export function fakeSession(branch: unknown[] = []) {
     registerTool: (tool: ToolDefinition) => tools.set(tool.name, tool),
     getActiveTools: () => [...activeTools],
     setActiveTools: vi.fn((names: string[]) => {
-      activeTools = [...names];
+      activeTools = names.filter((name) => builtins.includes(name) || tools.has(name));
     }),
   };
   const ctx = {
@@ -75,7 +77,7 @@ export function fakeSession(branch: unknown[] = []) {
   };
 }
 
-/** A module with one command, `<name>-cmd`; `init` is a spy. */
+/** A module with one command, `<name>-cmd`, and one tool, `<name>-tool`; `init` is a spy. */
 export function fakeModule(name: string, loadType: ModuleLoadMode): Module & { init: Mock<() => void> } {
   return {
     session: {} as Session,
@@ -87,5 +89,6 @@ export function fakeModule(name: string, loadType: ModuleLoadMode): Module & { i
     },
     init: vi.fn<() => void>(),
     commands: () => [{ info: { name: `${name}-cmd`, description: `${name} command` }, execute: () => "" }],
+    tools: () => [{ name: `${name}-tool` } as ToolDefinition],
   };
 }

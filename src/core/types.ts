@@ -1,3 +1,4 @@
+import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { CommandExec } from "#command/types";
 import type { Session } from "./session";
 
@@ -45,9 +46,12 @@ export interface Module {
   /** Name, description, command infos, and load mode. */
   get info(): ModuleInfo;
 
-  /** Registers event handlers and tools, and restores state. */
+  /** Registers event handlers, turns its tools on or off, and restores state. Runs after every tool is registered. */
   init(): void;
 
   /** The module's slash commands, registered through `registerCommand`. */
   commands(): Command[];
+
+  /** The module's tools, registered through `registerTools` before `init()`. Wrap each in `defineTool`. */
+  tools(): ToolDefinition[];
 }

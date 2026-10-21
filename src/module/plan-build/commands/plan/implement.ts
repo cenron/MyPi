@@ -3,9 +3,9 @@ import { homedir } from "node:os";
 import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { errorMessage } from "#core/util/errors";
 import { resolveToolPath } from "#core/util/paths";
-import { latestPlan } from "./plan-file";
-import { implementMessage } from "./prompts";
-import { PLANS_DIR } from "./rule";
+import { latestPlan } from "../../plan-file";
+import { implementMessage } from "../../prompts";
+import { PLANS_DIR } from "../../rule";
 
 /** `/plan implement`'s plan file: the argument, resolved the way the file tools resolve paths, else the latest plan. */
 export async function findPlan(cwd: string, file: string | undefined): Promise<string> {

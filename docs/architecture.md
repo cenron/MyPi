@@ -24,17 +24,24 @@ Pi supplies the host packages (`@earendil-works/pi-coding-agent`, `@earendil-wor
 index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "before_agent_start" | "tool_call" | "session_shutdown", …)
 └─ src/mypi.ts         MyPi.onSessionStart(ev, ctx)
    ├─ new Session(ctx, pi)                       src/core/session.ts: builds its ModuleManager, Footer, Editor, PromptManager
-   ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start()
+   ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start() picks the running ones
+   ├─ registerTools(pi, session)                 src/tool/index.ts: the built-in tools + the running modules'
+   ├─ initTools(tools)                           init() on the built-in tools that have one
+   ├─ moduleManager.init()                       init() on the running modules, now that their tools exist
    └─ registerCommand(pi, session)               src/command/index.ts: MyPi's commands + the running modules
    MyPi.onBeforeAgentStart(ev)                   before every run: promptManager.apply(ev.systemPromptOptions.sections)
    MyPi.onToolCall(ev, ctx)                      before every tool call: returns toolGuard.check(ev, ctx) to pi
+   MyPi.onSessionEnd(ev, ctx)                    session_shutdown: shutdownTools(tools, session)
 ```
 
 `index.ts` at the repo root is the single extension entry point. It creates the `MyPi` object and routes pi events to
 its methods. It holds no logic.
 
 `MyPi` (`src/mypi.ts`) owns the event handlers. On `session_start` it builds a `Session` for that session's context,
-keeps it, loads the modules, and registers the commands, its own and the modules'. On `before_agent_start` it writes
+keeps it, picks the modules to load, registers the tools (the built-ins and the modules'), runs the modules' `init()`,
+and registers the commands, its own and the modules'. Tools come before `init()` because a module's `init()` may turn
+its tools on with `setActiveTools`, and pi ignores names that aren't registered yet ("Unknown and hidden tool names are
+ignored", `setActiveToolsByName` in `dist/core/agent-session.js`). On `before_agent_start` it writes
 the modules' prompt sections (see `PromptManager` below), and on `tool_call` it returns the `ToolGuard`'s result.
 
 Each extension instance sees exactly one `session_start`. New, resume, fork, and `/reload` tear the extension down and
@@ -59,8 +66,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   before that session's `session_start`, so its modules see the entry in `init()`.
 - **`ModuleManager`** (`module-manager.ts`) holds the session's module instances and two sets of names: `running`,
   decided on `session_start` and fixed until `/reload`, and `selected`, what `/modules` saved for the next `/reload`.
-  `start(modules, reason)` reads the saved selection, picks the modules to load, and runs their `init()`.
-  `getCommands()` returns the running modules' commands. `select(names)` changes only `selected` and saves it.
+  `start(modules, reason)` reads the saved selection and picks the modules to load; `init()` then runs their
+  `init()`, once `registerTools` has run. `getCommands()` and `getTools()` return the running modules' commands and
+  tools. `select(names)` changes only `selected` and saves it.
   `moduleInfos` returns a copy of each `info` with `isLoaded` (running) and `isSelected` set. A module's `info` getter
   can build a new object on every call, so the flags live in the manager, never on `module.info`.
 - **`pickLoaded(reason, saved, modules)`**, a private `ModuleManager` method, is the only place the load rule is
@@ -150,11 +158,51 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - `runCommand` wraps every handler. It splits the raw argument string on whitespace, shows the returned string as an
   `info` notification, and turns a thrown error into an `error` notification. Commands don't need their own try/catch.
 
+A module's commands live in its own folder, `src/module/<name>/commands/<command>/`, with the command in `index.ts`
+and files only it uses beside it (plan-build's `/plan` is `commands/plan/`, with `implement.ts`). The module returns
+them from `commands()`.
+
 To add a command, create `src/command/<name>.ts` exporting a function that takes the `Session` and returns a `Command`,
 then add it to the list in `createCommand`. A command that needs more than one file gets a folder,
 `src/command/<name>/`, with the command in `index.ts`. `/myPi` is a placeholder showing the shape. `/modules` opens
 the module modal and `/modules list` prints each module as `loaded: <name>` or `not loaded: <name>`; see
 [Module loading](#module-loading).
+
+## Tools
+
+`src/tool/` holds MyPi's built-in tools: general tools that belong to no module, each with a doc in
+`docs/tools/<name>.md` (index: `docs/tools/README.md`). It mirrors `src/command/`.
+
+- A built-in tool is a `Tool` (`src/tool/types.ts`): `{ definition, init?, shutdown? }`. A tool file exports a function
+  that takes the `Session` and returns one, with `definition` built by `defineTool({ name, label, description,
+  parameters, execute, … })` (`src/tool/web-fetch.ts`). A module's tools are bare `ToolDefinition`s; the module's own
+  `init()` covers their setup.
+- **Hooks**, for tools that keep state or resources across calls:
+  - `init()` runs on `session_start`, after every tool is registered and before the modules' `init()`. Rebuild state
+    from the branch here (todo). A `session_start` handler added now would miss this session: pi copies the handler
+    list before dispatching (`snapshotEventHandlers` in `dist/core/extensions/runner.js`). Later events, such as
+    `session_tree`, can be subscribed from `init()` with `session.pi.on`.
+  - `shutdown()` runs on `session_shutdown`, which `/reload`, a session switch, and quit all reach, so it must be
+    idempotent (background process kills its children here). `shutdownTools` logs a `shutdown()` that throws and goes
+    on, so one tool's failure doesn't leave another's processes running.
+  - `MyPi` keeps the list `registerTools` returns and runs the hooks through `initTools` and `shutdownTools`.
+- `defineTool` (exported by pi) does nothing at runtime. It keeps the types: `execute`'s arguments are inferred from
+  the TypeBox `parameters`, and the result, `ToolDefinition<TParams, TDetails> & ToolDefinition<any, any, any>`, fits
+  in a plain `ToolDefinition[]`. Without it a list rejects a tool (`renderCall`'s arguments don't match), and a tool
+  returned as a bare `ToolDefinition` gets `any` arguments, which tsc doesn't flag. Commands need nothing like it: every
+  `Command` has the same type, because each one parses its own `string[]`, while pi parses a tool's arguments from its
+  schema, so each tool's `execute` has its own type.
+- `registerTools(pi, session)` registers the definitions of everything returned by `createTools(session)`, then
+  `session.moduleManager.getTools()`: the tools of running modules only. It returns the built-in tools. It runs on `session_start`, before the
+  modules' `init()` (see [Startup flow](#startup-flow)).
+- pi turns an error thrown in `execute` into an error result for the model, so there's no wrapper like `runCommand`.
+- Tools can't be unregistered (only withdrawn by registering again with `exposure: "hidden"`). As with commands, a
+  tool that isn't registered on the next `session_start` is gone after `/reload`.
+- Set `annotations` truthfully: `ToolGuard` and plan-build's rule read `readOnlyHint`.
+
+To add a tool, create `src/tool/<name>.ts` (or a folder, `src/tool/<name>/index.ts`, once it needs more than one
+file), then add it to the list in `createTools`. A module's tools live in `src/module/<name>/tools/` and are returned
+from its `tools()`.
 
 ## Modules
 
@@ -168,14 +216,15 @@ export type ModuleClass = new (session: Session) => Module;
 export interface Module {
   readonly session: Session;
   get info(): ModuleInfo;  // name, description, command infos, loadType
-  init(): void;            // register event handlers and tools, restore state
+  init(): void;            // register event handlers, turn tools on or off, restore state
   commands(): Command[];   // registered through registerCommand, wrapped by runCommand
+  tools(): ToolDefinition[]; // registered through registerTools, before init()
 }
 ```
 
 - `ModuleClass` is the constructor type, so every module is built the same way: `new Module(session)`.
 - **`BaseModule<State>`** is the module SDK: a module owns everything about itself, including its saved state, and
-  core never lists it. It gives defaults for `init()` (nothing) and `commands()` (none), so a module only writes what it
+  core never lists it. It gives defaults for `init()` (nothing), `commands()` (none), and `tools()` (none), so a module only writes what it
   uses, and `info` is the one thing it must provide. `State` is the module's own state type, declared in its folder
   (`class PlanBuildModule extends BaseModule<{ mode: Mode }>`). The protected `saveState(state)` and `loadState()`
   store it as `mypi-module-<info.name>`, typed by `State`, so saving the wrong shape doesn't compile. The `module-`
@@ -183,7 +232,8 @@ export interface Module {
   state)` saves it into another session (plan-build starts `/plan implement`'s new session in Build this way).
   `loadState` trusts the file, so check any field you rely on. The helpers `setFooter(item)`, `onKey(key, handler)`, `setPrompt(text)`, and
   `onToolCall(rule)` each give the module one slot keyed by `info.name`: a footer item, a key handler, a prompt section,
-  and a `ToolGuard` rule. `registerTool(def)` passes a tool to `pi.registerTool`, and `setToolActive(name, active)` adds
+  and a `ToolGuard` rule. A module returns its tools from `tools()`, wrapping each in `defineTool` (see [Tools](#tools));
+  `tools()` runs before `init()`, so a tool reads module state in `execute`, not when it's built. `setToolActive(name, active)` adds
   one tool to pi's active tools or removes it, leaving the rest alone (and doing nothing when it's already in that
   state), since pi restores the active tools from the transcript. Add helpers here when a module first needs them (event handlers, tools), so the SDK only
   holds what's used.
@@ -192,8 +242,8 @@ export interface Module {
   unloaded). `pickLoaded` always picks `ALWAYS` modules, `select` always keeps them, and the modal shows their row
   locked (see [Module loading](#module-loading)).
 - `src/module/index.ts` lists the module classes. `loadModules(session, reason)` builds each one and hands them to
-  `session.moduleManager.start(modules, reason)`, which picks the ones to load and runs their `init()`.
-  `registerCommand` then reads the commands from the manager.
+  `session.moduleManager.start(modules, reason)`, which picks the ones to load. `registerTools` reads their tools from
+  the manager, `moduleManager.init()` runs their `init()`, and `registerCommand` then reads their commands.
 - A module reaches pi through `session.pi` and `session.ctx`, keeps its runtime state as fields, and saves what must
   survive `/reload` with `saveState`. Modules don't reach for globals or import each other's internals.
 - A module that needs a pi event MyPi doesn't route subscribes in `init()` with `session.pi.on(event, handler)`
@@ -298,7 +348,7 @@ The UI comes first, then the wiring.
 3. **Done.** `pickLoaded`: `reason` + saved set + module list → names to load. Tested through `start` and `select`
    with fake modules, including an `ALWAYS` one, and a missing save (the defaults) versus an empty one (only `ALWAYS`).
 4. **Done.** `start(modules, reason)` reads the last `mypi-modules` entry, and only running modules run `init()` and
-   get their commands registered.
+   get their commands and tools registered. (Since 2026-10-21, `moduleManager.init()` runs `init()`, after the tools.)
 5. **Done.** Save calls `ModuleManager.select`, which writes `{ loaded: [...selected] }` with `session.save`, and the
    command asks for `/reload`.
 6. **Done.** Locked rows: `ToggleItem.disabled`, and the modal locks `ALWAYS` modules.
@@ -316,6 +366,7 @@ Imports use Node subpath imports, declared under `imports` in `package.json`:
 |-------------------|-------------------------|---------------------------------------------------|
 | `#core/<file>`    | `src/core/<file>.ts`    | `import { Session } from "#core/session";`        |
 | `#command/<file>` | `src/command/<file>.ts` | `import { myPiCmd } from "#command/mypi";`        |
+| `#tool/<file>`    | `src/tool/<file>.ts`    | `import { registerTools } from "#tool/index";`    |
 | `#module/<file>`  | `src/module/<file>.ts`  | `import { loadModules } from "#module/index";`    |
 | `#ui/<file>`      | `src/ui/<file>.ts`      | `import { Dialog } from "#ui/components/dialog";` |
 

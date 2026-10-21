@@ -1,23 +1,20 @@
 import { relative } from "node:path";
-import type { AgentSettledEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+  type AgentSettledEvent,
+  defineTool,
+  type ExtensionContext,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
-import { offerPlan, PLAN_CHOICES, type PlanActions } from "./dialog";
-import { findPlan, implementInNewSession } from "./implement";
-import type { SubmittedPlan } from "./plan-file";
+import { planCmd } from "./commands/plan";
+import { offerPlan, PLAN_CHOICES } from "./dialog";
 import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
 import { planRule } from "./rule";
 import { ASK_USER, askUserTool } from "./tools/ask-user";
 import { SUBMIT_PLAN, submitPlanTool } from "./tools/submit-plan";
-
-const Mode = {
-  PLAN: "plan",
-  BUILD: "build",
-} as const;
-
-type Mode = (typeof Mode)[keyof typeof Mode];
-const isMode = (value: unknown): value is Mode => (Object.values(Mode) as unknown[]).includes(value);
+import { isMode, Mode, type PlanActions, type SubmittedPlan } from "./types";
 
 /** Tools active only in Plan: entering Plan adds them, leaving removes them. */
 const PLAN_TOOLS = [SUBMIT_PLAN, ASK_USER];
@@ -50,8 +47,6 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.mode = isMode(savedMode) ? savedMode : Mode.PLAN;
     this.setFooter(this.footerItems[this.mode]);
     this.setPrompt(this.prompts[this.mode]);
-    this.registerTool(submitPlanTool((plan) => (this._submittedPlan = plan)));
-    this.registerTool(askUserTool());
     this.initEventHandlers();
 
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
@@ -68,33 +63,18 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
 
   commands(): Command[] {
     return [
-      {
-        info: {
-          name: "plan",
-          description: "Toggle Plan/Build mode (plan|build: pick one; implement [plan file]: in a new session)",
-        },
-        execute: async (ctx, args) => {
-          const [arg, file] = args;
-
-          switch (arg) {
-            case "implement": {
-              const path = await findPlan(ctx.cwd, file);
-              return implementInNewSession(ctx, path, (sessionManager) =>
-                this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
-              );
-            }
-
-            case undefined:
-              this.toggleMode();
-              break;
-
-            default:
-              if (!isMode(arg)) throw new Error(`Unknown mode: ${arg} (use plan, build, or implement)`);
-              this.setMode(arg);
-          }
-        },
-      },
+      planCmd({
+        toggleMode: () => this.toggleMode(),
+        setMode: (mode) => this.setMode(mode),
+        saveBuildTo: (sessionManager) => this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
+      }),
     ];
+  }
+
+  /** `submit_plan` and `ask_user`, registered inactive; `applyPlanTools` turns them on in Plan only. */
+  tools(): ToolDefinition[] {
+    // defineTool lets each tool's own parameter types fit in one list.
+    return [defineTool(submitPlanTool((plan) => (this._submittedPlan = plan))), defineTool(askUserTool())];
   }
 
   private initEventHandlers() {

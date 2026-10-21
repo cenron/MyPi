@@ -1,6 +1,9 @@
 # Sub-agents
 
-**Status:** idea
+**Status:** idea (deferred: designed and built later)
+
+**Load type:** `ON_LOAD`. On by default, so the agent can use the `subagent` tool whenever the module is loaded; the user
+can turn it off in `/modules`.
 
 ## Goal
 
@@ -62,7 +65,7 @@ Checked against `@earendil-works/pi-durable` 1.3.0's README (published 2026-10-1
 
 | Piece | Where | Notes |
 |---|---|---|
-| Tool | `pi.registerTool()` from the module's `init()` | Turns the pi call into a durable submission, streams progress with `onUpdate`, and passes the `signal` through to abort. |
+| Tool | Returned from the module's `tools()` | Turns the pi call into a durable submission, streams progress with `onUpdate`, and passes the `signal` through to abort. |
 | Harness | Opened in `init()`, closed on `session_shutdown` | SQLite storage, for example under `.pi/` or pi's agent directory, one file per pi session. "One process owns a storage at a time", so two pi windows on one project need separate files. Call `harness.resume()` on open to continue unfinished children. |
 | Models | `HarnessOptions.models` takes a pi-ai `Models` | Pi gives extensions `ctx.modelRegistry`, which isn't a `Models`. Either adapt it, or build one with pi-ai's `createModels()` and pi's credentials. **Check this first:** it decides whether children can use the models pi is logged in to. |
 | Tools for the child | `CodingTools` with `NodeExecutionEnv({ cwd: ctx.cwd })` | pi-durable's own tools, not pi's. Read-only agents get `read` only, or a `beforeTool` block on `write`, `edit` and `bash`. |
@@ -100,7 +103,6 @@ gets around Plan mode.
 - Where does the SQLite file live, and is it one per pi session or one per project?
 - pi-durable is experimental. Pin an exact version?
 - Which agents ship with MyPi, and on which models?
-- Load type: `ON_LOAD` or `ON_DEMAND`?
 
 ## References
 

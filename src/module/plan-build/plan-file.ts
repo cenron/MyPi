@@ -3,9 +3,6 @@ import { join } from "node:path";
 import { isNodeError } from "#core/util/errors";
 import { PLANS_DIR } from "./rule";
 
-/** A plan the model submitted with `submit_plan`, and where it was saved. */
-export type SubmittedPlan = { title: string; plan: string; path: string };
-
 const MAX_SLUG = 50;
 
 /** `title` as a file-name slug: lowercase, runs of anything but a-z and 0-9 become `-`; `plan` when nothing is left. */

@@ -15,11 +15,13 @@ MyPi/
 │   ├── architecture.md
 │   ├── principles.md
 │   ├── project-structure.md
-│   └── modules/           # One doc per module, built or planned
+│   ├── modules/           # One doc per module, built or planned
+│   └── tools/             # One doc per built-in tool (tools that belong to no module)
 ├── src/
 │   ├── mypi.ts            # MyPi class: pi event handlers
 │   ├── core/              # Session, ModuleManager, Notifier, PromptManager, shared types (incl. Module), util/   (#core/<file>)
 │   ├── command/           # Slash commands: types, registry, one file or folder per command   (#command/<file>)
+│   ├── tool/              # Built-in tools: registerTools, one file or folder per tool   (#tool/<file>)
 │   ├── module/            # BaseModule (the module SDK), module list, loadModules, one folder per module   (#module/<file>)
 │   └── ui/                # Feature UI (modules-modal.ts), shared footer.ts and editor.ts; components/: Dialog, ToggleList   (#ui/<file>)
 ├── test/                  # vitest tests, mirroring src/ (index.test.ts covers the wiring; fakes.ts: shared fakes)
@@ -34,11 +36,14 @@ MyPi/
 | Adding | Put it in | Also |
 |---|---|---|
 | A module idea | `docs/modules/<name>.md` with status `idea` | Add a row to `docs/modules/README.md` |
+| A built-in tool idea | `docs/tools/<name>.md` with status `idea` | Add a row to `docs/tools/README.md`. A tool a module owns goes in that module's doc instead. |
+| A built-in tool | `src/tool/<name>.ts`, returning a `Tool`: `{ definition: defineTool({ … }), init?, shutdown? }`; `src/tool/<name>/index.ts` when it needs more files | Add it to `createTools` in `src/tool/index.ts`; tests in `test/tool/`; a doc in `docs/tools/` |
 | A slash command | `src/command/<name>.ts`, returning a `Command`; `src/command/<name>/index.ts` when it needs more files | Add it to `createCommand` in `src/command/index.ts`; tests in `test/command/` |
 | A reusable TUI component | `src/ui/components/<name>.ts`, implementing pi-tui's `Component` | No feature logic; tests in `test/ui/components/` |
 | A feature's UI | `src/ui/<name>.ts`, opening it through `ctx.ui.custom` | Built from `src/ui/components/`; tests in `test/ui/` |
 | Module code | `src/module/<name>/index.ts`, a class extending `BaseModule` (its state type is its own) | Add it to the list in `src/module/index.ts`; tests in `test/module/<name>/` |
-| A module's tool | `src/module/<name>/tools/<tool>.ts`, returning a `ToolDefinition` | Register it from `init()` with `BaseModule.registerTool`; tests in `test/module/<name>/tools/` |
+| A module's tool | `src/module/<name>/tools/<tool>.ts`, returning a `ToolDefinition` | Return it from the module's `tools()`, wrapped in `defineTool`; tests in `test/module/<name>/tools/` |
+| A module's command | `src/module/<name>/commands/<command>/index.ts`, returning a `Command`, with files only it uses beside it | Return it from the module's `commands()`; tests in `test/module/<name>/commands/<command>/` |
 | A shared service or helper | `src/core/` (helpers in `src/core/util/`) | Only once more than one place needs it; tests in `test/core/` |
 | A skill | `resources/skills/<name>/SKILL.md` | |
 | A prompt template | `resources/prompts/<name>.md` | |

@@ -3,7 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findPlan, implementInNewSession } from "#module/plan-build/implement";
+import { findPlan, implementInNewSession } from "#module/plan-build/commands/plan/implement";
 import { savePlan } from "#module/plan-build/plan-file";
 import { implementMessage } from "#module/plan-build/prompts";
 

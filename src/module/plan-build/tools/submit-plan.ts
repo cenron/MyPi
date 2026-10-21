@@ -1,6 +1,7 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
-import { type SubmittedPlan, savePlan } from "../plan-file";
+import { savePlan } from "../plan-file";
+import type { SubmittedPlan } from "../types";
 
 export const SUBMIT_PLAN = "submit_plan";
 

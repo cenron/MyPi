@@ -1,4 +1,4 @@
-import type { SessionStartEvent } from "@earendil-works/pi-coding-agent";
+import type { SessionStartEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Session } from "./session";
 import { type Command, type Module, type ModuleInfo, ModuleLoadMode } from "./types";
 
@@ -12,7 +12,10 @@ export class ModuleManager {
 
   constructor(readonly session: Session) {}
 
-  /** Takes the session's modules, picks the ones to load for `reason`, and runs `init()` on them. */
+  /**
+   * Takes the session's modules and picks the ones to load for `reason`. Doesn't run their `init()`: `init()` does,
+   * once their tools are registered.
+   */
   start(modules: Module[], reason: SessionStartEvent["reason"]) {
     this.modules = modules;
 
@@ -22,8 +25,14 @@ export class ModuleManager {
       modules.map((module) => module.info),
     );
     this.selected = new Set(this.running);
+  }
 
-    for (const module of modules) {
+  /**
+   * Runs `init()` on the running modules. Call it after `registerTools`: `init()` may turn a module's tools on, and pi
+   * ignores tool names that aren't registered yet.
+   */
+  init() {
+    for (const module of this.modules) {
       if (this.running.has(module.info.name)) module.init();
     }
   }
@@ -43,6 +52,11 @@ export class ModuleManager {
   /** Commands of the running modules only. */
   getCommands(): Command[] {
     return this.modules.filter((module) => this.running.has(module.info.name)).flatMap((module) => module.commands());
+  }
+
+  /** Tools of the running modules only. */
+  getTools(): ToolDefinition[] {
+    return this.modules.filter((module) => this.running.has(module.info.name)).flatMap((module) => module.tools());
   }
 
   /** Stores the user's selection with every `ALWAYS` module added, and returns it in list order. */

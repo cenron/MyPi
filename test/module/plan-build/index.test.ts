@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, ToolCallEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "#core/session";
 import { PlanBuildModule } from "#module/plan-build/index";
@@ -21,6 +21,7 @@ function promptSection(session: Session) {
 function startPlanBuild(branch: unknown[] = []) {
   const fake = fakeSession(branch);
   const module = new PlanBuildModule(fake.session);
+  for (const tool of module.tools()) fake.session.pi.registerTool(tool);
   module.init();
   const plan = module.commands().find((command) => command.info.name === "plan");
   if (!plan) throw new Error("no /plan command");
@@ -201,9 +202,12 @@ describe("PlanBuildModule", () => {
   });
 
   describe("Plan tools", () => {
-    it("registers submit_plan and ask_user on init", () => {
-      const { tools } = startPlanBuild();
-      expect([...tools.keys()]).toEqual(["submit_plan", "ask_user"]);
+    it("lists submit_plan and ask_user as its tools", () => {
+      expect(
+        startPlanBuild()
+          .module.tools()
+          .map((tool) => tool.name),
+      ).toEqual(["submit_plan", "ask_user"]);
     });
 
     it("are active on init in Plan, and only then", () => {
@@ -214,6 +218,7 @@ describe("PlanBuildModule", () => {
     // Leaving Plan removes only Plan's tools, so tools the user turned on or off in the meantime stay as they are.
     it("are added on entering Plan and removed on leaving, leaving other tools alone", async () => {
       const { session, run, activeTools } = startPlanBuild();
+      session.pi.registerTool({ name: "mcp_search" } as ToolDefinition);
       session.pi.setActiveTools(["read", "submit_plan", "ask_user", "mcp_search"]);
       await run("build");
       expect(activeTools()).toEqual(["read", "mcp_search"]);
