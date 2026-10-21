@@ -75,20 +75,23 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
         },
         execute: async (ctx, args) => {
           const [arg, file] = args;
-          if (arg === "implement") {
-            const path = await findPlan(ctx.cwd, file);
-            return implementInNewSession(ctx, path, (sessionManager) =>
-              this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
-            );
-          }
 
-          if (arg === undefined) {
-            this.toggleMode();
-            return;
-          }
+          switch (arg) {
+            case "implement": {
+              const path = await findPlan(ctx.cwd, file);
+              return implementInNewSession(ctx, path, (sessionManager) =>
+                this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
+              );
+            }
 
-          if (!isMode(arg)) throw new Error(`Unknown mode: ${arg} (use plan, build, or implement)`);
-          this.setMode(arg);
+            case undefined:
+              this.toggleMode();
+              break;
+
+            default:
+              if (!isMode(arg)) throw new Error(`Unknown mode: ${arg} (use plan, build, or implement)`);
+              this.setMode(arg);
+          }
         },
       },
     ];
