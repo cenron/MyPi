@@ -1,6 +1,7 @@
 # web_search
 
-**Status:** building (registered as a stub that returns `TODO`, with its description and `promptSnippet`)
+**Status:** building (slice 1 done 2026-10-22: the Parallel backend. The tool is still a stub that returns `TODO`,
+with its description and `promptSnippet`.)
 
 ## Goal
 
@@ -79,8 +80,8 @@ which is cleaner.
 
 | Piece | pi hook | Notes |
 |---|---|---|
-| Tool | `webSearchTool(session)` in `src/tool/web-search.ts`, registered by `registerTools`; a folder once the backends land (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. `promptSnippet` adds a line to pi's tool list in the system prompt. |
-| Backend | `interface SearchBackend { id; name; search(query, signal) → Result[] }`, `Result` shaped like OpenCode's | One file per backend. |
+| Tool | `webSearchTool(session)` in `src/tool/web-search/index.ts`, registered by `registerTools` (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. `promptSnippet` adds a line to pi's tool list in the system prompt. |
+| Backend | `SearchBackend { id; name; search(ctx, query) → SearchResult[] }` and `SearchResult { url; title?; excerpt?; published? }` in `src/tool/web-search/types.ts` | One file per backend. `search` takes the tool's `ctx` and no signal: `ctx.executeTool` uses the calling tool's signal. A failed search throws. |
 | MCP call | Each backend is a server in MyPi's [MCP server list](../mcp/README.md), connected by pi's own client. The backend calls `ctx.executeTool("mcp__parallel__web_search", …)` and reads `structuredContent` from the result, which carries the whole MCP result. | Decided 2026-10-22, instead of OpenCode's `mcpCall` POST helper: pi already handles retries, keys in headers, Exa's event stream, and turning a server off in `/mcp`. web_search declares `reachesTools`, so pi waits for the server to connect before the call runs. To check before the fallback slice: whether an HTTP 429 error result still says 429, after pi's two retries. |
 | Backends | Parallel first, Exa as fallback | Both keyless. TinyFish and Tavily are keyless extras. A self-hosted SearXNG is the unmetered option. |
 | Fallback | On HTTP 429, try the next backend | A plain ordered list. Skip OpenCode's random pick and cooldown map until rate limits actually hurt. |
@@ -97,8 +98,21 @@ which is cleaner.
 
 ## Slices
 
-1. The Parallel backend over `ctx.executeTool`, mapping `structuredContent.results` to `Result[]`, with tests
-   against a recorded response. Needs slice 1 of the [MCP server list](../mcp/README.md#slices) first.
+1. **Done.** The Parallel backend over `ctx.executeTool`, in `src/tool/web-search/parallel.ts`.
+   - `parallelBackend(sessionId)` calls `PARALLEL_SEARCH_TOOL` (`mcp__parallel__web_search`, a constant: pi doesn't
+     export its naming rule) with `{ objective: query, search_queries: [query], session_id }`. Slice 2 makes the
+     session id with `randomUUID()` once per tool instance, since Parallel asks for one for its free-tier limits.
+   - An error outcome (an unknown tool, a blocked call, an MCP error) throws with its text.
+   - Pi's `structuredContent` is the whole MCP result (`convertMcpResult` in `dist/extensions/mcp/tools.js`), so
+     Parallel's reply is its `structuredContent`. There's no fallback to parsing the text content: Parallel always sends
+     structured content.
+   - `toResults(reply)` maps `results`: an entry without a string `url` is skipped, a title or `publish_date` is kept
+     only when it's a non-empty string, and excerpts are joined with a blank line. No `results` list throws.
+   - Tests: `test/tool/web-search/parallel.test.ts`, a `toResults` table, a recorded reply cut to 3 results, and the
+     request, the nested reply, and an error outcome through a fake `ctx`.
+   - Live (2026-10-22), with `execute` pointed at the backend for the test only: in Plan mode, one `web_search` call
+     returned 10 results with `url`, `title`, and `excerpt` and no permission prompt, which confirms the nested
+     `structuredContent`. `published` was left out, since Parallel sent no dates.
 2. The `web_search` tool: markdown result blocks, short error messages, annotations.
 3. Exa as a second backend, and fallback to the next backend on HTTP 429.
 4. Rendering (`renderCall` / `renderResult`).

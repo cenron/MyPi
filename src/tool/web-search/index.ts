@@ -1,7 +1,7 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Session } from "#core/session";
-import type { Tool } from "./types";
+import type { Tool } from "#tool/types";
 
 const parameters = Type.Object({
   query: Type.String({ description: "What to search for, as you would type it into a search engine." }),
