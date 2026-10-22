@@ -10,8 +10,16 @@ export type SearchBackend = {
   /** Display name, such as `Parallel`. */
   name: string;
   /**
+   * The pi tool it calls, such as `mcp__parallel__web_search`. web_search's `reachesTools` lists it, so pi waits for
+   * the server to connect.
+   */
+  tool: string;
+  /**
    * Searches for `query` through `ctx.executeTool`, so the call runs through pi's tool pipeline and is cancelled
    * with the calling tool. Throws when the search fails.
    */
   search(ctx: ExtensionToolContext, query: string): Promise<SearchResult[]>;
 };
+
+/** What web_search keeps about a search, for rendering. `backend` is the backend's `id`. */
+export type SearchDetails = { query: string; backend: string; results: SearchResult[] };

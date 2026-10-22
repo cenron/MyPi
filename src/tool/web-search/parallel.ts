@@ -12,6 +12,7 @@ export function parallelBackend(sessionId: string): SearchBackend {
   return {
     id: "parallel_search",
     name: "Parallel",
+    tool: PARALLEL_SEARCH_TOOL,
     async search(ctx: ExtensionToolContext, query: string) {
       const outcome = await ctx.executeTool(PARALLEL_SEARCH_TOOL, {
         objective: query,
