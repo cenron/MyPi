@@ -1,6 +1,6 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { callMcpTool, textOf } from "#tool/utils";
+import { callMcpTool, siteOf, textOf } from "#tool/utils";
 import { answered, failed, fakeContext } from "./web-search/fakes";
 
 describe("callMcpTool", () => {
@@ -44,5 +44,16 @@ describe("textOf", () => {
     ["is empty for anything but a list", undefined, ""],
   ])("%s", (_rule, content, expected) => {
     expect(textOf(content)).toBe(expected);
+  });
+});
+
+describe("siteOf", () => {
+  it.each([
+    ["the hostname", "https://developer.mozilla.org/en-US/docs", "developer.mozilla.org"],
+    ["drops www.", "https://www.example.com/page", "example.com"],
+    ["keeps a www. that isn't first", "https://docs.www.example.com/", "docs.www.example.com"],
+    ["undefined for a URL that doesn't parse", "not a url", undefined],
+  ])("%s", (_rule, url, expected) => {
+    expect(siteOf(url)).toBe(expected);
   });
 });

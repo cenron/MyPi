@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { type AgentToolResult, defineTool } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type { Session } from "#core/session";
 import type { Tool } from "#tool/types";
 import { formatResults } from "./format";
+import { formatCall, formatResult } from "./render";
 import { searchInOrder } from "./search";
 import { exaBackend } from "./tools/exa";
 import { parallelBackend } from "./tools/parallel";
@@ -37,11 +39,22 @@ export function webSearchTool(_session: Session): Tool {
     // Pi waits for the servers these tools belong to before the call runs, so a search sent while one is still
     // connecting doesn't fail with "not found".
     reachesTools: () => backends.map((backend) => backend.tool),
+    // One Text per slot, reused across redraws, as pi's own tools do.
+    renderCall(args, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      text.setText(formatCall(args, theme));
+      return text;
+    },
+    renderResult(result, { expanded }, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      text.setText(formatResult(result, expanded, context.isError, theme));
+      return text;
+    },
     async execute(_toolCallId, { query }, signal, _onUpdate, ctx): Promise<AgentToolResult<SearchDetails>> {
       const { backend, results } = await searchInOrder(backends, ctx, query, signal);
       return {
         content: [{ type: "text", text: formatResults(query, backend.name, results) }],
-        details: { query, backend: backend.id, results },
+        details: { query, backend: { id: backend.id, name: backend.name }, results },
       };
     },
   });

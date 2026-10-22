@@ -24,13 +24,13 @@ describe("webSearchTool", () => {
   it("returns Parallel's results, and keeps them in details", async () => {
     const result = await run(fakeContext({ [PARALLEL_SEARCH_TOOL]: parallel, [EXA_SEARCH_TOOL]: exa }).ctx);
     expect(result.content).toEqual([{ type: "text", text: formatResults("q", "Parallel", results) }]);
-    expect(result.details).toEqual({ query: "q", backend: "parallel_search", results });
+    expect(result.details).toEqual({ query: "q", backend: { id: "parallel_search", name: "Parallel" }, results });
   });
 
   it("asks Exa when Parallel can't answer", async () => {
     const result = await run(fakeContext({ [EXA_SEARCH_TOOL]: exa }).ctx);
     expect(result.content).toEqual([{ type: "text", text: formatResults("q", "Exa", results) }]);
-    expect(result.details).toEqual({ query: "q", backend: "exa_search", results });
+    expect(result.details).toEqual({ query: "q", backend: { id: "exa_search", name: "Exa" }, results });
   });
 
   it("names each backend when the search fails", async () => {
@@ -58,5 +58,18 @@ describe("webSearchTool", () => {
 
   it("reaches every backend's tool, so pi waits for their servers", () => {
     expect(definition.reachesTools?.({ query: "q" })).toEqual([PARALLEL_SEARCH_TOOL, EXA_SEARCH_TOOL]);
+  });
+
+  it("draws its call and result into one reused Text each", () => {
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+    const call = definition.renderCall?.({ query: "q" }, theme, { lastComponent: undefined } as never);
+    expect(call?.render(120).join("\n")).toContain('web_search "q"');
+    expect(definition.renderCall?.({ query: "q" }, theme, { lastComponent: call } as never)).toBe(call);
+    const result = { content: [{ type: "text" as const, text: "boom" }], details: undefined };
+    const shown = definition.renderResult?.(result, { expanded: false, isPartial: false }, theme, {
+      lastComponent: undefined,
+      isError: true,
+    } as never);
+    expect(shown?.render(120).join("\n")).toContain("boom");
   });
 });

@@ -21,5 +21,5 @@ export type SearchBackend = {
   search(ctx: ExtensionToolContext, query: string): Promise<SearchResult[]>;
 };
 
-/** What web_search keeps about a search, for rendering. `backend` is the backend's `id`. */
-export type SearchDetails = { query: string; backend: string; results: SearchResult[] };
+/** What web_search keeps about a search, for rendering: the query, the backend that answered, and its results. */
+export type SearchDetails = { query: string; backend: { id: string; name: string }; results: SearchResult[] };

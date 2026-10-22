@@ -1,6 +1,6 @@
 # MCP servers
 
-**Status:** done (slice 1, 2026-10-22: the registry and Parallel, verified live)
+**Status:** done (2026-10-22): the registry and Parallel, Exa, and optional keys, all verified live
 
 MyPi ships a list of MCP servers and registers them with pi on every `session_start`, the way it registers its
 built-in tools. Pi's own MCP client does the rest, so MyPi has no MCP client code: only the list and the loop that
@@ -64,7 +64,7 @@ Checked against the installed pi 1.2.0 (`docs/mcp.md`, `docs/extensions.md`, `di
 | Piece | Where | Notes |
 |---|---|---|
 | `McpServer` | `src/mcp/types.ts` | `{ name: string; config: McpServerConfig }` |
-| A server | `src/mcp/<name>.ts`, exporting a `McpServer` constant | Constants, not `(session) =>` factories, until a server needs the session. |
+| A server | `src/mcp/<name>.ts`, exporting a function that returns a `McpServer` | A function, so a key header goes in only when its variable is set (see [Keys](#keys)). No `session` parameter until a server needs one. |
 | The list | `createMcpServers()` in `src/mcp/index.ts` | Add new servers here. |
 | Registering | `registerMcpServers(pi, session)` in `src/mcp/index.ts`, called last in `MyPi.onSessionStart` | Builds its own list, like `registerTools`. One `pi.registerMcpServer` per server, in a try/catch: a rejected server is logged with `session.logError("MCP server <name>: <message>")`, and the rest still register, as in `shutdownTools`. Nothing is unregistered; `/reload` builds a new runtime. |
 | Names | Plain (`parallel`, not `mypi-parallel`) | So an `mcp.json` entry of the same name overrides it on purpose. |
@@ -83,16 +83,19 @@ A server gets its own doc here only once it needs design of its own.
 ### parallel
 
 ```ts
-/** Parallel's free search server: keyless, read-only. Its web_fetch is hidden, since MyPi has its own. */
-export const parallelServer: McpServer = {
-  name: "parallel",
-  config: {
-    url: "https://search.parallel.ai/mcp",
-    description: "Web search through Parallel's free search service",
-    exposure: "deferred",
-    toolExposure: { web_fetch: "hidden" },
-  },
-};
+export function parallelServer(): McpServer {
+  return {
+    name: "parallel",
+    config: {
+      url: "https://search.parallel.ai/mcp",
+      description: "Web search through Parallel's free search service",
+      exposure: "deferred",
+      toolExposure: { web_fetch: "hidden" },
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: pi resolves ${ENV} in headers when it connects.
+      ...(process.env.PARALLEL_API_KEY ? { headers: { Authorization: "Bearer ${PARALLEL_API_KEY}" } } : {}),
+    },
+  };
+}
 ```
 
 Checked live (2026-10-21): no key and no handshake needed. `web_search` and `web_fetch` both declare
@@ -107,16 +110,19 @@ cut by pi's 20 KB limit for the model.
 ### exa
 
 ```ts
-/** Exa's free search server: keyless, read-only. Its web_fetch_exa is hidden, since MyPi has its own web_fetch. */
-export const exaServer: McpServer = {
-  name: "exa",
-  config: {
-    url: "https://mcp.exa.ai/mcp",
-    description: "Web search through Exa's free search service",
-    exposure: "deferred",
-    toolExposure: { web_fetch_exa: "hidden" },
-  },
-};
+export function exaServer(): McpServer {
+  return {
+    name: "exa",
+    config: {
+      url: "https://mcp.exa.ai/mcp",
+      description: "Web search through Exa's free search service",
+      exposure: "deferred",
+      toolExposure: { web_fetch_exa: "hidden" },
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: pi resolves ${ENV} in headers when it connects.
+      ...(process.env.EXA_API_KEY ? { headers: { "x-api-key": "${EXA_API_KEY}" } } : {}),
+    },
+  };
+}
 ```
 
 Checked live (2026-10-22): no key and no handshake needed. `web_search_exa` and `web_fetch_exa` declare
@@ -125,6 +131,28 @@ only, with no `structuredContent`. Its old `get_code_context_exa` tool is gone f
 
 Live in pi (2026-10-22): `/reload` registered it (no restart needed, since `package.json` didn't change). `/mcp` shows
 `connected · 2 tools · resources · deferred · extension`, with `web_fetch_exa` marked `[hidden]`.
+
+## Keys
+
+Both servers work without a key; a key only raises the service's limits. MyPi reads two environment variables, the
+same names OpenCode uses, at each `session_start`:
+
+| Variable | Header MyPi adds |
+|---|---|
+| `PARALLEL_API_KEY` | `Authorization: Bearer ${PARALLEL_API_KEY}` |
+| `EXA_API_KEY` | `x-api-key: ${EXA_API_KEY}` |
+
+- The header names the variable, and pi resolves it when it connects (`resolveHeadersOrThrow` in
+  `dist/extensions/mcp/runtime.js`), so the key never appears in MyPi's code, its config, `/mcp`, or a log.
+- MyPi adds a header only when the variable is set and not empty: pi fails to connect a server whose header names a
+  missing variable, which would break keyless use.
+- Pi resolves variables only in `headers`, not in `url`. That rules out Exa's documented `?exaApiKey=`, which would
+  put the key itself in the config and on screen in `/mcp`.
+- With an `Authorization` header, pi doesn't try OAuth. A wrong key fails the connection, and web_search falls back
+  to the other server.
+- The variables come from pi's own environment: set them before starting pi, and restart it after a change.
+- Anything else (a `!command` key from a password manager, another exposure) goes in a full `parallel` or `exa` entry
+  in `~/.pi/agent/mcp.json`, which replaces MyPi's.
 
 ## Slices
 
@@ -141,6 +169,10 @@ Live in pi (2026-10-22): `/reload` registered it (no restart needed, since `pack
 2. **Done.** Exa (2026-10-22), for web_search's fallback: `exaServer` in `src/mcp/exa.ts`, added to
    `createMcpServers()`. The registry test now checks both servers register, and that a server pi rejects doesn't
    stop the next.
+3. **Done.** Optional keys (2026-10-22), for web_search's slice 5: `parallelServer()` and `exaServer()` became
+   functions that add a key header when `PARALLEL_API_KEY` or `EXA_API_KEY` is set. See [Keys](#keys). Tests: an
+   "API keys" table in `test/mcp/index.test.ts`, using `vi.stubEnv`. Live: with `PARALLEL_API_KEY=bogus`, Parallel
+   failed with `MCP server requires authentication` and web_search answered from Exa; without it, both connected.
 
 ## Open questions
 

@@ -1,7 +1,7 @@
 # web_search
 
-**Status:** building (slices 1–3 done 2026-10-22: the Parallel backend, the tool, and Exa as fallback. Rendering and
-keys are left.)
+**Status:** done (2026-10-22): all five slices, from the Parallel backend to optional keys. The open questions below
+are still open.
 
 ## Goal
 
@@ -80,13 +80,13 @@ which is cleaner.
 
 | Piece | pi hook | Notes |
 |---|---|---|
-| Tool | `webSearchTool(session)` in `src/tool/web-search/index.ts`, registered by `registerTools` (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. `promptSnippet` adds a line to pi's tool list in the system prompt. `reachesTools` lists the backend's tool, so pi waits for its server to connect. `details` is `SearchDetails { query; backend; results }`, for rendering. |
+| Tool | `webSearchTool(session)` in `src/tool/web-search/index.ts`, registered by `registerTools` (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. `promptSnippet` adds a line to pi's tool list in the system prompt. `reachesTools` lists the backend's tool, so pi waits for its server to connect. `details` is `SearchDetails { query; backend: { id, name }; results }`, for rendering. |
 | Backend | `SearchBackend { id; name; tool; search(ctx, query) → SearchResult[] }` and `SearchResult { url; title?; excerpt?; published? }` in `src/tool/web-search/types.ts` | One file per backend. `search` takes the tool's `ctx` and no signal: `ctx.executeTool` uses the calling tool's signal. A failed search throws. |
 | MCP call | Each backend is a server in MyPi's [MCP server list](../mcp/README.md), connected by pi's own client. A backend calls `callMcpTool(ctx, "mcp__parallel__web_search", …)` (`src/tool/utils.ts`), which runs `ctx.executeTool` and returns `structuredContent`: the whole MCP result, where the model's copy in `content` is cut at 20 KB. | Decided 2026-10-22, instead of OpenCode's `mcpCall` POST helper: pi already handles connecting, keys in headers, Exa's event stream, and turning a server off in `/mcp`. web_search declares `reachesTools`, so pi waits for the servers to connect before the call runs. Pi doesn't retry tool calls (only connecting, and read-only requests once), so an HTTP 429 reaches the backend as `MCP HTTP request failed with status 429: <body>`, without `Retry-After`. |
 | Backends | Parallel first, Exa as fallback | Both keyless. TinyFish and Tavily are keyless extras. A self-hosted SearXNG is the unmetered option. DuckDuckGo is out: it has no search API (the Instant Answer API returns topic summaries), only HTML scraping, which breaks with the page and meets CAPTCHAs; OpenCode doesn't use it either. |
 | Fallback | `searchInOrder` in `src/tool/web-search/search.ts`: on HTTP 429, or the backend's tool not found (its server off in `/mcp` or not connected), try the next backend | A plain ordered list, tried from the top on every search. Skip OpenCode's random pick and cooldown map until rate limits actually hurt. |
-| Keys | Optional `apiKey` per backend, resolved like `models.json`: `$ENV`, `${ENV}`, or `!command` | Never logged and never in tracked files. |
-| Rendering | `renderCall` / `renderResult` | A short call line (`search "query"`) and a collapsed result list, like the built-in tools. |
+| Keys | `PARALLEL_API_KEY` and `EXA_API_KEY`, the same names as OpenCode. When one is set, the server's config gets a header naming it (`Authorization: Bearer ${PARALLEL_API_KEY}`, `x-api-key: ${EXA_API_KEY}`), and pi resolves it when it connects | Keyless without them. The key never appears in MyPi's code, config, or logs. A full `mcp.json` entry overrides anything else. See [Keys](../mcp/README.md#keys). |
+| Rendering | `renderCall` / `renderResult`, from `formatCall` and `formatResult` in `src/tool/web-search/render.ts` | `web_search "query"`, then `10 results from Parallel` and one `Title · site` line per result, collapsed, or each result's title, URL, date, and excerpt, expanded (slice 4). |
 | Exposure | `exposure: "direct"` to start | `"deferred"` keeps the tool out of every request until `tool_search` loads it, which saves tokens if search is rare. |
 
 ## Safety
@@ -156,8 +156,39 @@ which is cleaner.
      off in `/mcp`, it came from Exa: 10 results, dates cut to the day. With both off, it failed with one line per
      backend (`Web search failed (Parallel): Tool mcp__parallel__web_search not found`, then Exa's). A real 429 can't be
      forced, so only the unit tests cover it.
-4. Rendering (`renderCall` / `renderResult`).
-5. Optional keys per backend.
+4. **Done.** The display, in `src/tool/web-search/render.ts`, built like web_fetch's: `formatCall(args, theme)` and
+   `formatResult(result, expanded, isError, theme)` are plain string builders, and `renderCall` / `renderResult` in
+   `index.ts` fill one reused `Text` each.
+   - The call line is `web_search "query"`, or just `web_search` before the query arrives.
+   - Collapsed: `10 results from Parallel` (`1 result` in the singular), then one line per result, its title (or URL)
+     and its site in `muted` (`· developer.mozilla.org`), and `(ctrl+o to expand)` at the end. A search's results are
+     what you want to see, so the list shows even collapsed, where web_fetch shows one summary line.
+   - Expanded: the summary, then a block per result from `details`, not the markdown the model got: the title in bold,
+     the URL in `accent` (only the URL when there's no title), `Published:` in `dim`, and the excerpt in `toolOutput`.
+   - No results shows `No results from Parallel`; an error shows its text in `error`; no `details` shows nothing.
+   - A fallback isn't shown: when Exa answers, the summary just says "from Exa".
+   - `details.backend` became `{ id, name }`, so the renderer can name it; `id` stays for keys (slice 5).
+   - Shared helpers went into `src/tool/utils.ts`: `siteOf(url)` (the hostname without `www.`, undefined when the URL
+     doesn't parse) and `expandKey()` (the expand key's name, `ctrl+o` outside the TUI), which web_fetch's renderer
+     now uses too.
+   - Tests: `test/tool/web-search/render.test.ts`, with a theme that writes colors as tags (the call line, the
+     collapsed list, the singular, a URL that doesn't parse, the expanded blocks, no results, an error, no details);
+     `siteOf` rows in `test/tool/utils.test.ts`; and the reused `Text` in `index.test.ts`.
+   - Live (2026-10-22, Plan mode, after `/reload`): `web_search "node AbortSignal.timeout"`, then `10 results from
+     Parallel` and ten `Title · site` lines; ctrl+o showed each title, URL, and excerpt. With both servers off in
+     `/mcp`, the two `Web search failed` lines showed once, where pi's default display had shown them twice.
+5. **Done.** Optional keys, through environment variables. See [Keys](../mcp/README.md#keys) in the MCP doc.
+   - `parallelServer()` and `exaServer()` became functions, read at each `session_start`. With `PARALLEL_API_KEY` set,
+     Parallel's config gets `headers: { Authorization: "Bearer ${PARALLEL_API_KEY}" }`; with `EXA_API_KEY` set, Exa's
+     gets `headers: { "x-api-key": "${EXA_API_KEY}" }`. Those are pi's references, not JS template strings, so each
+     line has a `biome-ignore` for `noTemplateCurlyInString`. An empty variable counts as unset.
+   - Exa documents `?exaApiKey=` in the URL, but pi resolves variables only in `headers`, and `/mcp` shows the URL.
+     Its server allows an `x-api-key` header; whether that raises its limits needs a real key to check. If Exa
+     ignores it, Exa stays keyless.
+   - Tests: an "API keys" table in `test/mcp/index.test.ts` (no variables, empty ones, each key), with `vi.stubEnv`.
+   - Live (2026-10-22): pi started with `PARALLEL_API_KEY=bogus` showed `parallel: failed: MCP server requires
+     authentication` (so the header went out) and Exa connected; a search came back `10 results from Exa`. Restarted
+     without the variable, both connected keyless again. A real key's limits weren't checked.
 
 ## Open questions
 

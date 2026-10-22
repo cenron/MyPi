@@ -533,8 +533,8 @@ In pi, in Plan mode: `https://example.com` was read; `http://localhost:3000/` ("
 - `truncate.ts`: `truncate(text, extension)`, moved out of `index.ts`, now async; it returns `fullTextPath` when it
   saved one.
 - `render.ts`: `formatCall(args, theme)` and `formatResult(result, expanded, isError, theme)`, plain string builders.
-  `keyText("app.tools.expand")` names the key; it's empty outside the TUI, so `ctrl+o` stands in. pi's `keyHint`
-  throws until pi's theme is set up, so it isn't used.
+  `expandKey()` from `src/tool/utils.ts` names the key: `keyText("app.tools.expand")`, which is empty outside the TUI,
+  so `ctrl+o` stands in. pi's `keyHint` throws until pi's theme is set up, so it isn't used.
 - `index.ts`: `renderCall` and `renderResult` fill one reused `Text` each, as pi's own tools do; `extensionFor(mime,
   converted)`; `details.fullTextPath`; and the description says a cut text is saved to a file the model can read.
 - `types.ts`: `FetchedDetails.fullTextPath`.

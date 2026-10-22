@@ -27,6 +27,19 @@ Pi loads the checkout in place. Run `/reload` in a session to pick up edits.
 
 Either path above works on a fresh machine. Credentials (`~/.pi/agent/auth.json`), personal settings, and sessions are not part of this repository, so log in again after installing. Check that `pi --version` matches the pinned `@earendil-works/pi-coding-agent` devDependency, and bump it if not.
 
+## Configure
+
+web_search works without keys. A key only raises a search service's limits: set either variable before starting pi.
+
+| Variable | Sent as |
+|---|---|
+| `PARALLEL_API_KEY` | `Authorization: Bearer …` to Parallel |
+| `EXA_API_KEY` | `x-api-key` to Exa |
+
+MyPi never stores the key: pi reads the variable when it connects. To change anything else about these servers (a key
+from a password manager with `!command`, another exposure), add a full `parallel` or `exa` entry to
+`~/.pi/agent/mcp.json`; it replaces MyPi's. See [MCP servers](docs/mcp/README.md#keys).
+
 ## Develop
 
 | Script | What it does |

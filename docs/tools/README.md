@@ -27,7 +27,7 @@ The must-haves:
 
 | Tool | Status | Summary |
 |---|---|---|
-| [web_search](web-search.md) | building | Search the web through keyless search services; returns titles, URLs, and excerpts |
+| [web_search](web-search.md) | done | Search the web through keyless search services; returns titles, URLs, and excerpts |
 | [web_fetch](web-fetch.md) | done | Fetch a public URL and return readable markdown, capped, with the full text saved when cut |
 | [todo](todo.md) | idea | A checklist the agent keeps while it works, shown to the user |
 | [background process](background-process.md) | idea | Start long-running commands, read their output, stop them, and get told when they exit; monitor output |
@@ -63,7 +63,8 @@ Built (2026-10-21), the same way as `src/command/`:
 - `MyPi.onSessionStart` calls `registerTools` on every `session_start`, after the modules are picked and before their
   `init()`, since a module's `init()` may turn its tools on and pi ignores names that aren't registered yet.
 - Imported as `#tool/<file>`; tests in `test/tool/`, mirroring `src/tool/`.
-- Helpers more than one tool uses go in `src/tool/utils.ts` (`#tool/utils`): `callMcpTool` calls one of MyPi's MCP
-  servers through `ctx.executeTool` and returns the whole MCP result, and `textOf` joins a result's text parts.
+- Helpers more than one tool uses go in `src/tool/utils.ts` (`#tool/utils`), not new files: `callMcpTool` calls one of
+  MyPi's MCP servers through `ctx.executeTool` and returns the whole MCP result, `textOf` joins a result's text parts,
+  and, for renderers, `expandKey` names the expand key and `siteOf` gives a URL's site.
 
 See [Tools](../architecture.md#tools) in the architecture doc for why each tool is wrapped in `defineTool`.

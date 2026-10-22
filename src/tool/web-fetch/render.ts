@@ -1,6 +1,6 @@
-import { type AgentToolResult, formatSize, keyText, type Theme } from "@earendil-works/pi-coding-agent";
+import { type AgentToolResult, formatSize, type Theme } from "@earendil-works/pi-coding-agent";
 import { mimeOf } from "#core/util/http";
-import { textOf } from "#tool/utils";
+import { expandKey, textOf } from "#tool/utils";
 import type { FetchedDetails, Format } from "./types";
 
 /** The call's arguments as the renderer sees them: any may be missing while the model is still writing the call. */
@@ -34,9 +34,7 @@ export function formatResult(
   if (details.fullTextPath) lines.push(theme.fg("warning", `Cut to fit; full text in ${details.fullTextPath}`));
 
   if (!expanded) {
-    // keyText is empty outside the TUI, where no keybindings are loaded.
-    const key = keyText("app.tools.expand") || "ctrl+o";
-    return `\n${lines.join("\n")} ${theme.fg("dim", `(${key} to expand)`)}`;
+    return `\n${lines.join("\n")} ${theme.fg("dim", `(${expandKey()} to expand)`)}`;
   }
   const body = text.split("\n").map((line) => theme.fg("toolOutput", line));
   return `\n${[...lines, "", ...body].join("\n")}`;

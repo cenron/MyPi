@@ -16,4 +16,4 @@ export function registerMcpServers(pi: ExtensionAPI, session: Session): void {
   }
 }
 
-const createMcpServers = (): McpServer[] => [parallelServer, exaServer];
+const createMcpServers = (): McpServer[] => [parallelServer(), exaServer()];
