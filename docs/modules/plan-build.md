@@ -141,6 +141,12 @@ What plan-build's `ToolGuard` rule returns in Plan, by tool:
 | `ask_user` | Allow. It only asks the user. |
 | Anything else | Allow when its `annotations.readOnlyHint` is true, else ask. Annotations come from the tool's author and aren't verified, the same trust pi gives them. |
 
+**Long commands** (fixed 2026-10-21). The ask shows the whole command, and once a model ran a `python3` heredoc with
+a fetched web page pasted in. The dialog grew taller than the terminal, pushed its choices off screen, and pi looked
+frozen. The guard now shows at most 12 lines of an ask, each cut at 160 characters, and says what it left out
+(`… 20 more lines not shown. Yes allows all of it.`). Only the display is cut; see `ToolGuard` in
+[architecture](../architecture.md#core).
+
 `isReadOnlyCommand` (`src/core/util/shell.ts`) is strict, because a miss only costs a confirm. Pi's plan-mode example
 checks only the first word plus a denylist, so `ls; node …` and the 3a test cases run unasked.
 

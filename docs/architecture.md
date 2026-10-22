@@ -108,6 +108,10 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     and No (`showExtensionConfirm` in `interactive-mode.js`), so the dialog looks the same plus the third choice. No,
     Esc, and an abort (select resolves `undefined`) block with `The user declined this call.` Without a UI an `ask`
     blocks. Modules never ask themselves, so dialogs don't stack and the `hasUI` check lives in one place.
+  - A long ask is shortened for the dialog by `previewAsk`: at most 12 lines, each cut at 160 characters, with a note
+    saying how much was left out and that Yes allows all of it. Without it, a command with a pasted page made the
+    dialog taller than the terminal and hid its choices. The no-UI block reason gets the same short version. Approvals
+    still match the full lines, so two long commands that start alike never share an "Allow for this session".
   - "Allow for this session" lives here too, without touching modules. Picking it lets the call run and remembers each
     listed ask line as an exact string in an in-memory `Set` on the guard. `Session` builds a new guard, so `/reload`,
     resume, and a new session forget it. Later asks whose line is remembered are skipped, the dialog lists only the

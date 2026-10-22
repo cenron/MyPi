@@ -21,6 +21,26 @@ const Choice = {
   ALLOW_SESSION: "Allow for this session",
 } as const;
 
+/** Most lines of one ask the dialog shows. More would push its choices off a short terminal and look like a hang. */
+const PREVIEW_LINES = 12;
+/** Most characters of one line the dialog shows; a longer line wraps into many rows. */
+const PREVIEW_LINE_CHARS = 160;
+
+/**
+ * `ask` cut down to fit the permission dialog, saying what was left out. Only the display is cut: "Allow for this
+ * session" still matches the full text, so two long commands that start alike never share an approval.
+ */
+export function previewAsk(ask: string): string {
+  const lines = ask.split("\n");
+  const shown = lines.slice(0, PREVIEW_LINES).map((line) => {
+    if (line.length <= PREVIEW_LINE_CHARS) return line;
+    return `${line.slice(0, PREVIEW_LINE_CHARS)}… (${line.length - PREVIEW_LINE_CHARS} more characters)`;
+  });
+  const hidden = lines.length - shown.length;
+  if (hidden > 0) shown.push(`… ${hidden} more line${hidden === 1 ? "" : "s"} not shown. Yes allows all of it.`);
+  return shown.join("\n");
+}
+
 const returnBlock = (reason: string): ToolCallEventResult => {
   return { block: true, reason };
 };
@@ -60,7 +80,7 @@ export class ToolGuard {
     const lines = asks.map(({ name, question }) => `${name}: ${question}`).filter((line) => !this.allowed.has(line));
     if (lines.length === 0) return undefined;
 
-    const details = lines.join("\n\n");
+    const details = lines.map(previewAsk).join("\n\n");
     if (!ctx.hasUI) return returnBlock(`Confirmation needed, no UI to ask:\n ${details}`);
 
     // Esc and an abort resolve undefined, which declines like No.

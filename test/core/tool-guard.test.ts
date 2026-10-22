@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import type { ExtensionAPI, ExtensionContext, ToolAnnotations, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { ToolGuard, type ToolRule, type Verdict } from "#core/tool-guard";
+import { previewAsk, ToolGuard, type ToolRule, type Verdict } from "#core/tool-guard";
 
 /** A guard over a fake pi whose `getAllTools()` lists `tools`. */
 function newGuard(tools: { name: string; annotations?: ToolAnnotations }[] = []) {
@@ -210,6 +210,33 @@ describe("ToolGuard", () => {
     });
   });
 
+  describe("a long ask", () => {
+    const longCommand = ["python3 - <<'PY'", ...Array.from({ length: 30 }, (_, i) => `line ${i}`), "PY"].join("\n");
+
+    it("shows a shortened question, saying how much is hidden", async () => {
+      const guard = newGuard();
+      guard.set("plan-build", ask(`Run this command?\n${longCommand}`));
+      const { ctx, select } = fakeContext({ answer: "Yes" });
+      await guard.check(event(), ctx);
+      const title = select.mock.calls[0]?.[0] ?? "";
+      expect(title).toContain("plan-build: Run this command?\npython3 - <<'PY'");
+      expect(title).not.toContain("line 29");
+      expect(title).toContain("more lines not shown. Yes allows all of it.");
+    });
+
+    // The dialog is cut, but approvals match the full text.
+    it("doesn't let an approval for one long command cover another that starts the same", async () => {
+      const guard = newGuard();
+      let command = `${longCommand}\necho one`;
+      guard.set("one", () => ({ kind: "ask", question: command }));
+      await guard.check(event(), fakeContext({ answer: "Allow for this session" }).ctx);
+      command = `${longCommand}\nrm -rf build`;
+      const { ctx, select } = fakeContext({ answer: "No" });
+      await expect(guard.check(event(), ctx)).resolves.toMatchObject({ block: true });
+      expect(select).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("blocks without a UI, telling the model what needed confirming", async () => {
     const guard = newGuard();
     guard.set("one", ask("Run ls?"));
@@ -241,5 +268,33 @@ describe("ToolGuard", () => {
       throw new Error("rule bug");
     });
     await expect(guard.check(event(), fakeContext().ctx)).rejects.toThrow("rule bug");
+  });
+});
+
+describe("previewAsk", () => {
+  it("leaves a short ask as is", () => {
+    expect(previewAsk("one: Run ls?")).toBe("one: Run ls?");
+  });
+
+  it("keeps the first 12 lines and counts the rest", () => {
+    const ask = Array.from({ length: 15 }, (_, i) => `line ${i + 1}`).join("\n");
+    const lines = previewAsk(ask).split("\n");
+    expect(lines).toHaveLength(13);
+    expect(lines[11]).toBe("line 12");
+    expect(lines[12]).toBe("… 3 more lines not shown. Yes allows all of it.");
+  });
+
+  it("says line, not lines, for one hidden line", () => {
+    const ask = Array.from({ length: 13 }, (_, i) => `line ${i + 1}`).join("\n");
+    expect(previewAsk(ask)).toMatch(/… 1 more line not shown\./);
+  });
+
+  it("cuts a long line, counting the characters left out", () => {
+    expect(previewAsk(`x${"y".repeat(199)}`)).toBe(`x${"y".repeat(159)}… (40 more characters)`);
+  });
+
+  it("keeps exactly 12 lines of exactly 160 characters whole", () => {
+    const ask = Array.from({ length: 12 }, () => "z".repeat(160)).join("\n");
+    expect(previewAsk(ask)).toBe(ask);
   });
 });
