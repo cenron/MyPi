@@ -21,4 +21,6 @@ export type FetchedDetails = {
   format: Format;
   converted: boolean;
   title?: string;
+  /** Where the whole text was saved when it was cut to fit. */
+  fullTextPath?: string;
 };

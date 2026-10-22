@@ -55,23 +55,15 @@ const abortedWithin = (signal: AbortSignal, ms: number) =>
   });
 
 describe("readCapped", () => {
-  it("returns the body's bytes", async () => {
-    const body = await readCapped(new Response("hello"), 100);
-    expect(new TextDecoder().decode(body)).toBe("hello");
-  });
-
-  it("joins chunks in order", async () => {
+  it("returns the body's bytes, joining chunks in order", async () => {
     const encoder = new TextEncoder();
     const { stream } = trackedStream([encoder.encode("one "), encoder.encode("two "), encoder.encode("three")]);
     const body = await readCapped(new Response(stream), 100);
     expect(new TextDecoder().decode(body)).toBe("one two three");
   });
 
-  it("returns empty bytes for an empty body", async () => {
+  it("returns empty bytes for an empty body, or none at all", async () => {
     expect(await readCapped(new Response(""), 100)).toHaveLength(0);
-  });
-
-  it("returns empty bytes when there is no body at all", async () => {
     // A 204 or a HEAD response has a null body.
     expect(await readCapped(new Response(null, { status: 204 }), 100)).toHaveLength(0);
   });
@@ -149,52 +141,37 @@ describe("timeoutSignal", () => {
 });
 
 describe("mimeOf", () => {
-  it("drops parameters such as the charset", () => {
-    expect(mimeOf("text/html; charset=utf-8")).toBe("text/html");
-  });
-
-  it("trims and lowercases", () => {
+  it("drops parameters, trims, and lowercases", () => {
     expect(mimeOf(" Text/HTML ;charset=UTF-8")).toBe("text/html");
-  });
-
-  it("returns an empty string for an empty content type", () => {
     expect(mimeOf("")).toBe("");
   });
 });
 
 describe("isTextual", () => {
+  // One row per rule: text/*, the listed types, +json, +xml, and no type at all.
   it.each([
     "text/plain",
-    "text/html",
-    "text/markdown",
     "application/json",
-    "application/ld+json",
     "application/xml",
-    "application/rss+xml",
-    "image/svg+xml",
     "application/javascript",
     "application/x-javascript",
+    "application/ld+json",
+    "image/svg+xml",
     "",
   ])("is true for %j", (mime) => {
     expect(isTextual(mime)).toBe(true);
   });
 
-  it.each(["image/png", "application/pdf", "application/zip", "application/octet-stream", "video/mp4"])(
-    "is false for %j",
-    (mime) => {
-      expect(isTextual(mime)).toBe(false);
-    },
-  );
+  it.each(["image/png", "application/pdf"])("is false for %j", (mime) => {
+    expect(isTextual(mime)).toBe(false);
+  });
 });
 
 describe("isImage", () => {
-  it.each(["image/png", "image/jpeg", "image/webp"])("is true for %j", (mime) => {
-    expect(isImage(mime)).toBe(true);
-  });
-
-  // SVG is XML, so a model can read it.
-  it.each(["image/svg+xml", "text/html", ""])("is false for %j", (mime) => {
-    expect(isImage(mime)).toBe(false);
+  it("is true for an image, but not for SVG, which is XML a model can read", () => {
+    expect(isImage("image/png")).toBe(true);
+    expect(isImage("image/svg+xml")).toBe(false);
+    expect(isImage("text/html")).toBe(false);
   });
 });
 

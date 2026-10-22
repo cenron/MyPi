@@ -1,6 +1,7 @@
 # web_fetch
 
-**Status:** building ([slice 1](#slice-1-get-with-checks-a-size-cap-and-a-timeout-text-out) done; [slice 2](#slice-2-html-to-markdown) done; [slice 3](#slice-3-public-addresses-only) done)
+**Status:** done (2026-10-21): all four slices, from
+[slice 1](#slice-1-get-with-checks-a-size-cap-and-a-timeout-text-out) to [slice 4](#slice-4-full-text-file-and-display).
 
 ## Goal
 
@@ -52,8 +53,8 @@ There's no backend; it's a direct GET (`packages/core/src/tool/plugin/webfetch.t
 | Tool | `webFetchTool(session)` in `src/tool/web-fetch/index.ts` (a single file, `src/tool/web-fetch.ts`, in slice 1), registered by `registerTools` (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. |
 | Request | `fetch` with the tool's `signal`, a timeout, and an `Accept` header weighted by format | Stream the body and stop at the cap. Reject a `Content-Length` over the cap before reading. The capped read and the timeout signal live in `src/core/util/http.ts`, since web_search's `mcpCall` needs them too. |
 | Conversion | HTML to markdown | Turndown with the GFM plugin, on `<main>` when there's exactly one, with site chrome removed (slice 2). Readability was measured and set aside; see slice 2. |
-| Long output | pi's truncation pattern | `truncateHead` at pi's defaults (50 KB / 2000 lines) from slice 1; see `examples/extensions/truncated-tool.ts`. Slice 4 saves the full text to a temp file. |
-| Rendering | `renderCall` / `renderResult` | A short call line (`fetch <url>`) and a collapsed body. |
+| Long output | pi's truncation pattern | `truncateHead` at pi's defaults (50 KB / 2000 lines), and the full text saved to a temp file the model can `read` (slice 4); see `examples/extensions/truncated-tool.ts`. |
+| Rendering | `renderCall` / `renderResult` | `web_fetch <url>`, then one summary line collapsed, or the text expanded (slice 4). |
 
 ## Safety
 
@@ -68,7 +69,7 @@ There's no backend; it's a direct GET (`packages/core/src/tool/plugin/webfetch.t
 1. GET with content-type checks, the size cap, and the timeout; plain text out, truncated. `done`
 2. HTML to markdown, and the `format` parameter. `done`
 3. The private-address block, including redirects. `done`
-4. The full text in a temp file when truncated, and rendering.
+4. The full text in a temp file when truncated, and rendering. `done`
 
 ## Slice 1: GET with checks, a size cap, and a timeout; text out
 
@@ -228,8 +229,8 @@ touches the network.
 - **`http.test.ts`** (done): `readCapped` with chunks, an empty or null body, exactly the cap, one byte over, a
   `Content-Length` over the cap (not read, and cancelled), a body larger than its `Content-Length`, and an endless
   body; `timeoutSignal` timing out, not timing out early, the parent aborting, and the parent already aborted;
-  `mimeOf` dropping the charset, trimming, lowercasing, and an empty value; `isTextual` for each text family and for
-  images, PDFs, zips, and video; `isImage` true for PNG, JPEG, and WebP and false for SVG; `decode` with no charset,
+  `mimeOf` dropping the charset, trimming, lowercasing, and an empty value; `isTextual` with one row per rule, and an
+  image and a PDF; `isImage` true for PNG and false for SVG; `decode` with no charset,
   a quoted one, an unknown one, and a non-charset error re-thrown; `failWith` cancelling the body;
   `describeFetchError` for a timeout, a network code, a cause without a code, and a non-Error.
 
@@ -492,11 +493,12 @@ local server, use curl in bash.`, or `localhost resolves to ::1, which is not a 
   NAT64 for 8.8.8.8) pass; every range above, mapped loopback, and NAT64 for loopback and metadata fail; a
   non-address fails; `assertPublicHost` for literals, bracketed IPv6, mixed answers, and DNS failures; `publicLookup`
   in both callback forms, a rebinding answer, mixed answers, and a DNS error.
-- `index.test.ts`, with `undici` and `node:dns/promises` faked: eleven literal local URLs refused without a fetch; the
-  curl hint; a name resolving locally; mixed answers; an unresolvable name; a connect-time refusal reported with its
-  reason; relative redirects; each redirect status; a redirect's body cancelled; redirects into a local address, a
-  local name, or `file:` refused before the next fetch; the 10-hop limit; a 3xx without `Location`; the connector's
-  options; and shutdown closing it twice safely. The redirect tests from slices 1 and 2 now use real 3xx replies.
+- `index.test.ts`, with `undici` and `node:dns/promises` faked, covers only the wiring (the ranges are
+  `address.test.ts`'s): a local address refused without a fetch, with the curl hint; a name resolving locally; a
+  connect-time refusal reported with its reason; a relative redirect; a redirect's body cancelled; a redirect into a
+  local address or to `file:` refused before the next fetch; the 10-hop limit; a 3xx without `Location`; the
+  connector's options; and shutdown closing it twice safely. The redirect tests from slices 1 and 2 use real 3xx
+  replies.
 - Mutation checks: checking only the first hop, ignoring NAT64, a lookup that passes everything, reporting the
   refusal as `fetch failed`, and dropping `169.254.0.0/16` each fail tests.
 
@@ -506,6 +508,55 @@ In pi, in Plan mode: `https://example.com` was read; `http://localhost:3000/` ("
 `http://127.0.0.1:8080/`, `http://169.254.169.254/latest/meta-data/`, and an httpbin redirect to
 `http://127.0.0.1:8080/admin` were all refused with the curl hint. pi loaded `undici` from the package's
 `node_modules`.
+
+## Slice 4: full-text file and display
+
+**Status:** done (2026-10-21).
+
+### Decisions (2026-10-21)
+
+1. **Save the whole text when it's cut**, the way pi's `bash` does: a new file in the OS temp directory,
+   `pi-web-fetch-<16 hex><ext>`, mode `0600`, created with `wx` so it never follows a link someone else put there.
+   pi's own helper (`writeOutputFile` in `dist/utils/output-files.js`) isn't exported, so `truncate.ts` does the same
+   in a few lines. Files are left for the OS to clear, as pi leaves its own.
+2. **The note names the file**: `[Truncated: showed 2000 of 2500 lines. The full text is in <path>; read it for the
+   rest.]`. `read` is allowed in Plan, so the model can page through the rest unasked. When the file can't be written,
+   the note leaves the path out and the fetch still succeeds.
+3. **The extension says what the text is**: `.md` for converted pages and `text/markdown`, `.html`, `.json`, `.xml`,
+   else `.txt`.
+4. **Display**, collapsed: `web_fetch <url>`, then `Title · 50.1KB of markdown from 314.4KB of HTML`, a `→ <url>` line
+   after a redirect, and `Cut to fit; full text in <path>` when cut, with `(ctrl+o to expand)`. Expanded: the summary
+   and the text the model got. An error shows its message in the error color.
+
+### Code
+
+- `truncate.ts`: `truncate(text, extension)`, moved out of `index.ts`, now async; it returns `fullTextPath` when it
+  saved one.
+- `render.ts`: `formatCall(args, theme)` and `formatResult(result, expanded, isError, theme)`, plain string builders.
+  `keyText("app.tools.expand")` names the key; it's empty outside the TUI, so `ctrl+o` stands in. pi's `keyHint`
+  throws until pi's theme is set up, so it isn't used.
+- `index.ts`: `renderCall` and `renderResult` fill one reused `Text` each, as pi's own tools do; `extensionFor(mime,
+  converted)`; `details.fullTextPath`; and the description says a cut text is saved to a file the model can read.
+- `types.ts`: `FetchedDetails.fullTextPath`.
+
+### Tests
+
+- `truncate.test.ts`: a short text isn't saved; past 2000 lines the cut text names the file, which holds the whole
+  text, sits in the temp directory, and has mode `0600`; a single over-long line; a failed write still cuts, without a
+  path.
+- `render.test.ts`, seven tests with a theme that writes colors as tags: the call line (with `(html)`, and with no
+  URL yet); the collapsed summary (with and without a title); an unconverted or untyped response; a redirect, the cut
+  size, and the saved file; the expanded text; an error; and no details.
+- `index.test.ts`: the saved file's content and `.txt`, `.md`, and `.json` extensions, files removed after each test;
+  no file for a short page; the renderers return one reused `Text`; the description.
+- Mutation checks: a file readable by others, no file saved, and a converted page saved as `.html` each fail tests.
+
+### Live test (2026-10-21)
+
+In pi, in Plan mode: Wikipedia's "Markdown" showed `Markdown - Wikipedia · 50.1KB of markdown from 314.4KB of HTML`
+and `Cut to fit; full text in /var/folders/…/pi-web-fetch-b4ff2437b0b6dc94.md`; the model then read lines 661–665 of
+that file unasked. `example.com` showed `Example Domain · 244B of markdown from 577B of HTML`, and ctrl+o expanded it
+to the header and text.
 
 ## Open questions
 

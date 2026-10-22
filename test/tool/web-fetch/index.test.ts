@@ -1,3 +1,4 @@
+import { readFile, rm } from "node:fs/promises";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { publicLookup } from "#tool/web-fetch/address";
 import { webFetchTool } from "#tool/web-fetch/index";
@@ -128,18 +129,9 @@ describe("web_fetch", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it.each(["file:///etc/passwd", "ftp://example.com/file", "data:text/plain,hi"])(
-      "rejects %s without fetching",
-      async (url) => {
-        await expect(run({ url })).rejects.toThrow(/http/);
-        expect(fetchMock).not.toHaveBeenCalled();
-      },
-    );
-
-    it.each(["http://example.com/", "https://example.com/"])("fetches %s", async (url) => {
-      replyWith({ url });
-      await run({ url });
-      expect(fetchMock).toHaveBeenCalledOnce();
+    it("rejects a scheme other than http(s) without fetching", async () => {
+      await expect(run({ url: "file:///etc/passwd" })).rejects.toThrow(/Only http: and https:/);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 
@@ -201,17 +193,6 @@ describe("web_fetch", () => {
       await expect(run({ url: PAGE })).rejects.toThrow(/content type/i);
     });
 
-    it("reads JSON", async () => {
-      replyWith({ body: '{"ok":true}', headers: { "content-type": "application/json; charset=utf-8" } });
-      expect(await textOf({ url: PAGE })).toContain('{"ok":true}');
-    });
-
-    it("reads a response with no content type", async () => {
-      // A string body would get text/plain on its own; bytes get no content type.
-      replyWith({ body: new TextEncoder().encode("untyped"), headers: {} });
-      expect(await textOf({ url: PAGE })).toContain("untyped");
-    });
-
     it("decodes with the response's charset", async () => {
       replyWith({
         body: new Uint8Array([0x63, 0x61, 0x66, 0xe9]),
@@ -232,12 +213,6 @@ describe("web_fetch", () => {
     it("prefixes failures with the URL", async () => {
       replyWith({ status: 500 });
       await expect(run({ url: PAGE })).rejects.toThrow(`Unable to fetch ${PAGE}`);
-    });
-
-    it("reports a network error with its code", async () => {
-      const cause = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), { code: "ENOTFOUND" });
-      fetchMock.mockRejectedValueOnce(new TypeError("fetch failed", { cause }));
-      await expect(run({ url: PAGE })).rejects.toThrow(/fetch failed \(ENOTFOUND\)/);
     });
 
     it("times out after the given number of seconds", async () => {
@@ -281,29 +256,52 @@ describe("web_fetch", () => {
       });
     });
 
-    it("truncates past 2000 lines and says so", async () => {
+    it("truncates past 2000 lines, saves the whole text, and says where", async () => {
       const lines = Array.from({ length: 2500 }, (_, i) => `line ${i}`).join("\n");
       replyWith({ body: lines });
       const result = await run({ url: PAGE });
       const [first] = result.content;
       const text = first?.type === "text" ? first.text : "";
-      expect(text).toMatch(/\[Truncated/);
-      expect(text).not.toContain("line 2499");
-      expect(result.details).toMatchObject({ truncated: true });
+      const { fullTextPath } = result.details as { fullTextPath: string };
+      try {
+        expect(text).not.toContain("line 2499");
+        expect(fullTextPath).toMatch(/pi-web-fetch-[0-9a-f]{16}\.txt$/);
+        expect(text).toContain(`[Truncated: showed 2000 of 2500 lines. The full text is in ${fullTextPath}`);
+        expect(await readFile(fullTextPath, "utf8")).toBe(lines);
+        expect(result.details).toMatchObject({ truncated: true });
+      } finally {
+        await rm(fullTextPath, { force: true });
+      }
     });
 
-    it("leaves a short page whole", async () => {
+    it("saves a converted page's full text as markdown", async () => {
+      const paragraphs = Array.from({ length: 1500 }, (_, i) => `<p>paragraph ${i}</p>`).join("");
+      replyWith({ body: `<html><body>${paragraphs}</body></html>`, headers: { "content-type": "text/html" } });
+      const { details } = await run({ url: PAGE });
+      const { fullTextPath } = details as { fullTextPath: string };
+      try {
+        expect(fullTextPath).toMatch(/\.md$/);
+        expect(await readFile(fullTextPath, "utf8")).toContain("paragraph 1499");
+      } finally {
+        await rm(fullTextPath, { force: true });
+      }
+    });
+
+    it("leaves a short page whole, with no file", async () => {
+      replyWith({ body: "one\ntwo\nthree" });
+      expect((await run({ url: PAGE })).details).toMatchObject({ truncated: false, fullTextPath: undefined });
       replyWith({ body: "one\ntwo\nthree" });
       expect(await textOf({ url: PAGE })).not.toMatch(/\[Truncated/);
     });
 
-    // Minified JSON or JavaScript is often one line; cutting only at line ends would leave nothing.
-    it("keeps the first 50KB of a page that is one long line", async () => {
+    it("saves JSON's full text as .json", async () => {
       replyWith({ body: "x".repeat(200 * 1024), headers: { "content-type": "application/json" } });
-      const text = await textOf({ url: PAGE });
-      expect(text).toContain("x".repeat(50 * 1024));
-      expect(text).not.toContain("x".repeat(50 * 1024 + 1));
-      expect(text).toMatch(/\[Truncated: showed the first 50\.0KB of 200\.0KB\]/);
+      const { fullTextPath } = (await run({ url: PAGE })).details as { fullTextPath: string };
+      try {
+        expect(fullTextPath).toMatch(/\.json$/);
+      } finally {
+        await rm(fullTextPath, { force: true });
+      }
     });
   });
 
@@ -315,9 +313,12 @@ describe("web_fetch", () => {
 
     it("converts an HTML page to markdown, with a Title line", async () => {
       replyWith({ body: DOC, headers: { "content-type": HTML } });
-      expect(await textOf({ url: PAGE })).toBe(
+      const result = await run({ url: PAGE });
+      const [first] = result.content;
+      expect(first?.type === "text" && first.text).toBe(
         `URL: ${PAGE}\nTitle: Docs\nContent-Type: ${HTML}\n\n# Hello\n\nA [link](https://example.com/next).`,
       );
+      expect(result.details).toMatchObject({ format: "markdown", converted: true, title: "Docs" });
     });
 
     it("resolves links against the final URL after a redirect", async () => {
@@ -328,9 +329,17 @@ describe("web_fetch", () => {
       expect(await textOf({ url: PAGE })).toContain("[link](https://other.example.org/next)");
     });
 
-    it("converts XHTML too", async () => {
-      replyWith({ body: DOC, headers: { "content-type": "application/xhtml+xml" } });
-      expect(await textOf({ url: PAGE })).toContain("# Hello");
+    it.each([
+      ["application/xhtml+xml", DOC, true],
+      ["text/markdown", "# Already markdown\n\n<b>kept</b>", false],
+      ["text/plain", "<p>not html</p>", false],
+    ])("converts %s: %s", async (type, body, converted) => {
+      replyWith({ body, headers: { "content-type": type } });
+      const result = await run({ url: PAGE });
+      const [first] = result.content;
+      const text = first?.type === "text" ? first.text : "";
+      expect(text.includes(body)).toBe(!converted);
+      expect(result.details).toMatchObject({ converted });
     });
 
     it("leaves out the Title line when the page has no title", async () => {
@@ -338,19 +347,6 @@ describe("web_fetch", () => {
       const text = await textOf({ url: PAGE });
       expect(text).not.toContain("Title:");
       expect(text).toBe(`URL: ${PAGE}\nContent-Type: ${HTML}\n\nuntitled`);
-    });
-
-    it("passes markdown from the server through unchanged", async () => {
-      replyWith({ body: "# Already markdown\n\n<b>kept</b>", headers: { "content-type": "text/markdown" } });
-      const result = await run({ url: PAGE });
-      const [first] = result.content;
-      expect(first?.type === "text" && first.text).toContain("# Already markdown\n\n<b>kept</b>");
-      expect(result.details).toMatchObject({ converted: false });
-    });
-
-    it("doesn't convert plain text that looks like HTML", async () => {
-      replyWith({ body: "<p>not html</p>", headers: { "content-type": "text/plain" } });
-      expect(await textOf({ url: PAGE })).toContain("<p>not html</p>");
     });
 
     it("converts before truncating, so a big page with little text isn't cut", async () => {
@@ -389,12 +385,6 @@ describe("web_fetch", () => {
       expect(text).toContain("[Couldn't convert the HTML (parser blew up); showing it raw]");
       expect(result.details).toMatchObject({ converted: false });
     });
-
-    it("returns details with the format, whether it converted, and the title", async () => {
-      replyWith({ body: DOC, headers: { "content-type": HTML } });
-      const { details } = await run({ url: PAGE });
-      expect(details).toMatchObject({ format: "markdown", converted: true, title: "Docs" });
-    });
   });
 
   describe('format: "html"', () => {
@@ -416,25 +406,9 @@ describe("web_fetch", () => {
   });
 
   describe("local addresses", () => {
-    it.each([
-      "http://127.0.0.1/",
-      "http://127.0.0.1:8080/admin",
-      "http://[::1]:3000/",
-      "http://10.0.0.5/",
-      "http://172.20.1.1/",
-      "http://192.168.1.1/",
-      "http://169.254.169.254/latest/meta-data/",
-      "http://0.0.0.0/",
-      "http://2130706433/", // 127.0.0.1 written as one number
-      "http://[::ffff:127.0.0.1]/",
-      "http://[fd00::1]/",
-    ])("refuses %s without fetching", async (url) => {
-      await expect(run({ url })).rejects.toThrow(/is not a public address/);
+    it("refuses a local address without fetching, and points to curl", async () => {
+      await expect(run({ url: "http://127.0.0.1:5173/" })).rejects.toThrow(/not a public address.*use curl in bash/);
       expect(fetchMock).not.toHaveBeenCalled();
-    });
-
-    it("tells the model to use curl for a local server", async () => {
-      await expect(run({ url: "http://127.0.0.1:5173/" })).rejects.toThrow(/use curl in bash/);
     });
 
     it("refuses a name that resolves to a local address", async () => {
@@ -443,20 +417,6 @@ describe("web_fetch", () => {
         /localhost resolves to ::1, which is not a public address/,
       );
       expect(fetchMock).not.toHaveBeenCalled();
-    });
-
-    // An attacker's DNS can mix a local answer in with public ones.
-    it("refuses a name when any of its addresses is local", async () => {
-      net.dns.set("mixed.example", ["93.184.215.14", "10.0.0.1"]);
-      await expect(run({ url: "https://mixed.example/" })).rejects.toThrow(/resolves to 10\.0\.0\.1/);
-    });
-
-    it("reports a name that doesn't resolve", async () => {
-      net.dns.set(
-        "nope.example",
-        Object.assign(new Error("getaddrinfo ENOTFOUND nope.example"), { code: "ENOTFOUND" }),
-      );
-      await expect(run({ url: "https://nope.example/" })).rejects.toThrow(/ENOTFOUND nope\.example/);
     });
 
     it("reports a refusal at connect time with its reason, not as a failed fetch", async () => {
@@ -476,11 +436,6 @@ describe("web_fetch", () => {
       expect(String(fetchMock.mock.calls[1]?.[0])).toBe("https://example.com/moved?x=1");
     });
 
-    it.each([301, 302, 303, 307, 308])("follows a %i", async (status) => {
-      replyWith({ status, headers: { location: "/next" } }, { body: "landed" });
-      expect(await textOf({ url: PAGE })).toContain("landed");
-    });
-
     it("cancels each redirect's body", async () => {
       const { stream, state } = trackedBody("Moved");
       fetchMock.mockResolvedValueOnce(response({ body: stream, status: 302, headers: { location: "/next" } }));
@@ -491,13 +446,6 @@ describe("web_fetch", () => {
     it("refuses a redirect to a local address before fetching it", async () => {
       replyWith({ status: 302, headers: { location: "http://127.0.0.1:8080/admin" } });
       await expect(run({ url: PAGE })).rejects.toThrow(/127\.0\.0\.1 is not a public address/);
-      expect(fetchMock).toHaveBeenCalledOnce();
-    });
-
-    it("refuses a redirect to a name that resolves to a local address", async () => {
-      net.dns.set("sneaky.example", ["192.168.0.10"]);
-      replyWith({ status: 307, headers: { location: "https://sneaky.example/" } });
-      await expect(run({ url: PAGE })).rejects.toThrow(/sneaky\.example resolves to 192\.168\.0\.10/);
       expect(fetchMock).toHaveBeenCalledOnce();
     });
 
@@ -551,16 +499,25 @@ describe("web_fetch", () => {
       expect(format).toContain('"html"');
     });
 
-    it("says local addresses are refused", () => {
+    it("draws its call and result into one reused Text each", () => {
+      const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+      const context = { lastComponent: undefined, isError: false } as never;
+      const call = definition.renderCall?.({ url: PAGE }, theme, context);
+      expect(call?.render(120).join("\n")).toContain(`web_fetch ${PAGE}`);
+      const again = definition.renderCall?.({ url: PAGE }, theme, { lastComponent: call } as never);
+      expect(again).toBe(call);
+      const result = { content: [{ type: "text" as const, text: "boom" }], details: undefined };
+      const shown = definition.renderResult?.(result, { expanded: false, isPartial: false }, theme, {
+        lastComponent: undefined,
+        isError: true,
+      } as never);
+      expect(shown?.render(120).join("\n")).toContain("boom");
+    });
+
+    it("describes its limits and treats page text as data, and shows up in Available tools", () => {
+      expect(definition.description).toMatch(/HTML pages come back as markdown/);
+      expect(definition.description).toMatch(/full text saved to a file you can read/);
       expect(definition.description).toMatch(/localhost and private network addresses are refused/);
-    });
-
-    it("says HTML comes back as markdown", () => {
-      expect(definition.description).toMatch(/markdown/);
-      expect(definition.description).not.toMatch(/HTML is returned as is/);
-    });
-
-    it("tells the model page text is data, and shows up in Available tools", () => {
       expect(definition.description).toMatch(/not instructions/);
       expect(definition.promptSnippet).toBeTruthy();
     });

@@ -28,7 +28,7 @@ The must-haves:
 | Tool | Status | Summary |
 |---|---|---|
 | [web_search](web-search.md) | building | Search the web through keyless search services; returns titles, URLs, and excerpts |
-| [web_fetch](web-fetch.md) | building | Fetch a URL and return readable markdown, capped |
+| [web_fetch](web-fetch.md) | done | Fetch a public URL and return readable markdown, capped, with the full text saved when cut |
 | [todo](todo.md) | idea | A checklist the agent keeps while it works, shown to the user |
 | [background process](background-process.md) | idea | Start long-running commands, read their output, stop them, and get told when they exit; monitor output |
 | [apply_patch](apply-patch.md) | idea | Multi-file edits in Codex's patch format |

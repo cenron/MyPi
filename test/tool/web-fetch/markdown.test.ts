@@ -112,13 +112,6 @@ describe("htmlToMarkdown", () => {
       expect(md('<p>a<i aria-hidden="true">icon</i><b aria-hidden="false">b</b></p>')).toBe("a**b**");
     });
 
-    // Sites that animate a sample render every frame, and hide all but one from screen readers.
-    it("keeps one copy of content repeated for an animation", () => {
-      const frames =
-        '<div aria-hidden="true"><p>frame</p></div><div><p>final</p></div><div aria-hidden="true"><p>frame</p></div>';
-      expect(md(frames)).toBe("final");
-    });
-
     it("drops hidden line numbers inside a code block", () => {
       const pre = "<pre><code><span hidden>1</span>a = 1</code></pre>";
       expect(md(pre)).toBe("```\na = 1\n```");
@@ -138,7 +131,7 @@ describe("htmlToMarkdown", () => {
       expect(md(pre)).toBe("```\na\n\nb\n```");
     });
 
-    it.each(["code-line", "doc-code-line", "line"])('recognizes class="%s"', (name) => {
+    it.each(["code-line", "doc-code-line"])('recognizes class="%s"', (name) => {
       const pre = `<pre><code><span class="${name}">a</span><span class="${name}">b</span></code></pre>`;
       expect(md(pre)).toBe("```\na\nb\n```");
     });

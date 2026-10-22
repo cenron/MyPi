@@ -143,10 +143,7 @@ describe("publicLookup", () => {
     dns.set("rebind.example", ["127.0.0.1"]);
     const { error } = await lookUp("rebind.example", {});
     expect(error?.code).toBe(BLOCKED);
-    expect(error?.message).toBe(
-      "rebind.example resolves to 127.0.0.1, which is not a public address. web_fetch only reads public sites; " +
-        "for a local server, use curl in bash.",
-    );
+    expect(error?.message).toMatch(/^rebind\.example resolves to 127\.0\.0\.1, which is not a public address/);
   });
 
   it("fails when any of several answers is local", async () => {

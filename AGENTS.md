@@ -59,3 +59,15 @@ Check that `pi --version` matches the pinned devDependency. If the docs and sour
   a folder. Leave `.ts` off import paths.
 - Wrap every tool in pi's `defineTool` where it's built; without it `execute`'s arguments are silently `any`.
 - Update the module's doc in `docs/modules/`, or the tool's doc in `docs/tools/`, when its design or status changes.
+
+## Tests
+
+Test each behavior once, at the lowest level that shows it:
+
+- Pure helpers (`src/core/util/`, a tool's `address.ts`) get table tests: one row per rule, not several examples of
+  the same rule. Security tables (`isReadOnlyCommand`, the address ranges) are the spec and keep one row per case.
+- A tool's or module's own tests cover only the wiring: that each helper is called, with the right inputs, once per
+  behavior. Don't repeat a helper's table through the tool.
+- Display code (`renderCall`, `renderResult`, footers) gets a few tests, not one per line of output.
+- Check exact wording in one place; elsewhere match a key phrase, so rewording a message breaks one test.
+- Check a new test catches something: break the code it covers and watch it fail.
