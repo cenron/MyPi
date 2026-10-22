@@ -11,12 +11,26 @@ declare module "turndown-plugin-gfm" {
  * relies on the browser's DOM types, which this project doesn't load. This declares only the parts MyPi calls.
  */
 declare module "@mixmark-io/domino" {
+  /** A text node, from `Document.createTextNode`. */
+  export interface Text {
+    readonly nodeName: "#text";
+  }
+
   export interface Element {
     /** The tag name in upper case, such as `MAIN`. */
     readonly nodeName: string;
+    /** The element's child elements, without text nodes. */
+    readonly children: ArrayLike<Element>;
+    /** All the text inside, hidden or not. */
+    readonly textContent: string;
     getAttribute(name: string): string | null;
     /** The element itself or its nearest ancestor that matches `selectors`. */
     closest(selectors: string): Element | null;
+    querySelector(selectors: string): Element | null;
+    querySelectorAll(selectors: string): ArrayLike<Element>;
+    appendChild(node: Element | Text): void;
+    /** Takes the element, and everything inside it, out of the document. */
+    remove(): void;
   }
 
   export interface Document {
@@ -24,6 +38,7 @@ declare module "@mixmark-io/domino" {
     readonly title: string;
     readonly body: Element;
     querySelectorAll(selectors: string): ArrayLike<Element>;
+    createTextNode(text: string): Text;
   }
 
   const domino: { createDocument(html: string): Document };

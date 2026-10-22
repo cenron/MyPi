@@ -360,6 +360,9 @@ type Details = { …slice 1's fields; format: "markdown" | "html"; converted: bo
    `data:` image.
 7. **Return** `{ title, markdown: output.trim() }`.
 
+Two clean-up steps run on the document around step 2; see
+[Slice 2 follow-up](#slice-2-follow-up-hidden-elements-and-per-line-code).
+
 ### Changes to `fetchPage`
 
 1. **`Accept` by format:** `markdown` keeps slice 1's header; `html` sends
@@ -395,12 +398,54 @@ type Details = { …slice 1's fields; format: "markdown" | "html"; converted: bo
 - **Live in pi:** an MDN page, a Wikipedia page, and `format: "html"` on `example.com`. This also checks that pi loads
   a real `node_modules` dependency from a local package, which MyPi hasn't done before.
 
+## Slice 2 follow-up: hidden elements and per-line code
+
+**Status:** done (2026-10-21). Live-tested in pi after a `/reload`: knap.md's samples come back once, with their
+lines intact.
+
+Reading [knap.md](https://knap.md/) through `htmlToMarkdown` showed two bugs. The page renders each code sample several
+times for an animation, hiding all but one copy with `aria-hidden="true"`, and hides line numbers with `hidden`; all of
+it came through. Its code lines are one `<span class="doc-code-line">` each, broken by CSS, so Turndown joined them:
+`1# The Matrix23**Plot:**4> …`. After the fixes the page goes from 3.9k to 2.3k characters, with one copy of each
+sample and the lines intact.
+
+### Hidden elements
+
+- `dropHidden(document)` removes every element matching `[hidden], [aria-hidden="true"]` from the document, right after
+  parsing and before the root is picked. `aria-hidden="false"` is kept.
+- A model reads a page the way a screen reader does, so what's hidden from screen readers is safe to drop.
+- It runs on the document, not as a Turndown `remove` rule, because Turndown's code-block rule reads the block's
+  `textContent` directly: a remove rule never reaches hidden line numbers inside `<pre>`.
+
+### Code blocks split into one element per line
+
+- `breakCodeLines(root, document)` runs after the root is picked. For each `pre` with no newline in its text, it takes
+  the `code` inside (or the `pre` itself) and its child elements that look like lines: a `div`, or a class token that
+  is `line` or ends in `-line` or `_line` (`line`, `code-line`, `doc-code-line`).
+- With two or more lines, it appends a `"\n"` text node to each line but the last.
+- A block that already has newlines is left alone, and so is a one-line block of highlighted tokens
+  (`<span class="kw">const</span> …`), since token classes don't look like lines.
+
+### Tests
+
+In `markdown.test.ts`: the `hidden` attribute; `aria-hidden="true"` dropped and `"false"` kept; animation copies down to
+one; hidden line numbers inside a code block; lines broken for `line`, `code-line`, `doc-code-line`, and `div` children;
+an empty line kept; knap.md's markup (`doc-code-line` with hidden numbers); a one-line token block left alone; a block
+with newlines left alone; lines straight in `<pre>`; and a child without a class not counted as a line.
+
 ## Open questions
 
 - Wikipedia's `<main>` still holds the interlanguage list ("33 languages" and a link per language). Drop it by
   class, or leave it to truncation?
-- Readability for main-content extraction, maybe as a later `format: "article"`? Measured in slice 2: it saves the
-  most context but dropped MDN's opening summary with `linkedom`, and `jsdom`, which keeps it, is too heavy for MyPi.
+- Article extraction as a later, opt-in `format: "article"`? Two candidates were measured:
+  - **Readability** (slice 2): saves the most context, but dropped MDN's opening summary with `linkedom`, and `jsdom`,
+    which keeps it, is too heavy for MyPi.
+  - **Defuddle** (2026-10-21; Obsidian Web Clipper's extractor, MIT): needs `linkedom` (about 8 MB with Defuddle
+    itself), because it crashes on domino and falls back to the raw page; `jsdom` gives the same output 5–10× slower.
+    Compared with our converter: MDN 4.5k vs 5.8k characters (−22%; drops "Help improve MDN" and its long encoded
+    URL), Wikipedia 33k vs 51k (−35%, so the whole article fits under the cap; drops the language list but also the
+    infobox), Node.js about the same. On knap.md's home page it dropped the opening sentence, the heading, and three
+    sections (1.7k vs 3.9k). It's the better candidate, but only as an opt-in, never the default.
 - When a plain GET fails or returns nothing useful (JS-heavy page, PDF), fall back to Parallel's or Exa's fetch tool?
   That would share web_search's `mcpCall` helper.
 - Add Claude Code's `prompt` parameter, so a cheap model answers a question over the page instead of returning all of

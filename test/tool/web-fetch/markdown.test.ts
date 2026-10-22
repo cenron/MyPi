@@ -103,6 +103,79 @@ describe("htmlToMarkdown", () => {
     });
   });
 
+  describe("hidden elements", () => {
+    it("drops elements with the hidden attribute", () => {
+      expect(md("<p>shown<span hidden> secret</span></p>")).toBe("shown");
+    });
+
+    it('drops aria-hidden="true" but keeps aria-hidden="false"', () => {
+      expect(md('<p>a<i aria-hidden="true">icon</i><b aria-hidden="false">b</b></p>')).toBe("a**b**");
+    });
+
+    // Sites that animate a sample render every frame, and hide all but one from screen readers.
+    it("keeps one copy of content repeated for an animation", () => {
+      const frames =
+        '<div aria-hidden="true"><p>frame</p></div><div><p>final</p></div><div aria-hidden="true"><p>frame</p></div>';
+      expect(md(frames)).toBe("final");
+    });
+
+    it("drops hidden line numbers inside a code block", () => {
+      const pre = "<pre><code><span hidden>1</span>a = 1</code></pre>";
+      expect(md(pre)).toBe("```\na = 1\n```");
+    });
+  });
+
+  describe("code blocks split into one element per line", () => {
+    it("puts each line on its own line", () => {
+      const pre =
+        '<pre><code class="language-js"><span class="line">const a = 1;</span><span class="line">const b = 2;</span></code></pre>';
+      expect(md(pre)).toBe("```js\nconst a = 1;\nconst b = 2;\n```");
+    });
+
+    it("keeps an empty line", () => {
+      const pre =
+        '<pre><code><span class="line">a</span><span class="line"></span><span class="line">b</span></code></pre>';
+      expect(md(pre)).toBe("```\na\n\nb\n```");
+    });
+
+    it.each(["code-line", "doc-code-line", "line"])('recognizes class="%s"', (name) => {
+      const pre = `<pre><code><span class="${name}">a</span><span class="${name}">b</span></code></pre>`;
+      expect(md(pre)).toBe("```\na\nb\n```");
+    });
+
+    it("treats div children as lines", () => {
+      expect(md("<pre><code><div>a</div><div>b</div></code></pre>")).toBe("```\na\nb\n```");
+    });
+
+    it("drops hidden line numbers and keeps the breaks", () => {
+      const line = (n: number, text: string) =>
+        `<span class="doc-code-line"><span class="doc-line-number" hidden>${n}</span><span>${text}</span></span>`;
+      expect(md(`<pre><code>${line(1, "# The Matrix")}${line(2, "")}${line(3, "**Plot:**")}</code></pre>`)).toBe(
+        "```\n# The Matrix\n\n**Plot:**\n```",
+      );
+    });
+
+    it("leaves a one-line block of highlighted tokens on one line", () => {
+      const pre =
+        '<pre><code><span class="kw">const</span> <span class="id">a</span> = <span class="num">1</span></code></pre>';
+      expect(md(pre)).toBe("```\nconst a = 1\n```");
+    });
+
+    it("handles lines placed straight in <pre>, with no <code>", () => {
+      expect(md('<pre><span class="line">a</span><span class="line">b</span></pre>')).toContain("a\nb");
+    });
+
+    it("doesn't count a child with no class as a line", () => {
+      const pre = '<pre><code><span class="line">a</span><span>b</span></code></pre>';
+      expect(md(pre)).toBe("```\nab\n```");
+    });
+
+    it("leaves a block that already has newlines alone", () => {
+      const pre = '<pre><code><span class="line">a</span>\n<span class="line">b</span></code></pre>';
+      expect(md(pre)).toBe("```\na\nb\n```");
+    });
+  });
+
   describe("links", () => {
     it("makes a root-relative link absolute", () => {
       expect(md('<p><a href="/other">Other</a></p>')).toBe("[Other](https://example.com/other)");
