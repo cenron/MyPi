@@ -21,9 +21,9 @@ describe("loadModules", () => {
     expect(session.moduleManager.moduleInfos.length).toBeGreaterThan(0);
   });
 
-  it.each(["startup", "reload"] as const)("starts every module that isn't ON_DEMAND on %s", (reason) => {
+  it("starts every module that isn't ON_DEMAND", () => {
     const session = fakeSession();
-    loadModules(session, reason);
+    loadModules(session, "startup");
     for (const info of session.moduleManager.moduleInfos) {
       expect(info.isLoaded).toBe(info.loadType !== ModuleLoadMode.ON_DEMAND);
     }
@@ -33,14 +33,6 @@ describe("loadModules", () => {
     const session = fakeSession(everyModuleSaved());
     loadModules(session, "reload");
     for (const info of session.moduleManager.moduleInfos) expect(info.isLoaded).toBe(true);
-  });
-
-  it("ignores a saved selection on startup", () => {
-    const session = fakeSession(everyModuleSaved());
-    loadModules(session, "startup");
-    for (const info of session.moduleManager.moduleInfos) {
-      expect(info.isLoaded).toBe(info.loadType !== ModuleLoadMode.ON_DEMAND);
-    }
   });
 
   it("gives every command a name and description", () => {

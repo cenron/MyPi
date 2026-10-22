@@ -36,11 +36,8 @@ const ask = (question: string) => rule({ kind: "ask", question });
 const block = (reason: string) => rule({ kind: "block", reason });
 
 describe("ToolGuard", () => {
-  it("lets a call run when no rule is set", async () => {
+  it("lets a call run when no rule is set, or every rule allows it", async () => {
     await expect(newGuard().check(event(), fakeContext().ctx)).resolves.toBeUndefined();
-  });
-
-  it("lets a call run when every rule allows it", async () => {
     const guard = newGuard();
     guard.set("one", allow);
     guard.set("two", allow);
@@ -247,17 +244,13 @@ describe("ToolGuard", () => {
     expect(select).not.toHaveBeenCalled();
   });
 
-  it("replaces a rule set again under the same name", async () => {
+  it("replaces a rule set again under the same name, and clears one set to undefined", async () => {
     const guard = newGuard();
     guard.set("one", block("old"));
     guard.set("one", allow);
     await expect(guard.check(event(), fakeContext().ctx)).resolves.toBeUndefined();
-  });
-
-  it("clears a rule set to undefined", async () => {
-    const guard = newGuard();
-    guard.set("one", block("no"));
-    guard.set("one", undefined);
+    guard.set("two", block("no"));
+    guard.set("two", undefined);
     await expect(guard.check(event(), fakeContext().ctx)).resolves.toBeUndefined();
   });
 
@@ -272,8 +265,10 @@ describe("ToolGuard", () => {
 });
 
 describe("previewAsk", () => {
-  it("leaves a short ask as is", () => {
+  it("leaves an ask of up to 12 lines of up to 160 characters as is", () => {
     expect(previewAsk("one: Run ls?")).toBe("one: Run ls?");
+    const atTheLimit = Array.from({ length: 12 }, () => "z".repeat(160)).join("\n");
+    expect(previewAsk(atTheLimit)).toBe(atTheLimit);
   });
 
   it("keeps the first 12 lines and counts the rest", () => {
@@ -282,19 +277,11 @@ describe("previewAsk", () => {
     expect(lines).toHaveLength(13);
     expect(lines[11]).toBe("line 12");
     expect(lines[12]).toBe("… 3 more lines not shown. Yes allows all of it.");
-  });
-
-  it("says line, not lines, for one hidden line", () => {
-    const ask = Array.from({ length: 13 }, (_, i) => `line ${i + 1}`).join("\n");
-    expect(previewAsk(ask)).toMatch(/… 1 more line not shown\./);
+    const oneOver = Array.from({ length: 13 }, (_, i) => `line ${i + 1}`).join("\n");
+    expect(previewAsk(oneOver)).toMatch(/… 1 more line not shown\./);
   });
 
   it("cuts a long line, counting the characters left out", () => {
     expect(previewAsk(`x${"y".repeat(199)}`)).toBe(`x${"y".repeat(159)}… (40 more characters)`);
-  });
-
-  it("keeps exactly 12 lines of exactly 160 characters whole", () => {
-    const ask = Array.from({ length: 12 }, () => "z".repeat(160)).join("\n");
-    expect(previewAsk(ask)).toBe(ask);
   });
 });

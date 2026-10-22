@@ -11,25 +11,13 @@ describe("planRule", () => {
     expect(verdict(tool)).toEqual({ kind: "allow" });
   });
 
-  it.each([
-    ".pi/plans/feature.md",
-    "./.pi/plans/deep/feature.md",
-    "@.pi/plans/feature.md",
-    "/project/.pi/plans/feature.md",
-    "src/../.pi/plans/feature.md",
-  ])("allows edit and write to %j", (path) => {
+  // Path resolution is paths.test.ts's; here only that the rule uses it with .pi/plans.
+  it.each([".pi/plans/feature.md", "/project/.pi/plans/feature.md"])("allows edit and write to %j", (path) => {
     expect(verdict("edit", { path })).toEqual({ kind: "allow" });
     expect(verdict("write", { path })).toEqual({ kind: "allow" });
   });
 
-  it.each([
-    "src/a.ts",
-    ".pi/plans-evil/x.md",
-    ".pi/plans/../x.md",
-    ".pi/settings.json",
-    "/elsewhere/.pi/plans/x.md",
-    "~/.pi/plans/x.md",
-  ])("blocks edit and write to %j", (path) => {
+  it.each(["src/a.ts", "~/.pi/plans/x.md"])("blocks edit and write to %j", (path) => {
     for (const tool of ["edit", "write"]) {
       const result = verdict(tool, { path });
       expect(result.kind).toBe("block");

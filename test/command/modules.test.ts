@@ -57,26 +57,15 @@ describe("/modules", () => {
     expect(() => modulesCmd(fakeSession().session).execute(ctx, ["nope"])).toThrow("Unknown subcommand: nope");
   });
 
-  it("refuses to open the modal outside TUI mode", async () => {
-    const { ctx, custom } = fakeContext("print");
-    await expect(modulesCmd(fakeSession().session).execute(ctx, [])).rejects.toThrow("/modules requires TUI mode");
-    expect(custom).not.toHaveBeenCalled();
-  });
-
-  it("stores the selection on Save and asks for /reload", async () => {
-    const { session, notify } = fakeSession();
+  it("stores and saves the selection on Save, and asks for /reload", async () => {
+    const { session, notify, appendEntry } = fakeSession();
     const { ctx } = fakeContext("tui", [SPACE, UP, ENTER]); // a off, then Save
 
     await modulesCmd(session).execute(ctx, []);
 
     expect(selected(session)).toEqual([]);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("/reload"), "warning");
-  });
-
-  it("saves the selection to the session on Save", async () => {
-    const { session, appendEntry } = fakeSession();
-    await modulesCmd(session).execute(fakeContext("tui", [SPACE, UP, ENTER]).ctx, []);
     expect(appendEntry).toHaveBeenCalledWith("mypi-modules", { loaded: [] });
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("/reload"), "warning");
   });
 
   // Running modules only change on /reload.

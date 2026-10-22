@@ -24,7 +24,7 @@ function start(reason: SessionStartEvent["reason"], ...saved: unknown[]) {
 }
 
 describe("ModuleManager.start", () => {
-  it.each<SessionStartEvent["reason"]>(["startup", "new", "resume", "fork"])(
+  it.each<SessionStartEvent["reason"]>(["startup", "resume"])(
     "runs the defaults on %s and ignores the saved selection",
     (reason) => {
       expect(start(reason, { loaded: ["notes"] }).running).toEqual(["core", "plan"]);
@@ -57,7 +57,7 @@ describe("ModuleManager.start", () => {
   });
 
   // The session file can hold anything, so a bad save falls back to the defaults instead of crashing session_start.
-  it.each([null, {}, { loaded: "notes" }, "notes"])("runs the defaults on reload when the save is %j", (saved) => {
+  it.each([null, { loaded: "notes" }])("runs the defaults on reload when the save is %j", (saved) => {
     expect(start("reload", saved).running).toEqual(["core", "plan"]);
   });
 

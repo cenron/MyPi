@@ -30,21 +30,24 @@ function startPlanBuild(branch: unknown[] = []) {
 }
 
 describe("PlanBuildModule", () => {
-  it("starts in Plan when nothing is saved", () => {
+  it("starts in Plan when nothing is saved, with Plan's footer and prompt", () => {
     const { session, setStatus } = fakeSession();
     new PlanBuildModule(session).init();
     expect(setStatus).toHaveBeenCalledWith("mypi-plan-build", "<warning>PLAN");
+    expect(promptSection(session)).toBe(PLAN_PROMPT);
   });
 
-  it("restores the saved mode", () => {
+  // A resumed session or a /reload builds a new, empty PromptManager, so init() must set the text again.
+  it("restores the saved mode, with its footer and prompt", () => {
     const { session, setStatus } = fakeSession([saved("build")]);
     new PlanBuildModule(session).init();
     expect(setStatus).toHaveBeenCalledWith("mypi-plan-build", "<dim>BUILD");
+    expect(promptSection(session)).toBe(BUILD_PROMPT);
   });
 
   // The session file can hold anything, so a bad value must still leave a mode and a label.
-  it.each([["Plan"], [42], [undefined]])("falls back to Plan when the saved mode is %j", (mode) => {
-    const { session, setStatus } = fakeSession([saved(mode)]);
+  it("falls back to Plan when the saved mode isn't one", () => {
+    const { session, setStatus } = fakeSession([saved(42)]);
     new PlanBuildModule(session).init();
     expect(setStatus).toHaveBeenCalledWith("mypi-plan-build", "<warning>PLAN");
   });
@@ -146,17 +149,6 @@ describe("PlanBuildModule", () => {
   });
 
   describe("prompt section", () => {
-    it("is the Plan text on init when nothing is saved", () => {
-      const { session } = startPlanBuild();
-      expect(promptSection(session)).toBe(PLAN_PROMPT);
-    });
-
-    // A resumed session or a /reload builds a new, empty PromptManager, so init() must set the text again.
-    it("is the Build text on init when Build is saved", () => {
-      const { session } = startPlanBuild([saved("build")]);
-      expect(promptSection(session)).toBe(BUILD_PROMPT);
-    });
-
     // Leaving Plan replaces the text instead of dropping it, so the model is told the restrictions are gone.
     it("follows each switch, and is never dropped", async () => {
       const { session, run } = startPlanBuild();

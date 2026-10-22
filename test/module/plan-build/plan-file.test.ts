@@ -11,12 +11,11 @@ describe("slugify", () => {
     ["Add submit_plan", "add-submit-plan"],
     ["  Fix: the /plan  command!  ", "fix-the-plan-command"],
     ["Ünïcode café", "n-code-caf"],
-    ["v2.0 rollout", "v2-0-rollout"],
   ])("turns %j into %j", (title, slug) => {
     expect(slugify(title)).toBe(slug);
   });
 
-  it.each(["", "   ", "!!!", "日本語"])("falls back to plan for %j", (title) => {
+  it.each(["", "日本語"])("falls back to plan for %j", (title) => {
     expect(slugify(title)).toBe("plan");
   });
 

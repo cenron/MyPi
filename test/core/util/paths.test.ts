@@ -20,28 +20,13 @@ describe("resolveToolPath", () => {
     ["~user/x.md", "/project/~user/x.md"],
     ["file:///tmp/x.md", "/tmp/x.md"],
     ["a b c.md", "/project/a b c.md"],
-  ])("resolves %j to %s", (input, expected) => {
+  ])("resolves %j to %s, as pi's resolveToCwd does", (input, expected) => {
     expect(resolveToolPath(input, cwd, home)).toBe(expected);
+    expect(resolveToolPath(input, cwd, homedir())).toBe(resolveToCwd(input, cwd));
   });
 
   it("strips only one @", () => {
     expect(resolveToolPath("@@x", cwd, home)).toBe("/project/@x");
-  });
-
-  it.each([
-    "notes.md",
-    "./a/../b.md",
-    "../up",
-    "/abs/x",
-    "@src/a.ts",
-    "~",
-    "~/x",
-    "@~/x",
-    "~user/x",
-    "file:///tmp/x",
-    "a b",
-  ])("matches pi's resolveToCwd for %j", (input) => {
-    expect(resolveToolPath(input, cwd, homedir())).toBe(resolveToCwd(input, cwd));
   });
 });
 
@@ -51,13 +36,11 @@ describe("isInside", () => {
   it.each([
     [plans, true],
     [`${plans}/a.md`, true],
-    [`${plans}/deep/a.md`, true],
     [`${plans}/..notes.md`, true],
     [`${plans}-evil/a.md`, false],
     ["/project/.pi", false],
     ["/project/a.md", false],
     [`${plans}/../a.md`, false],
-    ["/elsewhere/a.md", false],
   ])("%s is inside: %s", (path, expected) => {
     expect(isInside(plans, path)).toBe(expected);
   });

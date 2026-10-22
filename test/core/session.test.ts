@@ -71,12 +71,9 @@ describe("Session", () => {
     expect(session.load("modules")).toEqual({ loaded: ["a"] });
   });
 
-  it("loads undefined when nothing was saved", () => {
-    expect(fakeSession().session.load("modules")).toBeUndefined();
-  });
-
-  it("loads back what it saved", () => {
+  it("loads back what it saved, and undefined before that", () => {
     const { session } = fakeSession();
+    expect(session.load("modules")).toBeUndefined();
     session.save("modules", { loaded: ["a"] });
     expect(session.load("modules")).toEqual({ loaded: ["a"] });
   });

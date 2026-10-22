@@ -15,12 +15,13 @@ function fakeChild(lines: string[] = []) {
 }
 
 describe("Dialog", () => {
-  it("draws the top and bottom borders at exactly the given width", () => {
+  it("draws the borders at exactly the given width, with the title in the top one", () => {
     for (const width of [20, 40, 100]) {
       const lines = new Dialog(theme, { title: "Modules" }).render(width);
       expect(visibleWidth(lines[0] ?? "")).toBe(width);
       expect(visibleWidth(lines.at(-1) ?? "")).toBe(width);
     }
+    expect(new Dialog(theme, { title: "Modules" }).render(40)[0]).toMatch(/^╭─ Modules ─+╮$/);
   });
 
   it("truncates a title that doesn't fit, so the top border keeps its width", () => {
@@ -41,11 +42,6 @@ describe("Dialog", () => {
     const afterReset = top.slice(top.lastIndexOf("\x1b[0m"));
     expect(afterReset).toContain("\x1b[36m╮");
     expect(top).toContain("\x1b[36m…");
-  });
-
-  it("puts the title in the top border", () => {
-    const [top] = new Dialog(theme, { title: "Modules" }).render(40);
-    expect(top).toMatch(/^╭─ Modules ─+╮$/);
   });
 
   it("renders its children between the borders", () => {

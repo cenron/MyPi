@@ -27,16 +27,11 @@ describe("PromptManager", () => {
   });
 
   // Leaving Plan replaces the text under the same name, so pi sends an update rather than a removal.
-  it("replaces a prompt set again under the same name", () => {
+  it("replaces a prompt set again under the same name, and clears one set to undefined", () => {
     const prompts = newPromptManager();
     prompts.set("plan-build", "plan text");
     prompts.set("plan-build", "build text");
     expect(applied(prompts)).toEqual({ "mypi-plan-build": "build text" });
-  });
-
-  it("clears a prompt set to undefined", () => {
-    const prompts = newPromptManager();
-    prompts.set("plan-build", "plan text");
     prompts.set("plan-build", undefined);
     expect(applied(prompts)).toEqual({});
   });

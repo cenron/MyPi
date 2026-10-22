@@ -84,23 +84,14 @@ describe("BaseModule", () => {
     expect(module.load()).toEqual({ count: 2 });
   });
 
-  it("loads undefined when the module saved nothing", () => {
-    expect(new Counter(fakeSession().session).load()).toBeUndefined();
-  });
-
-  // The prefix keeps a module's state apart from other modules' and from core's own entries.
-  it("doesn't see another module's state, or core's mypi-modules", () => {
+  // The prefix keeps a module's state apart from other modules' and from core's own entries: a module named
+  // "modules" saves as mypi-module-modules, so it can't overwrite the module selection.
+  it("doesn't see another module's state, or core's mypi-modules, even when named modules", () => {
     const { session } = fakeSession([customEntry("mypi-modules", { count: 9 })]);
     new Counter(session, "other").save(5);
     expect(new Counter(session).load()).toBeUndefined();
-  });
-
-  // A module named "modules" saves as mypi-module-modules, so it can't overwrite the module selection.
-  it("can't collide with core even when a module is named modules", () => {
-    const { session, appendEntry } = fakeSession();
     new Counter(session, "modules").save(1);
-    expect(appendEntry).toHaveBeenCalledWith("mypi-module-modules", { count: 1 });
-    expect(session.load("modules")).toBeUndefined();
+    expect(session.load("modules")).toEqual({ count: 9 });
   });
 
   it("gives each module one footer slot, keyed by its name", () => {
