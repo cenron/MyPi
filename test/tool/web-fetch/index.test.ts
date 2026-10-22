@@ -1,8 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import { webFetchTool } from "#tool/web-fetch";
-import { fakeSession } from "../fakes";
+import { webFetchTool } from "#tool/web-fetch/index";
+import { fakeSession } from "../../fakes";
 
 const PAGE = "https://example.com/page";
+
+/** `htmlToMarkdown` throws this once when set, to test the fallback to raw HTML. */
+const convertFailure = vi.hoisted(() => ({ next: undefined as Error | undefined }));
+
+vi.mock("#tool/web-fetch/markdown", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#tool/web-fetch/markdown")>();
+  return {
+    ...actual,
+    htmlToMarkdown: (html: string, baseUrl: string) => {
+      const error = convertFailure.next;
+      convertFailure.next = undefined;
+      if (error) throw error;
+      return actual.htmlToMarkdown(html, baseUrl);
+    },
+  };
+});
 
 type Reply = {
   body?: ConstructorParameters<typeof Response>[0];
@@ -55,10 +71,12 @@ const replyWith = (...replies: Reply[]) => {
   for (const reply of replies) fetchMock.mockResolvedValueOnce(response(reply));
 };
 
-const run = (params: { url: string; timeout?: number }, signal?: AbortSignal) =>
+type Params = { url: string; format?: "markdown" | "html"; timeout?: number };
+
+const run = (params: Params, signal?: AbortSignal) =>
   webFetchTool(fakeSession().session).definition.execute("call-1", params, signal, undefined, {} as never);
 
-const textOf = async (params: { url: string; timeout?: number }) => {
+const textOf = async (params: Params) => {
   const result = await run(params);
   const [first] = result.content;
   return first?.type === "text" ? first.text : "";
@@ -222,6 +240,8 @@ describe("web_fetch", () => {
         contentType: "text/plain",
         bytes: 5,
         truncated: false,
+        format: "markdown",
+        converted: false,
       });
     });
 
@@ -241,13 +261,118 @@ describe("web_fetch", () => {
       expect(await textOf({ url: PAGE })).not.toMatch(/\[Truncated/);
     });
 
-    // Minified HTML is often one line; cutting only at line ends would leave nothing.
+    // Minified JSON or JavaScript is often one line; cutting only at line ends would leave nothing.
     it("keeps the first 50KB of a page that is one long line", async () => {
-      replyWith({ body: "x".repeat(200 * 1024), headers: { "content-type": "text/html" } });
+      replyWith({ body: "x".repeat(200 * 1024), headers: { "content-type": "application/json" } });
       const text = await textOf({ url: PAGE });
       expect(text).toContain("x".repeat(50 * 1024));
       expect(text).not.toContain("x".repeat(50 * 1024 + 1));
       expect(text).toMatch(/\[Truncated: showed the first 50\.0KB of 200\.0KB\]/);
+    });
+  });
+
+  describe("HTML", () => {
+    const HTML = "text/html; charset=utf-8";
+    const DOC =
+      "<html><head><title>Docs</title></head><body><nav>menu</nav>" +
+      '<main><h1>Hello</h1><p>A <a href="/next">link</a>.</p></main></body></html>';
+
+    it("converts an HTML page to markdown, with a Title line", async () => {
+      replyWith({ body: DOC, headers: { "content-type": HTML } });
+      expect(await textOf({ url: PAGE })).toBe(
+        `URL: ${PAGE}\nTitle: Docs\nContent-Type: ${HTML}\n\n# Hello\n\nA [link](https://example.com/next).`,
+      );
+    });
+
+    it("resolves links against the final URL after a redirect", async () => {
+      replyWith({ body: DOC, headers: { "content-type": HTML }, url: "https://other.example.org/a/page" });
+      expect(await textOf({ url: PAGE })).toContain("[link](https://other.example.org/next)");
+    });
+
+    it("converts XHTML too", async () => {
+      replyWith({ body: DOC, headers: { "content-type": "application/xhtml+xml" } });
+      expect(await textOf({ url: PAGE })).toContain("# Hello");
+    });
+
+    it("leaves out the Title line when the page has no title", async () => {
+      replyWith({ body: "<html><body><p>untitled</p></body></html>", headers: { "content-type": HTML } });
+      const text = await textOf({ url: PAGE });
+      expect(text).not.toContain("Title:");
+      expect(text).toBe(`URL: ${PAGE}\nContent-Type: ${HTML}\n\nuntitled`);
+    });
+
+    it("passes markdown from the server through unchanged", async () => {
+      replyWith({ body: "# Already markdown\n\n<b>kept</b>", headers: { "content-type": "text/markdown" } });
+      const result = await run({ url: PAGE });
+      const [first] = result.content;
+      expect(first?.type === "text" && first.text).toContain("# Already markdown\n\n<b>kept</b>");
+      expect(result.details).toMatchObject({ converted: false });
+    });
+
+    it("doesn't convert plain text that looks like HTML", async () => {
+      replyWith({ body: "<p>not html</p>", headers: { "content-type": "text/plain" } });
+      expect(await textOf({ url: PAGE })).toContain("<p>not html</p>");
+    });
+
+    it("converts before truncating, so a big page with little text isn't cut", async () => {
+      const chrome = '<a href="/x">menu item</a>'.repeat(15_000); // about 400 KB of navigation
+      replyWith({
+        body: `<html><body><nav>${chrome}</nav><main><p>short</p></main></body></html>`,
+        headers: { "content-type": HTML },
+      });
+      const result = await run({ url: PAGE });
+      const [first] = result.content;
+      const text = first?.type === "text" ? first.text : "";
+      expect(text).toContain("short");
+      expect(text).not.toMatch(/\[Truncated/);
+      expect(result.details).toMatchObject({ truncated: false, converted: true });
+      // `bytes` is what was downloaded, before conversion.
+      expect((result.details as { bytes: number }).bytes).toBeGreaterThan(50 * 1024);
+    });
+
+    it("says when a page has no text without JavaScript", async () => {
+      const app =
+        '<html><head><title>App</title></head><body><div id="root"></div><script src="/app.js"></script></body></html>';
+      replyWith({ body: app, headers: { "content-type": HTML } });
+      const text = await textOf({ url: PAGE });
+      expect(text).toContain("Title: App");
+      expect(text).toMatch(/needs JavaScript/);
+      expect(text).toContain('format: "html"');
+    });
+
+    it("falls back to the raw HTML when conversion fails", async () => {
+      convertFailure.next = new Error("parser blew up");
+      replyWith({ body: DOC, headers: { "content-type": HTML } });
+      const result = await run({ url: PAGE });
+      const [first] = result.content;
+      const text = first?.type === "text" ? first.text : "";
+      expect(text).toContain("<main><h1>Hello</h1>");
+      expect(text).toContain("[Couldn't convert the HTML (parser blew up); showing it raw]");
+      expect(result.details).toMatchObject({ converted: false });
+    });
+
+    it("returns details with the format, whether it converted, and the title", async () => {
+      replyWith({ body: DOC, headers: { "content-type": HTML } });
+      const { details } = await run({ url: PAGE });
+      expect(details).toMatchObject({ format: "markdown", converted: true, title: "Docs" });
+    });
+  });
+
+  describe('format: "html"', () => {
+    const DOC = "<html><head><title>Docs</title></head><body><main><h1>Hello</h1></main></body></html>";
+
+    it("returns the page source as is", async () => {
+      replyWith({ body: DOC, headers: { "content-type": "text/html" } });
+      const result = await run({ url: PAGE, format: "html" });
+      const [first] = result.content;
+      expect(first?.type === "text" && first.text).toContain(DOC);
+      expect(result.details).toMatchObject({ format: "html", converted: false });
+    });
+
+    it("asks the server for HTML first", async () => {
+      replyWith({ body: DOC, headers: { "content-type": "text/html" } });
+      await run({ url: PAGE, format: "html" });
+      expect(sentHeaders().get("accept")).toMatch(/^text\/html/);
     });
   });
 
@@ -256,6 +381,19 @@ describe("web_fetch", () => {
 
     it("is read-only and open-world, so plan-build allows it without asking", () => {
       expect(definition.annotations).toEqual({ readOnlyHint: true, openWorldHint: true });
+    });
+
+    it("offers markdown and html formats", () => {
+      // `parameters` is typed as a bare TSchema here, so reach into the TypeBox object by hand.
+      const { properties } = definition.parameters as { properties: Record<string, unknown> };
+      const format = JSON.stringify(properties.format);
+      expect(format).toContain('"markdown"');
+      expect(format).toContain('"html"');
+    });
+
+    it("says HTML comes back as markdown", () => {
+      expect(definition.description).toMatch(/markdown/);
+      expect(definition.description).not.toMatch(/HTML is returned as is/);
     });
 
     it("tells the model page text is data, and shows up in Available tools", () => {

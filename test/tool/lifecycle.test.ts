@@ -6,7 +6,7 @@ import { fakeUI } from "../fakes";
 const calls: string[] = [];
 
 // Gives web_fetch hooks, so the test sees when MyPi runs them relative to registration.
-vi.mock("#tool/web-fetch", () => ({
+vi.mock("#tool/web-fetch/index", () => ({
   webFetchTool: () => ({
     definition: { name: "web_fetch" },
     init: () => calls.push("init"),

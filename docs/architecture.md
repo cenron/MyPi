@@ -175,8 +175,8 @@ the module modal and `/modules list` prints each module as `loaded: <name>` or `
 
 - A built-in tool is a `Tool` (`src/tool/types.ts`): `{ definition, init?, shutdown? }`. A tool file exports a function
   that takes the `Session` and returns one, with `definition` built by `defineTool({ name, label, description,
-  parameters, execute, … })` (`src/tool/web-fetch.ts`). A module's tools are bare `ToolDefinition`s; the module's own
-  `init()` covers their setup.
+  parameters, execute, … })` (`src/tool/web-fetch/index.ts`). A module's tools are bare `ToolDefinition`s; the
+  module's own `init()` covers their setup.
 - **Hooks**, for tools that keep state or resources across calls:
   - `init()` runs on `session_start`, after every tool is registered and before the modules' `init()`. Rebuild state
     from the branch here (todo). A `session_start` handler added now would miss this session: pi copies the handler
