@@ -56,7 +56,8 @@ Built (2026-10-21), the same way as `src/command/`:
   It exports a function that takes the `Session` and returns a `Tool` (`src/tool/types.ts`): `{ definition, init?,
   shutdown? }`, with `definition` built by `defineTool({ … })`.
 - `init()` runs on `session_start` once every tool is registered; `shutdown()` runs on `session_shutdown` and must be
-  idempotent. Only tools that keep state or resources need them (todo, background process).
+  idempotent. Only tools that keep state or resources need them: web_fetch closes its connection pool in
+  `shutdown()`, and todo and background process will use both.
 - `createTools(session)` in `src/tool/index.ts` lists them. `registerTools(pi, session)` registers that list, then the
   running modules' `tools()`.
 - `MyPi.onSessionStart` calls `registerTools` on every `session_start`, after the modules are picked and before their

@@ -1,6 +1,6 @@
 # web_fetch
 
-**Status:** building ([slice 1](#slice-1-get-with-checks-a-size-cap-and-a-timeout-text-out) done; [slice 2](#slice-2-html-to-markdown) done)
+**Status:** building ([slice 1](#slice-1-get-with-checks-a-size-cap-and-a-timeout-text-out) done; [slice 2](#slice-2-html-to-markdown) done; [slice 3](#slice-3-public-addresses-only) done)
 
 ## Goal
 
@@ -60,14 +60,14 @@ There's no backend; it's a direct GET (`packages/core/src/tool/plugin/webfetch.t
 - Fetched pages are untrusted input. A page can contain instructions aimed at the model. Wrap the body in clear
   delimiters, and say in the tool description that page text is data, not instructions.
 - Only `http` and `https` URLs.
-- Block private and loopback addresses, so a page can't point the agent at a local service. OpenCode doesn't. Check
-  the resolved IP, not just the hostname, and recheck after redirects.
+- Only public addresses (slice 3), so a page can't point the agent at a local service. OpenCode doesn't. The resolved
+  IP is checked, not just the hostname, on every redirect hop and again when each connection opens.
 
 ## Slices
 
 1. GET with content-type checks, the size cap, and the timeout; plain text out, truncated. `done`
 2. HTML to markdown, and the `format` parameter. `done`
-3. The private-address block, including redirects.
+3. The private-address block, including redirects. `done`
 4. The full text in a temp file when truncated, and rendering.
 
 ## Slice 1: GET with checks, a size cap, and a timeout; text out
@@ -433,6 +433,80 @@ one; hidden line numbers inside a code block; lines broken for `line`, `code-lin
 an empty line kept; knap.md's markup (`doc-code-line` with hidden numbers); a one-line token block left alone; a block
 with newlines left alone; lines straight in `<pre>`; and a child without a class not counted as a line.
 
+## Slice 3: public addresses only
+
+**Status:** done (2026-10-21).
+
+`web_fetch` is marked read-only, so plan-build runs it without asking. Without a block, a page with a prompt
+injection could have the agent read `http://localhost:…`, a router at `192.168.1.1`, or a cloud metadata service at
+`169.254.169.254`, and leak the answer with a second fetch.
+
+### Decisions (2026-10-21)
+
+1. **Block every address that isn't public, with no exception.** Asking per local origin, and an allowlist, were
+   considered. A local dev server goes through `curl` in `bash` instead, which asks in Plan; the error tells the model
+   so.
+2. **Check at connect time too.** Checking the DNS answer before fetching leaves a gap: the name can resolve again,
+   to a local address, when the connection opens (DNS rebinding). undici's `Agent` takes a `connect.lookup`, and
+   `publicLookup` refuses there. This adds `undici` (MIT, about 2 MB, no dependencies). Its own `fetch` is used with
+   its `Agent`, because Node's built-in `fetch` bundles a different undici major on some Node versions.
+3. **Follow redirects by hand**, `redirect: "manual"`, checking each hop's scheme and host before fetching it, up to
+   10 hops. An address written as an IP in the URL never reaches a DNS lookup, so the connect-time check alone would
+   miss `Location: http://127.0.0.1/`.
+4. **Code in the tool's folder**, `src/tool/web-fetch/address.ts`: only `web_fetch` needs it.
+
+### What's refused
+
+| IPv4 | IPv6 |
+|---|---|
+| `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.168.0.0/16`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24`, `224.0.0.0/4`, `240.0.0.0/4` | `::`, `::1`, `100::/64`, `2001:db8::/32`, `fc00::/7`, `fe80::/10`, `fec0::/10`, `ff00::/8` |
+
+- IPv4-mapped IPv6 (`::ffff:127.0.0.1`) is checked against the IPv4 ranges by Node's `BlockList` itself. Adding
+  `::ffff:0:0/96` as a range would block every IPv4 address, since `BlockList` maps IPv4 checks into that range.
+- NAT64 (`64:ff9b::/96`) is checked by the IPv4 address it carries, so it still works on IPv6-only networks.
+- The URL parser writes `2130706433`, `0x7f.1`, and `127.1` as `127.0.0.1`, so odd IPv4 spellings are covered.
+- A name is refused if any of its addresses is local, since an attacker's DNS can mix them.
+
+### Code
+
+- `address.ts`: `isPublicAddress(address)`; `assertPublicHost(hostname)`, which takes `URL.hostname` with IPv6 in
+  brackets and checks the literal or every DNS answer; and `publicLookup`, the connector's lookup, which fails with
+  code `EBLOCKED`.
+- `index.ts`:
+  - `webFetchTool` builds one `Agent({ connect: { lookup: publicLookup } })` per tool, and closes it in the tool's
+    `shutdown()` hook. A second close only rejects, and that's ignored.
+  - `follow(url, options)` runs the hops: abort check, `assertPublicHost`, request (with the Cloudflare retry), and
+    on a 301, 302, 303, 307, or 308 with a `Location`, cancel the body, resolve the next URL against the current one,
+    and check its scheme. It returns the first response that isn't a redirect, with its URL, which becomes
+    `finalUrl` and the base for the markdown's links.
+  - `request` passes `dispatcher` and `redirect: "manual"`, and turns a connect-time refusal (`fetch failed` with an
+    `EBLOCKED` cause) back into its own message.
+  - The description says localhost and private addresses are refused.
+
+The refusal reads: `Unable to fetch <url>: 127.0.0.1 is not a public address. web_fetch only reads public sites; for a
+local server, use curl in bash.`, or `localhost resolves to ::1, which is not a public address. …` for a name.
+
+### Tests
+
+- `address.test.ts`, with `node:dns` and `node:dns/promises` faked: public addresses (including `::ffff:8.8.8.8` and
+  NAT64 for 8.8.8.8) pass; every range above, mapped loopback, and NAT64 for loopback and metadata fail; a
+  non-address fails; `assertPublicHost` for literals, bracketed IPv6, mixed answers, and DNS failures; `publicLookup`
+  in both callback forms, a rebinding answer, mixed answers, and a DNS error.
+- `index.test.ts`, with `undici` and `node:dns/promises` faked: eleven literal local URLs refused without a fetch; the
+  curl hint; a name resolving locally; mixed answers; an unresolvable name; a connect-time refusal reported with its
+  reason; relative redirects; each redirect status; a redirect's body cancelled; redirects into a local address, a
+  local name, or `file:` refused before the next fetch; the 10-hop limit; a 3xx without `Location`; the connector's
+  options; and shutdown closing it twice safely. The redirect tests from slices 1 and 2 now use real 3xx replies.
+- Mutation checks: checking only the first hop, ignoring NAT64, a lookup that passes everything, reporting the
+  refusal as `fetch failed`, and dropping `169.254.0.0/16` each fail tests.
+
+### Live test (2026-10-21)
+
+In pi, in Plan mode: `https://example.com` was read; `http://localhost:3000/` ("localhost resolves to ::1"),
+`http://127.0.0.1:8080/`, `http://169.254.169.254/latest/meta-data/`, and an httpbin redirect to
+`http://127.0.0.1:8080/admin` were all refused with the curl hint. pi loaded `undici` from the package's
+`node_modules`.
+
 ## Open questions
 
 - Wikipedia's `<main>` still holds the interlanguage list ("33 languages" and a link per language). Drop it by
@@ -446,6 +520,8 @@ with newlines left alone; lines straight in `<pre>`; and a child without a class
     URL), Wikipedia 33k vs 51k (−35%, so the whole article fits under the cap; drops the language list but also the
     infobox), Node.js about the same. On knap.md's home page it dropped the opening sentence, the heading, and three
     sections (1.7k vs 3.9k). It's the better candidate, but only as an opt-in, never the default.
+- Company intranet names that resolve to private addresses (`wiki.corp` → `10.x`) are refused like any local
+  address. An allowlist in settings could cover them if that comes up.
 - When a plain GET fails or returns nothing useful (JS-heavy page, PDF), fall back to Parallel's or Exa's fetch tool?
   That would share web_search's `mcpCall` helper.
 - Add Claude Code's `prompt` parameter, so a cheap model answers a question over the page instead of returning all of

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { publicLookup } from "#tool/web-fetch/address";
 import { webFetchTool } from "#tool/web-fetch/index";
 import { fakeSession } from "../../fakes";
 
@@ -19,6 +20,40 @@ vi.mock("#tool/web-fetch/markdown", async (importOriginal) => {
     },
   };
 });
+
+/**
+ * The network, faked: undici's `fetch` calls `net.fetch`, each `Agent` built is recorded, and DNS answers come from
+ * `net.dns` (any name not listed resolves to a public address; an Error there is thrown).
+ */
+const net = vi.hoisted(() => ({
+  fetch: vi.fn<typeof fetch>(),
+  agents: [] as { options: unknown; closed: number }[],
+  dns: new Map<string, string[] | Error>(),
+}));
+
+vi.mock("undici", () => ({
+  Agent: class {
+    record: { options: unknown; closed: number };
+    constructor(options: unknown) {
+      this.record = { options, closed: 0 };
+      net.agents.push(this.record);
+    }
+    // Like undici, closing a second time rejects.
+    async close() {
+      this.record.closed++;
+      if (this.record.closed > 1) throw new Error("The client is destroyed");
+    }
+  },
+  fetch: (...args: Parameters<typeof fetch>) => net.fetch(...args),
+}));
+
+vi.mock("node:dns/promises", () => ({
+  lookup: async (host: string) => {
+    const answer = net.dns.get(host) ?? ["93.184.215.14"];
+    if (answer instanceof Error) throw answer;
+    return answer.map((address) => ({ address, family: address.includes(":") ? 6 : 4 }));
+  },
+}));
 
 type Reply = {
   body?: ConstructorParameters<typeof Response>[0];
@@ -49,21 +84,22 @@ function trackedBody(text = "body") {
   return { stream, state };
 }
 
-/** A `fetch` that never answers and rejects with the signal's reason once aborted, like the real one. */
+/** A `fetch` that never answers and rejects with the signal's reason once aborted, or at once if it already is, like
+ * the real one. */
 const hangingFetch = (_input: unknown, init?: RequestInit) =>
   new Promise<Response>((_resolve, reject) => {
+    if (init?.signal?.aborted) return reject(init.signal.reason);
     init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
   });
 
 let fetchMock: Mock<typeof fetch>;
 
 beforeEach(() => {
-  fetchMock = vi.fn<typeof fetch>(async () => response({}));
-  vi.stubGlobal("fetch", fetchMock);
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
+  fetchMock = net.fetch;
+  fetchMock.mockReset();
+  fetchMock.mockImplementation(async () => response({}));
+  net.agents.length = 0;
+  net.dns.clear();
 });
 
 /** Answers each fetch call with the next reply in order. */
@@ -226,12 +262,12 @@ describe("web_fetch", () => {
     });
 
     it("shows the final URL after a redirect", async () => {
-      replyWith({ url: "https://example.com/moved" });
+      replyWith({ status: 302, headers: { location: "/moved" } }, {});
       expect(await textOf({ url: PAGE })).toMatch(/^URL: https:\/\/example\.com\/moved\n/);
     });
 
     it("returns details about the fetch", async () => {
-      replyWith({ body: "hello", url: "https://example.com/moved" });
+      replyWith({ status: 301, headers: { location: "https://example.com/moved" } }, { body: "hello" });
       const { details } = await run({ url: PAGE });
       expect(details).toEqual({
         url: PAGE,
@@ -285,7 +321,10 @@ describe("web_fetch", () => {
     });
 
     it("resolves links against the final URL after a redirect", async () => {
-      replyWith({ body: DOC, headers: { "content-type": HTML }, url: "https://other.example.org/a/page" });
+      replyWith(
+        { status: 302, headers: { location: "https://other.example.org/a/page" } },
+        { body: DOC, headers: { "content-type": HTML } },
+      );
       expect(await textOf({ url: PAGE })).toContain("[link](https://other.example.org/next)");
     });
 
@@ -376,6 +415,127 @@ describe("web_fetch", () => {
     });
   });
 
+  describe("local addresses", () => {
+    it.each([
+      "http://127.0.0.1/",
+      "http://127.0.0.1:8080/admin",
+      "http://[::1]:3000/",
+      "http://10.0.0.5/",
+      "http://172.20.1.1/",
+      "http://192.168.1.1/",
+      "http://169.254.169.254/latest/meta-data/",
+      "http://0.0.0.0/",
+      "http://2130706433/", // 127.0.0.1 written as one number
+      "http://[::ffff:127.0.0.1]/",
+      "http://[fd00::1]/",
+    ])("refuses %s without fetching", async (url) => {
+      await expect(run({ url })).rejects.toThrow(/is not a public address/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("tells the model to use curl for a local server", async () => {
+      await expect(run({ url: "http://127.0.0.1:5173/" })).rejects.toThrow(/use curl in bash/);
+    });
+
+    it("refuses a name that resolves to a local address", async () => {
+      net.dns.set("localhost", ["::1", "127.0.0.1"]);
+      await expect(run({ url: "http://localhost:3000/" })).rejects.toThrow(
+        /localhost resolves to ::1, which is not a public address/,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // An attacker's DNS can mix a local answer in with public ones.
+    it("refuses a name when any of its addresses is local", async () => {
+      net.dns.set("mixed.example", ["93.184.215.14", "10.0.0.1"]);
+      await expect(run({ url: "https://mixed.example/" })).rejects.toThrow(/resolves to 10\.0\.0\.1/);
+    });
+
+    it("reports a name that doesn't resolve", async () => {
+      net.dns.set(
+        "nope.example",
+        Object.assign(new Error("getaddrinfo ENOTFOUND nope.example"), { code: "ENOTFOUND" }),
+      );
+      await expect(run({ url: "https://nope.example/" })).rejects.toThrow(/ENOTFOUND nope\.example/);
+    });
+
+    it("reports a refusal at connect time with its reason, not as a failed fetch", async () => {
+      const reason = "rebind.example resolves to 127.0.0.1, which is not a public address.";
+      const cause = Object.assign(new Error(reason), { code: "EBLOCKED" });
+      fetchMock.mockRejectedValueOnce(new TypeError("fetch failed", { cause }));
+      const pending = run({ url: "https://rebind.example/" });
+      await expect(pending).rejects.toThrow(reason);
+      await expect(pending).rejects.not.toThrow(/fetch failed/);
+    });
+  });
+
+  describe("redirects", () => {
+    it("follows a relative Location from the current URL", async () => {
+      replyWith({ status: 302, headers: { location: "moved?x=1" } }, { body: "landed" });
+      expect(await textOf({ url: PAGE })).toContain("landed");
+      expect(String(fetchMock.mock.calls[1]?.[0])).toBe("https://example.com/moved?x=1");
+    });
+
+    it.each([301, 302, 303, 307, 308])("follows a %i", async (status) => {
+      replyWith({ status, headers: { location: "/next" } }, { body: "landed" });
+      expect(await textOf({ url: PAGE })).toContain("landed");
+    });
+
+    it("cancels each redirect's body", async () => {
+      const { stream, state } = trackedBody("Moved");
+      fetchMock.mockResolvedValueOnce(response({ body: stream, status: 302, headers: { location: "/next" } }));
+      await run({ url: PAGE });
+      expect(state.cancelled).toBe(true);
+    });
+
+    it("refuses a redirect to a local address before fetching it", async () => {
+      replyWith({ status: 302, headers: { location: "http://127.0.0.1:8080/admin" } });
+      await expect(run({ url: PAGE })).rejects.toThrow(/127\.0\.0\.1 is not a public address/);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    it("refuses a redirect to a name that resolves to a local address", async () => {
+      net.dns.set("sneaky.example", ["192.168.0.10"]);
+      replyWith({ status: 307, headers: { location: "https://sneaky.example/" } });
+      await expect(run({ url: PAGE })).rejects.toThrow(/sneaky\.example resolves to 192\.168\.0\.10/);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    it("refuses a redirect to a scheme other than http(s)", async () => {
+      replyWith({ status: 302, headers: { location: "file:///etc/passwd" } });
+      await expect(run({ url: PAGE })).rejects.toThrow(/Only http: and https:/);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    it("gives up after 10 redirects", async () => {
+      fetchMock.mockImplementation(async () => response({ status: 302, headers: { location: "/loop" } }));
+      await expect(run({ url: PAGE })).rejects.toThrow(/more than 10 redirects/);
+      expect(fetchMock).toHaveBeenCalledTimes(11);
+    });
+
+    it("treats a 3xx without a Location as an error", async () => {
+      replyWith({ status: 300 });
+      await expect(run({ url: PAGE })).rejects.toThrow(/HTTP 300/);
+    });
+  });
+
+  describe("the connector", () => {
+    it("checks addresses when connections open, and redirects by hand", async () => {
+      await run({ url: PAGE });
+      expect(net.agents[0]?.options).toEqual({ connect: { lookup: publicLookup } });
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit & { dispatcher?: unknown };
+      expect(init.redirect).toBe("manual");
+      expect(init.dispatcher).toBeDefined();
+    });
+
+    it("closes its connections on shutdown, and a second shutdown is harmless", () => {
+      const tool = webFetchTool(fakeSession().session);
+      tool.shutdown?.();
+      tool.shutdown?.();
+      expect(net.agents.at(-1)?.closed).toBe(2);
+    });
+  });
+
   describe("the definition", () => {
     const { definition } = webFetchTool(fakeSession().session);
 
@@ -389,6 +549,10 @@ describe("web_fetch", () => {
       const format = JSON.stringify(properties.format);
       expect(format).toContain('"markdown"');
       expect(format).toContain('"html"');
+    });
+
+    it("says local addresses are refused", () => {
+      expect(definition.description).toMatch(/localhost and private network addresses are refused/);
     });
 
     it("says HTML comes back as markdown", () => {
