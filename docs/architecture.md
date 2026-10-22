@@ -28,7 +28,8 @@ index.ts               default factory: new MyPi(pi), then pi.on("session_start"
    ├─ registerTools(pi, session)                 src/tool/index.ts: the built-in tools + the running modules'
    ├─ initTools(tools)                           init() on the built-in tools that have one
    ├─ moduleManager.init()                       init() on the running modules, now that their tools exist
-   └─ registerCommand(pi, session)               src/command/index.ts: MyPi's commands + the running modules
+   ├─ registerCommand(pi, session)               src/command/index.ts: MyPi's commands + the running modules
+   └─ registerMcpServers(pi, session)            src/mcp/index.ts: MyPi's MCP servers, connected by pi
    MyPi.onBeforeAgentStart(ev)                   before every run: promptManager.apply(ev.systemPromptOptions.sections)
    MyPi.onToolCall(ev, ctx)                      before every tool call: returns toolGuard.check(ev, ctx) to pi
    MyPi.onSessionEnd(ev, ctx)                    session_shutdown: shutdownTools(tools, session)
@@ -39,9 +40,9 @@ its methods. It holds no logic.
 
 `MyPi` (`src/mypi.ts`) owns the event handlers. On `session_start` it builds a `Session` for that session's context,
 keeps it, picks the modules to load, registers the tools (the built-ins and the modules'), runs the modules' `init()`,
-and registers the commands, its own and the modules'. Tools come before `init()` because a module's `init()` may turn
-its tools on with `setActiveTools`, and pi ignores names that aren't registered yet ("Unknown and hidden tool names are
-ignored", `setActiveToolsByName` in `dist/core/agent-session.js`). On `before_agent_start` it writes
+registers the commands, its own and the modules', and registers MyPi's MCP servers. Tools come before `init()` because
+a module's `init()` may turn its tools on with `setActiveTools`, and pi ignores names that aren't registered yet
+("Unknown and hidden tool names are ignored", `setActiveToolsByName` in `dist/core/agent-session.js`). On `before_agent_start` it writes
 the modules' prompt sections (see `PromptManager` below), and on `tool_call` it returns the `ToolGuard`'s result.
 
 Each extension instance sees exactly one `session_start`. New, resume, fork, and `/reload` tear the extension down and
@@ -208,6 +209,25 @@ To add a tool, create `src/tool/<name>.ts` (or a folder, `src/tool/<name>/index.
 file), then add it to the list in `createTools`. A module's tools live in `src/module/<name>/tools/` and are returned
 from its `tools()`.
 
+## MCP servers
+
+`src/mcp/` holds the MCP servers MyPi registers with pi out of the box, documented in
+[`docs/mcp/README.md`](mcp/README.md). MyPi has no MCP client: pi's built-in MCP extension connects the servers.
+
+- A server is a `McpServer` (`src/mcp/types.ts`): `{ name, config }`, where `config` is pi's `McpServerConfig`, the
+  shape of an `mcp.json` entry. Each server is a constant in its own file (`src/mcp/parallel.ts`).
+- `registerMcpServers(pi, session)` registers everything `createMcpServers()` lists with `pi.registerMcpServer`, last
+  in `MyPi.onSessionStart`. Pi throws for an invalid config or a name another extension owns; each call has its own
+  try/catch, so a rejected server is logged (`MCP server <name>: <message>`) and doesn't stop the session starting.
+- Order doesn't matter: pi's MCP extension reads servers registered before its `session_start` there, and connects
+  later ones from its `mcp_servers_change` handler.
+- Nothing is unregistered. The registry belongs to the extension runtime, and `/reload` builds a new one, so a server
+  MyPi stops listing is gone after `/reload` (checked live).
+- Server tools are `mcp__<server>__<tool>`, reached as the server's `exposure` says. Their annotations reach
+  `ToolGuard` through `pi.getAllTools()`, like any tool's.
+
+To add a server, create `src/mcp/<name>.ts` exporting a `McpServer`, then add it to the list in `createMcpServers`.
+
 ## Modules
 
 Feature modules live in `src/module/<name>/`, each with a design doc in `docs/modules/<name>.md`. A module's `index.ts`
@@ -373,6 +393,7 @@ Imports use Node subpath imports, declared under `imports` in `package.json`:
 | `#tool/<file>`    | `src/tool/<file>.ts`    | `import { registerTools } from "#tool/index";`    |
 | `#module/<file>`  | `src/module/<file>.ts`  | `import { loadModules } from "#module/index";`    |
 | `#ui/<file>`      | `src/ui/<file>.ts`      | `import { Dialog } from "#ui/components/dialog";` |
+| `#mcp/<file>`     | `src/mcp/<file>.ts`     | `import { registerMcpServers } from "#mcp/index";` |
 
 Each alias maps to a file, not a folder. Nested paths work too: `#core/util/errors` resolves to
 `src/core/util/errors.ts`, and a module folder is `#module/<name>/index`. Inside a folder, use relative imports.

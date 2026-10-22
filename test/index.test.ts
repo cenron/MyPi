@@ -20,12 +20,14 @@ type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
 
 /**
  * Loads the extension into a fake pi. Like pi, a registered tool is active unless `defaultActive: false`, and
- * `setActiveTools` drops names that aren't registered; `activeTools` reads the active set.
+ * `setActiveTools` drops names that aren't registered; `activeTools` reads the active set, and `mcpServers` the
+ * names of the MCP servers registered.
  */
 function loadExtension() {
   const commands = new Map<string, CommandOptions>();
   const handlers = new Map<string, Handler>();
   const registered = new Set(["read", "bash", "edit", "write"]);
+  const mcpServers: string[] = [];
   let active = [...registered];
   const pi = {
     // Keeps the entry point's own handler: modules subscribe later, from init(), and would replace it here.
@@ -41,6 +43,9 @@ function loadExtension() {
       registered.add(tool.name);
       if (tool.defaultActive !== false) active.push(tool.name);
     },
+    registerMcpServer: (name: string) => {
+      mcpServers.push(name);
+    },
     sendUserMessage: () => {},
     getActiveTools: () => [...active],
     setActiveTools: (names: string[]) => {
@@ -48,7 +53,7 @@ function loadExtension() {
     },
   } as unknown as ExtensionAPI;
   mypi(pi);
-  return { pi, commands, handlers, activeTools: () => active };
+  return { pi, commands, handlers, activeTools: () => active, mcpServers };
 }
 
 function fakeContext() {
@@ -122,6 +127,13 @@ describe("mypi extension", () => {
     const event = { type: "before_agent_start", messageType, systemPromptOptions: { sections: {} } };
     handlers.get("before_agent_start")?.(event, fakeContext());
     expect(Object.keys(event.systemPromptOptions.sections)).toContain("mypi-plan-build");
+  });
+
+  it("registers MyPi's MCP servers when a session starts", () => {
+    const { handlers, mcpServers } = loadExtension();
+    expect(mcpServers).toEqual([]);
+    startSession(handlers);
+    expect(mcpServers).toEqual(["parallel"]);
   });
 
   it("lets a tool call run when no module objects", async () => {

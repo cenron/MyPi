@@ -81,7 +81,7 @@ which is cleaner.
 |---|---|---|
 | Tool | `webSearchTool(session)` in `src/tool/web-search.ts`, registered by `registerTools`; a folder once the backends land (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. `promptSnippet` adds a line to pi's tool list in the system prompt. |
 | Backend | `interface SearchBackend { id; name; search(query, signal) → Result[] }`, `Result` shaped like OpenCode's | One file per backend. |
-| MCP call | A small `mcpCall(url, tool, args, headers, signal)` helper, like OpenCode's `mcp.ts` | JSON-RPC `tools/call` over one POST. Parse plain JSON or the first `data:` line. Cap and time out. No MCP client, no `registerMcpServer`. Moves to `src/core/util/` if web_fetch's fallback needs it too. |
+| MCP call | Each backend is a server in MyPi's [MCP server list](../mcp/README.md), connected by pi's own client. The backend calls `ctx.executeTool("mcp__parallel__web_search", …)` and reads `structuredContent` from the result, which carries the whole MCP result. | Decided 2026-10-22, instead of OpenCode's `mcpCall` POST helper: pi already handles retries, keys in headers, Exa's event stream, and turning a server off in `/mcp`. web_search declares `reachesTools`, so pi waits for the server to connect before the call runs. To check before the fallback slice: whether an HTTP 429 error result still says 429, after pi's two retries. |
 | Backends | Parallel first, Exa as fallback | Both keyless. TinyFish and Tavily are keyless extras. A self-hosted SearXNG is the unmetered option. |
 | Fallback | On HTTP 429, try the next backend | A plain ordered list. Skip OpenCode's random pick and cooldown map until rate limits actually hurt. |
 | Keys | Optional `apiKey` per backend, resolved like `models.json`: `$ENV`, `${ENV}`, or `!command` | Never logged and never in tracked files. |
@@ -97,7 +97,8 @@ which is cleaner.
 
 ## Slices
 
-1. `mcpCall` helper and the Parallel backend, with tests against recorded responses.
+1. The Parallel backend over `ctx.executeTool`, mapping `structuredContent.results` to `Result[]`, with tests
+   against a recorded response. Needs slice 1 of the [MCP server list](../mcp/README.md#slices) first.
 2. The `web_search` tool: markdown result blocks, short error messages, annotations.
 3. Exa as a second backend, and fallback to the next backend on HTTP 429.
 4. Rendering (`renderCall` / `renderResult`).
@@ -105,9 +106,6 @@ which is cleaner.
 
 ## Open questions
 
-- MCP: MCP-dependent work is deferred until MyPi has a shared MCP endpoint (see [Deferred](README.md#deferred)).
-  Parallel and Exa are hosted MCP servers, but `mcpCall` is one plain HTTP POST, not MCP support. Build it now as
-  designed, or wait and run web_search through the shared endpoint later?
 - Backend order: Parallel then Exa, or SearXNG on the cluster first?
 - First-use consent like OpenCode's, or just on?
 - Can the user turn a built-in tool off (a `/tools` toggle like `/modules`), or is it always on?

@@ -28,6 +28,7 @@ describe("built-in tool hooks", () => {
       registerTool: (tool: ToolDefinition) => calls.push(`register ${tool.name}`),
       getAllTools: () => [],
       getActiveTools: () => [],
+      registerMcpServer: () => {},
       // plan-build's init() turns its tools on here, one call per tool.
       setActiveTools: () => calls.push("module init"),
       sendUserMessage: () => {},

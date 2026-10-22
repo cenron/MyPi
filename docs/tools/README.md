@@ -40,13 +40,13 @@ Tools that are modules instead, so they can be turned off, are documented in `do
 
 ## Deferred
 
-Anything that needs an MCP server or other third-party tooling waits until MyPi has MCP support. The plan: one shared
-MCP endpoint, with MCP servers added to it the way modules are added. Deferred until then:
+Tools that come from an MCP server go through MyPi's [MCP server list](../mcp/README.md): MyPi registers the server
+with pi, and pi's own MCP client connects it. The MCP resource tools (list, read) come with pi's client already.
+Deferred:
 
 | Tool | Who has it | Needs |
 |---|---|---|
-| code_search | OpenCode `codesearch` (Exa `get_code_context_exa`) | Exa's MCP server |
-| MCP resources (list, read) | Claude Code, OpenCode | MCP support |
+| code_search | OpenCode `codesearch` (Exa `get_code_context_exa`) | Exa's keyless server offers only `web_search_exa` and `web_fetch_exa` (2026-10-22) |
 
 ## Where the code goes
 

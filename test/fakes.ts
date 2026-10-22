@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, McpServerConfig, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Mock, vi } from "vitest";
 import { Session } from "#core/session";
 import type { Module, ModuleLoadMode } from "#core/types";
@@ -25,7 +25,7 @@ export function fakeUI() {
 /**
  * A `Session` over a fake pi. `branch` stands in for the session's current branch, and `appendEntry` adds to it like
  * pi does, so whatever a test saves can be loaded back. `activeTools` holds the active tool names, starting with
- * pi's defaults, and `tools` what was registered. Like pi, `setActiveTools` drops names that aren't registered (pi's
+ * pi's defaults, `tools` what was registered, and `mcpServers` the MCP servers registered, by name. Like pi, `setActiveTools` drops names that aren't registered (pi's
  * defaults count as registered). `emit` runs the handlers registered with `pi.on`, with the session's
  * own context unless one is given.
  */
@@ -37,6 +37,7 @@ export function fakeSession(branch: unknown[] = []) {
   const builtins = ["read", "bash", "edit", "write"];
   let activeTools = [...builtins];
   const tools = new Map<string, ToolDefinition>();
+  const mcpServers = new Map<string, McpServerConfig>();
   const handlers = new Map<string, ((ev: unknown, ctx: ExtensionContext) => unknown)[]>();
   const pi = {
     on: (event: string, handler: (ev: unknown, ctx: ExtensionContext) => unknown) => {
@@ -47,6 +48,9 @@ export function fakeSession(branch: unknown[] = []) {
     appendEntry,
     getAllTools: () => [],
     registerTool: (tool: ToolDefinition) => tools.set(tool.name, tool),
+    registerMcpServer: vi.fn((name: string, config: McpServerConfig) => {
+      mcpServers.set(name, config);
+    }),
     getActiveTools: () => [...activeTools],
     setActiveTools: vi.fn((names: string[]) => {
       activeTools = names.filter((name) => builtins.includes(name) || tools.has(name));
@@ -69,6 +73,8 @@ export function fakeSession(branch: unknown[] = []) {
     appendEntry,
     branch,
     tools,
+    mcpServers,
+    registerMcpServer: pi.registerMcpServer,
     setActiveTools: pi.setActiveTools,
     activeTools: () => activeTools,
     sendUserMessage: pi.sendUserMessage,
