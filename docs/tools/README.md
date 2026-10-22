@@ -63,5 +63,7 @@ Built (2026-10-21), the same way as `src/command/`:
 - `MyPi.onSessionStart` calls `registerTools` on every `session_start`, after the modules are picked and before their
   `init()`, since a module's `init()` may turn its tools on and pi ignores names that aren't registered yet.
 - Imported as `#tool/<file>`; tests in `test/tool/`, mirroring `src/tool/`.
+- Helpers more than one tool uses go in `src/tool/utils.ts` (`#tool/utils`): `callMcpTool` calls one of MyPi's MCP
+  servers through `ctx.executeTool` and returns the whole MCP result, and `textOf` joins a result's text parts.
 
 See [Tools](../architecture.md#tools) in the architecture doc for why each tool is wrapped in `defineTool`.

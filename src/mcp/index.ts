@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
 import { errorMessage } from "#core/util/errors";
+import { exaServer } from "./exa";
 import { parallelServer } from "./parallel";
 import type { McpServer } from "./types";
 
@@ -15,4 +16,4 @@ export function registerMcpServers(pi: ExtensionAPI, session: Session): void {
   }
 }
 
-const createMcpServers = (): McpServer[] => [parallelServer];
+const createMcpServers = (): McpServer[] => [parallelServer, exaServer];

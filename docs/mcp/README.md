@@ -25,8 +25,10 @@ Checked against the installed pi 1.2.0 (`docs/mcp.md`, `docs/extensions.md`, `di
   type). The built-in MCP extension connects it: a server registered before its `session_start` runs is read there,
   and one registered after is connected by its `mcp_servers_change` handler. So MyPi's order against it doesn't
   matter.
-- Pi handles the connection, two retries on network errors and HTTP 408, 429, and 5xx, OAuth, `${ENV}` and
-  `!command` values in `headers`, and the server log (`~/.pi/agent/mcp.log`).
+- Pi handles the connection, OAuth, `${ENV}` and `!command` values in `headers`, and the server log
+  (`~/.pi/agent/mcp.log`). It retries connecting twice on network errors and HTTP 408, 429, and 5xx, and a read-only
+  request once. It never retries a tool call, since the call may have run: a 429 comes back as an error result,
+  `MCP HTTP request failed with status 429: <body>` (`withClient` in `dist/extensions/mcp/runtime.js`).
 - `/mcp` lists a registered server with MyPi as its source, and can reconnect it, turn it off, or change its exposure
   for the current session.
 - The resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`) come with it, for
@@ -74,6 +76,7 @@ Checked against the installed pi 1.2.0 (`docs/mcp.md`, `docs/extensions.md`, `di
 | Server | Status | Endpoint | Exposure | Used by |
 |---|---|---|---|---|
 | parallel | done | `https://search.parallel.ai/mcp` | `deferred`; its `web_fetch` hidden | [web_search](../tools/web-search.md) |
+| exa | done | `https://mcp.exa.ai/mcp` | `deferred`; its `web_fetch_exa` hidden | [web_search](../tools/web-search.md), as fallback |
 
 A server gets its own doc here only once it needs design of its own.
 
@@ -101,19 +104,43 @@ marked `[hidden]` (the count includes it). In Plan mode the model loaded the too
 no permission prompt, since plan-build's rule reads the server's `readOnlyHint`. The result, about 5.3k tokens, was
 cut by pi's 20 KB limit for the model.
 
+### exa
+
+```ts
+/** Exa's free search server: keyless, read-only. Its web_fetch_exa is hidden, since MyPi has its own web_fetch. */
+export const exaServer: McpServer = {
+  name: "exa",
+  config: {
+    url: "https://mcp.exa.ai/mcp",
+    description: "Web search through Exa's free search service",
+    exposure: "deferred",
+    toolExposure: { web_fetch_exa: "hidden" },
+  },
+};
+```
+
+Checked live (2026-10-22): no key and no handshake needed. `web_search_exa` and `web_fetch_exa` declare
+`readOnlyHint: true` and `openWorldHint: true`. `web_search_exa` requires `query` and `objective`, and replies in text
+only, with no `structuredContent`. Its old `get_code_context_exa` tool is gone from the keyless server.
+
+Live in pi (2026-10-22): `/reload` registered it (no restart needed, since `package.json` didn't change). `/mcp` shows
+`connected · 2 tools · resources · deferred · extension`, with `web_fetch_exa` marked `[hidden]`.
+
 ## Slices
 
 1. **Done.** The registry and Parallel: `McpServer`, `registerMcpServers`, `parallelServer`, the `#mcp/*` alias, and the call
    in `MyPi.onSessionStart`.
    - Tests (wiring only): `test/mcp/index.test.ts` checks a server is registered with its config, and one pi rejects
-     is logged by name instead of throwing. With one server, nothing shows that the next still registers; add that
-     test with the second server. `test/index.test.ts` checks a session start
-     registers `parallel`. `test/fakes.ts` and the extension fake in `test/index.test.ts` get `registerMcpServer`.
+     is logged by name instead of throwing. `test/index.test.ts` checks a session start registers
+     `parallel`. `test/fakes.ts` and the extension fake in `test/index.test.ts` get `registerMcpServer`.
      Pi doesn't export `validateMcpServerConfig`, so the config itself is checked live.
    - Live test after restarting pi: `/mcp` lists `parallel` from MyPi, connected with 1 tool; `tool_search` is
      active; the model can search through it. Then drop it from the list and `/reload` to confirm it's gone.
    - Docs: an MCP servers section and a startup flow line in `architecture.md`, a row and the alias in
      `project-structure.md` and the AGENTS.md map.
+2. **Done.** Exa (2026-10-22), for web_search's fallback: `exaServer` in `src/mcp/exa.ts`, added to
+   `createMcpServers()`. The registry test now checks both servers register, and that a server pi rejects doesn't
+   stop the next.
 
 ## Open questions
 

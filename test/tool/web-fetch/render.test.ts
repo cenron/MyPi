@@ -89,7 +89,7 @@ describe("formatResult", () => {
       ],
       details: undefined,
     };
-    expect(formatResult(failed, false, true, theme)).toBe("\n<error>\nUnable to fetch …: HTTP 404 Not Found</error>");
+    expect(formatResult(failed, false, true, theme)).toBe("\n<error>Unable to fetch …: HTTP 404 Not Found</error>");
   });
 
   it("shows nothing for a result without details", () => {

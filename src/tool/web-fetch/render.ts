@@ -1,5 +1,6 @@
 import { type AgentToolResult, formatSize, keyText, type Theme } from "@earendil-works/pi-coding-agent";
 import { mimeOf } from "#core/util/http";
+import { textOf } from "#tool/utils";
 import type { FetchedDetails, Format } from "./types";
 
 /** The call's arguments as the renderer sees them: any may be missing while the model is still writing the call. */
@@ -22,7 +23,7 @@ export function formatResult(
   isError: boolean,
   theme: Theme,
 ): string {
-  const text = result.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+  const text = textOf(result.content);
   if (isError) return `\n${theme.fg("error", text)}`;
   // pi types `details` as unknown here, and a failed call has none.
   const details = result.details as FetchedDetails | undefined;

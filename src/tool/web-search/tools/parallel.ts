@@ -1,5 +1,7 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
-import type { SearchBackend, SearchResult } from "./types";
+import { isNonEmptyString, isRecord } from "#core/util/guards";
+import { callMcpTool } from "#tool/utils";
+import type { SearchBackend, SearchResult } from "../types";
 
 /** Pi's name for Parallel's search tool: `mcp__<server>__<tool>`, from `parallelServer` in `src/mcp/parallel.ts`. */
 export const PARALLEL_SEARCH_TOOL = "mcp__parallel__web_search";
@@ -14,20 +16,12 @@ export function parallelBackend(sessionId: string): SearchBackend {
     name: "Parallel",
     tool: PARALLEL_SEARCH_TOOL,
     async search(ctx: ExtensionToolContext, query: string) {
-      const outcome = await ctx.executeTool(PARALLEL_SEARCH_TOOL, {
+      const call = await callMcpTool(ctx, PARALLEL_SEARCH_TOOL, {
         objective: query,
         search_queries: [query],
         session_id: sessionId,
       });
-
-      if (outcome.isError) {
-        const text = outcome.result.content.flatMap((part) => (part.type === "text" ? [part.text] : []));
-        throw new Error(text.join("\n"));
-      }
-
-      // Pi puts the whole MCP result in `structuredContent`, so Parallel's own reply is one level down.
-      const call = outcome.result.structuredContent;
-      return toResults(isRecord(call) ? call.structuredContent : undefined);
+      return toResults(call.structuredContent);
     },
   };
 }
@@ -43,17 +37,12 @@ export function toResults(reply: unknown): SearchResult[] {
     if (!isRecord(entry) || typeof entry.url !== "string") return [];
 
     const result: SearchResult = { url: entry.url };
-    if (isText(entry.title)) result.title = entry.title;
+    if (isNonEmptyString(entry.title)) result.title = entry.title;
 
-    const excerpts = Array.isArray(entry.excerpts) ? entry.excerpts.filter(isText) : [];
+    const excerpts = Array.isArray(entry.excerpts) ? entry.excerpts.filter(isNonEmptyString) : [];
 
     if (excerpts.length > 0) result.excerpt = excerpts.join("\n\n");
-    if (isText(entry.publish_date)) result.published = entry.publish_date;
+    if (isNonEmptyString(entry.publish_date)) result.published = entry.publish_date;
     return [result];
   });
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isText = (value: unknown): value is string => typeof value === "string" && value !== "";

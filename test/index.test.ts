@@ -133,7 +133,7 @@ describe("mypi extension", () => {
     const { handlers, mcpServers } = loadExtension();
     expect(mcpServers).toEqual([]);
     startSession(handlers);
-    expect(mcpServers).toEqual(["parallel"]);
+    expect(mcpServers).toEqual(["parallel", "exa"]);
   });
 
   it("lets a tool call run when no module objects", async () => {

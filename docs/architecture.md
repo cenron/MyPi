@@ -149,6 +149,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   `CommandExec` is still in `src/command/types.ts`.
 - **`util/errors.ts`** has `errorMessage` (any thrown value to a string) and `isNodeError` (narrows to
   `NodeJS.ErrnoException`).
+- **`util/guards.ts`** has `isRecord` (a plain object, before reading fields off JSON) and `isNonEmptyString`.
 
 ## Commands
 
@@ -215,7 +216,7 @@ from its `tools()`.
 [`docs/mcp/README.md`](mcp/README.md). MyPi has no MCP client: pi's built-in MCP extension connects the servers.
 
 - A server is a `McpServer` (`src/mcp/types.ts`): `{ name, config }`, where `config` is pi's `McpServerConfig`, the
-  shape of an `mcp.json` entry. Each server is a constant in its own file (`src/mcp/parallel.ts`).
+  shape of an `mcp.json` entry. Each server is a constant in its own file (`src/mcp/parallel.ts`, `src/mcp/exa.ts`).
 - `registerMcpServers(pi, session)` registers everything `createMcpServers()` lists with `pi.registerMcpServer`, last
   in `MyPi.onSessionStart`. Pi throws for an invalid config or a name another extension owns; each call has its own
   try/catch, so a rejected server is logged (`MCP server <name>: <message>`) and doesn't stop the session starting.

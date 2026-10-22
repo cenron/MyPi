@@ -1,6 +1,6 @@
-import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
-import { PARALLEL_SEARCH_TOOL, parallelBackend, toResults } from "#tool/web-search/parallel";
+import { describe, expect, it } from "vitest";
+import { PARALLEL_SEARCH_TOOL, parallelBackend, toResults } from "#tool/web-search/tools/parallel";
+import { answered, fakeContext } from "../fakes";
 
 /** Parallel's reply to a real search (2026-10-21), cut to 3 results with shorter excerpts and placeholder ids. */
 const recorded = {
@@ -30,19 +30,9 @@ const recorded = {
   session_id: "session-0",
 };
 
-/** A `ctx` whose `executeTool` returns `result`, the way pi returns an MCP tool's result. */
-function fakeContext(
-  result: { content: { type: "text"; text: string }[]; structuredContent?: unknown },
-  isError = false,
-) {
-  const executeTool = vi.fn(async () => ({ toolCall: {}, result, isError }));
-  return { ctx: { executeTool } as unknown as ExtensionToolContext, executeTool };
-}
-
-/** Pi's result for an MCP call: the whole MCP result, minus `_meta`, is its `structuredContent`. */
-const mcpResult = (reply: unknown) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(reply) }],
-  structuredContent: { content: [{ type: "text", text: JSON.stringify(reply) }], structuredContent: reply },
+/** Pi's answer for a Parallel search: Parallel's reply is the MCP result's `structuredContent`. */
+const parallelAnswer = (reply: unknown) => ({
+  [PARALLEL_SEARCH_TOOL]: answered({ content: [], structuredContent: reply }),
 });
 
 describe("toResults", () => {
@@ -83,7 +73,7 @@ describe("toResults", () => {
 
 describe("parallelBackend", () => {
   it("searches with the query and the session id", async () => {
-    const { ctx, executeTool } = fakeContext(mcpResult(recorded));
+    const { ctx, executeTool } = fakeContext(parallelAnswer(recorded));
     await parallelBackend("session-1").search(ctx, "abort signal timeout");
     expect(executeTool).toHaveBeenCalledWith(PARALLEL_SEARCH_TOOL, {
       objective: "abort signal timeout",
@@ -93,14 +83,7 @@ describe("parallelBackend", () => {
   });
 
   it("reads Parallel's reply from inside the MCP result", async () => {
-    const { ctx } = fakeContext(mcpResult(recorded));
+    const { ctx } = fakeContext(parallelAnswer(recorded));
     expect(await parallelBackend("session-1").search(ctx, "q")).toEqual(toResults(recorded));
-  });
-
-  it("throws an error result's text", async () => {
-    const { ctx } = fakeContext({ content: [{ type: "text", text: `Tool ${PARALLEL_SEARCH_TOOL} not found` }] }, true);
-    await expect(parallelBackend("session-1").search(ctx, "q")).rejects.toThrow(
-      `Tool ${PARALLEL_SEARCH_TOOL} not found`,
-    );
   });
 });
