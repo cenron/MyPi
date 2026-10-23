@@ -55,3 +55,34 @@ export interface Module {
   /** The module's tools, registered through `registerTools` before `init()`. Wrap each in `defineTool`. */
   tools(): ToolDefinition[];
 }
+
+/** How a job stands: running, or how it ended. */
+export type JobStatus = "running" | "completed" | "failed" | "stopped";
+
+/** A job as the registry reports it. */
+export type JobInfo = {
+  id: string;
+  kind: string;
+  label: string;
+  status: JobStatus;
+  startedAt: number;
+  endedAt?: number;
+  /** The exit code `run` resolved to; missing while running, when stopped, or when `run` threw. */
+  exitCode?: number;
+  /** Why `run` threw, when it did. */
+  error?: string;
+  /** The file every byte of output goes to, kept after the job ends. */
+  logPath: string;
+};
+
+/** What to run. `kind` is `shell` today, and `subagent` later. */
+export interface JobSpec {
+  kind: string;
+  /** What the job is, for lists and notices, such as the command. */
+  label: string;
+  /**
+   * Runs until it ends: writes output with `write`, resolves to an exit code (0 is success), and stops when `signal`
+   * aborts.
+   */
+  run(signal: AbortSignal, write: (chunk: Buffer | string) => void): Promise<number>;
+}

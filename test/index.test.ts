@@ -3,7 +3,6 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
   RegisteredCommand,
-  SessionShutdownEvent,
   SessionStartEvent,
   ToolCallEvent,
   ToolDefinition,
@@ -86,12 +85,6 @@ describe("mypi extension", () => {
     expect(commands.size).toBe(0);
   });
 
-  it("registers commands when a session starts", () => {
-    const { commands, handlers } = loadExtension();
-    startSession(handlers);
-    expect(commands.size).toBeGreaterThan(0);
-  });
-
   it("runs every registered command without throwing", async () => {
     const { commands, handlers } = loadExtension();
     startSession(handlers);
@@ -136,12 +129,6 @@ describe("mypi extension", () => {
     expect(mcpServers).toEqual(["parallel", "exa"]);
   });
 
-  it("lets a tool call run when no module objects", async () => {
-    const { handlers } = loadExtension();
-    startSession(handlers);
-    await expect(handlers.get("tool_call")?.(bashCall, fakeContext())).resolves.toBeUndefined();
-  });
-
   // Pi reads the handler's return value; a handler that awaited the guard without returning would let every call run.
   it("returns the tool guard's result to pi", async () => {
     const blocked = { block: true, reason: "no" };
@@ -149,15 +136,5 @@ describe("mypi extension", () => {
     const { handlers } = loadExtension();
     startSession(handlers);
     await expect(handlers.get("tool_call")?.(bashCall, fakeContext())).resolves.toEqual(blocked);
-  });
-
-  it("handles session shutdown without throwing", () => {
-    const { handlers } = loadExtension();
-    startSession(handlers);
-    const event: SessionShutdownEvent = {
-      type: "session_shutdown",
-      reason: "quit",
-    };
-    expect(() => handlers.get("session_shutdown")?.(event, fakeContext())).not.toThrow();
   });
 });

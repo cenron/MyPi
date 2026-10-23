@@ -42,6 +42,8 @@ export class MyPi {
   }
 
   onSessionEnd(_ev: SessionShutdownEvent, _ctx: ExtensionContext) {
+    // Jobs first: nothing a job runs should outlive the session, whatever a tool's shutdown does.
+    this.session.jobs.stopAll();
     shutdownTools(this.tools, this.session);
   }
 }

@@ -53,13 +53,6 @@ describe("formatResult", () => {
     );
   });
 
-  it("names what came back when nothing was converted", () => {
-    const json = { converted: false, contentType: "application/json" };
-    expect(formatResult(result("{}", json), false, false, plain)).toContain("· 2B of application/json");
-    const untyped = { converted: false, contentType: "" };
-    expect(formatResult(result("hi", untyped), false, false, plain)).toContain("· 2B of an untyped response");
-  });
-
   it("adds where a redirect landed, the size it was cut from, and the saved file", () => {
     const details = {
       converted: false,
@@ -90,9 +83,5 @@ describe("formatResult", () => {
       details: undefined,
     };
     expect(formatResult(failed, false, true, theme)).toBe("\n<error>Unable to fetch …: HTTP 404 Not Found</error>");
-  });
-
-  it("shows nothing for a result without details", () => {
-    expect(formatResult(result("x", null), false, false, plain)).toBe("");
   });
 });

@@ -28,7 +28,6 @@ describe("searchInOrder", () => {
   // The fallback rules: only a rate limit or a missing tool sends the search on to the next backend.
   it.each([
     [RATE_LIMITED, true],
-    ["MCP HTTP request failed with status 429", true],
     ["Tool mcp__parallel__web_search not found", true],
     ["MCP HTTP request failed with status 500: Internal Server Error", false],
     ["Parallel's reply has no results list.", false],

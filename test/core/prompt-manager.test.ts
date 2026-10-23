@@ -15,10 +15,6 @@ function applied(prompts: PromptManager) {
 const newPromptManager = () => new PromptManager({} as ExtensionContext);
 
 describe("PromptManager", () => {
-  it("writes nothing when no prompt is set", () => {
-    expect(applied(newPromptManager())).toEqual({});
-  });
-
   it("writes each prompt as the mypi-<name> section", () => {
     const prompts = newPromptManager();
     prompts.set("plan-build", "plan text");

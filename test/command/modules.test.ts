@@ -68,16 +68,6 @@ describe("/modules", () => {
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("/reload"), "warning");
   });
 
-  // Running modules only change on /reload.
-  it("leaves the running modules alone on Save", async () => {
-    const { session } = fakeSession();
-    const { ctx } = fakeContext("tui", [SPACE, UP, ENTER]);
-
-    await modulesCmd(session).execute(ctx, []);
-
-    expect(await modulesCmd(session).execute(fakeContext("tui").ctx, ["list"])).toBe("loaded: a\nnot loaded: b");
-  });
-
   it("changes nothing and shows nothing on Escape", async () => {
     const { session, notify, appendEntry } = fakeSession();
     const { ctx } = fakeContext("tui", [SPACE, ESCAPE]);

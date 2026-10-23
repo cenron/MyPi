@@ -23,7 +23,7 @@ Pi supplies the host packages (`@earendil-works/pi-coding-agent`, `@earendil-wor
 ```
 index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "before_agent_start" | "tool_call" | "session_shutdown", …)
 └─ src/mypi.ts         MyPi.onSessionStart(ev, ctx)
-   ├─ new Session(ctx, pi)                       src/core/session.ts: builds its ModuleManager, Footer, Editor, PromptManager
+   ├─ new Session(ctx, pi)                       src/core/session.ts: builds its ModuleManager, Footer, Editor, PromptManager, JobManager
    ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start() picks the running ones
    ├─ registerTools(pi, session)                 src/tool/index.ts: the built-in tools + the running modules'
    ├─ initTools(tools)                           init() on the built-in tools that have one
@@ -32,7 +32,7 @@ index.ts               default factory: new MyPi(pi), then pi.on("session_start"
    └─ registerMcpServers(pi, session)            src/mcp/index.ts: MyPi's MCP servers, connected by pi
    MyPi.onBeforeAgentStart(ev)                   before every run: promptManager.apply(ev.systemPromptOptions.sections)
    MyPi.onToolCall(ev, ctx)                      before every tool call: returns toolGuard.check(ev, ctx) to pi
-   MyPi.onSessionEnd(ev, ctx)                    session_shutdown: shutdownTools(tools, session)
+   MyPi.onSessionEnd(ev, ctx)                    session_shutdown: session.jobs.stopAll(), then shutdownTools(tools, session)
 ```
 
 `index.ts` at the repo root is the single extension entry point. It creates the `MyPi` object and routes pi events to
@@ -141,12 +141,20 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
       pi's own function, so a pi upgrade that changes resolution fails there. `isInside(dir, path)` is a
       `path.relative` check, since `startsWith` lets `.pi/plans-evil/` through. It's true for `dir` itself, and it
       compares text only: a symlink under `dir` that points outside counts as inside.
+- **`JobManager`** (`job-manager.ts`) is `session.jobs`: long-running work that goes on after the tool call that
+  started it. A job is a `JobSpec` (`kind`, `label`, `run(signal, write)`; in `types.ts` with `JobInfo` and
+  `JobStatus`); `start` gives it an id counting up from 1, a log file (`pi-job-<hex>.log` in `os.tmpdir()`, `0600`,
+  kept after it ends), and a 50K-character tail in memory, and records how it ended: `completed`, `failed` (an exit
+  code or a thrown error), or `stopped`. `shellJob(command, cwd)` runs a command through pi's own
+  `createLocalBashOperations().exec`, which kills the process tree on abort. Generic on purpose, so subagents can be a
+  second kind. `MyPi.onSessionEnd` calls `stopAll()` before the tools' shutdown. See
+  [background process](tools/background-process.md).
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
   `enum`.
 - **`types.ts`** holds the types shared across folders: `Command`, `CommandInfo`, `ModuleInfo`, `ModuleLoadMode` (a
-  const object plus a type, the same pattern as `MessageType`), and the module contract, `Module` and `ModuleClass`.
-  `CommandExec` is still in `src/command/types.ts`.
+  const object plus a type, the same pattern as `MessageType`), the module contract, `Module` and `ModuleClass`, and
+  the job types, `JobStatus`, `JobSpec`, and `JobInfo`. `CommandExec` is still in `src/command/types.ts`.
 - **`util/errors.ts`** has `errorMessage` (any thrown value to a string) and `isNodeError` (narrows to
   `NodeJS.ErrnoException`).
 - **`util/guards.ts`** has `isRecord` (a plain object, before reading fields off JSON) and `isNonEmptyString`.

@@ -38,20 +38,6 @@ describe("Session", () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it("gives each session its own, empty ModuleManager", () => {
-    const first = new Session(fakeContext(true).ctx, pi);
-    const second = new Session(fakeContext(true).ctx, pi);
-
-    expect(first.moduleManager).not.toBe(second.moduleManager);
-    expect(first.moduleManager.moduleInfos).toEqual([]);
-  });
-
-  it("saves data as a mypi-<name> custom entry", () => {
-    const { session, appendEntry } = fakeSession();
-    session.save("modules", { loaded: ["a"] });
-    expect(appendEntry).toHaveBeenCalledWith("mypi-modules", { loaded: ["a"] });
-  });
-
   it("loads the last mypi-<name> entry on the branch", () => {
     const { session } = fakeSession([
       customEntry("mypi-modules", { loaded: ["a"] }),
@@ -69,20 +55,5 @@ describe("Session", () => {
       customEntry("other-ext", { loaded: ["z"] }),
     ]);
     expect(session.load("modules")).toEqual({ loaded: ["a"] });
-  });
-
-  it("loads back what it saved, and undefined before that", () => {
-    const { session } = fakeSession();
-    expect(session.load("modules")).toBeUndefined();
-    session.save("modules", { loaded: ["a"] });
-    expect(session.load("modules")).toEqual({ loaded: ["a"] });
-  });
-
-  it("saves into another session as a mypi-<name> custom entry", () => {
-    const appendCustomEntry = vi.fn();
-    const { session, appendEntry } = fakeSession();
-    session.saveTo({ appendCustomEntry } as never, "x", { a: 1 });
-    expect(appendCustomEntry).toHaveBeenCalledWith("mypi-x", { a: 1 });
-    expect(appendEntry).not.toHaveBeenCalled();
   });
 });

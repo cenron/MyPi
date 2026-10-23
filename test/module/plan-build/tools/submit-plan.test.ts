@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SUBMIT_PLAN, submitPlanTool } from "#module/plan-build/tools/submit-plan";
+import { submitPlanTool } from "#module/plan-build/tools/submit-plan";
 
 const now = new Date("2026-10-20T14:32:05Z");
 
@@ -20,13 +20,6 @@ describe("submitPlanTool", () => {
     submitPlanTool(onSubmit, () => now).execute("call-1", { title: "Add it", plan: "Steps." }, undefined, undefined, {
       cwd,
     } as ExtensionToolContext);
-
-  // A direct tool is active as soon as it's registered, which would show it in Build too.
-  it("is submit_plan and starts inactive", () => {
-    const tool = submitPlanTool(() => {});
-    expect(tool.name).toBe(SUBMIT_PLAN);
-    expect(tool.defaultActive).toBe(false);
-  });
 
   it("saves the plan in the session's cwd and tells the model where", async () => {
     const path = join(cwd, ".pi", "plans", "2026-10-20-143205-add-it.md");

@@ -7,7 +7,6 @@ import { fakeSession as fakeFor, fakeModule } from "../fakes";
 
 const SPACE = " ";
 const ENTER = "\r";
-const ESCAPE = "\x1b";
 const UP = "\x1b[A";
 
 const theme = {
@@ -60,16 +59,6 @@ describe("openModulesModal", () => {
     expect(custom).not.toHaveBeenCalled();
   });
 
-  it("opens as an overlay", async () => {
-    const { ctx, custom } = fakeContext([ESCAPE]);
-    await openModulesModal(ctx, fakeSession());
-    expect(custom.mock.calls[0]?.[1]).toMatchObject({ overlay: true });
-  });
-
-  it("saves the selected modules when nothing changed", async () => {
-    expect(await press([UP, ENTER])).toEqual(["a", "c"]);
-  });
-
   it("saves the selection in list order, not toggle order", async () => {
     expect(await press([SPACE, SPACE, UP, ENTER])).toEqual(["a", "c"]);
   });
@@ -79,10 +68,6 @@ describe("openModulesModal", () => {
     const session = fakeSession();
     session.moduleManager.select(new Set(["b"]));
     expect(await press([UP, ENTER], session)).toEqual(["b"]);
-  });
-
-  it("discards the selection on Escape", async () => {
-    expect(await press([SPACE, ESCAPE])).toBeUndefined();
   });
 
   it("locks ALWAYS modules, so toggling them changes nothing", async () => {

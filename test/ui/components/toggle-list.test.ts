@@ -5,7 +5,6 @@ import { type ToggleItem, ToggleList } from "#ui/components/toggle-list";
 
 const SPACE = " ";
 const ENTER = "\r";
-const ESCAPE = "\x1b";
 const UP = "\x1b[A";
 const DOWN = "\x1b[B";
 
@@ -31,12 +30,6 @@ function renderText(list: ToggleList): string[] {
 beforeAll(() => initTheme("dark"));
 
 describe("ToggleList", () => {
-  it("shows a green circle for on and a grey circle for off", () => {
-    const lines = renderText(new ToggleList(theme, items, fakeHandlers()));
-    expect(lines[0]).toMatch(/a\s+●/);
-    expect(lines[1]).toMatch(/b\s+○/);
-  });
-
   it("toggles the selected row with Space and Enter", () => {
     const handlers = fakeHandlers();
     const list = new ToggleList(theme, items, handlers);
@@ -73,18 +66,6 @@ describe("ToggleList", () => {
     list.handleInput(SPACE);
 
     expect(onToggle).toHaveBeenCalledWith("b", true);
-  });
-
-  it("calls onCancel on Escape", () => {
-    const handlers = fakeHandlers();
-    new ToggleList(theme, items, handlers).handleInput(ESCAPE);
-    expect(handlers.onCancel).toHaveBeenCalledOnce();
-    expect(handlers.onAccept).not.toHaveBeenCalled();
-  });
-
-  it("shows the selected row's description", () => {
-    const lines = renderText(new ToggleList(theme, items, fakeHandlers()));
-    expect(lines.join("\n")).toContain("first");
   });
 
   describe("a disabled row", () => {

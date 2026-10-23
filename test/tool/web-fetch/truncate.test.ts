@@ -27,10 +27,6 @@ afterEach(async () => {
 const manyLines = (count: number) => Array.from({ length: count }, (_, i) => `line ${i}`).join("\n");
 
 describe("truncate", () => {
-  it("returns a short text whole, without saving it", async () => {
-    expect(await truncate("one\ntwo", ".txt")).toEqual({ text: "one\ntwo", truncated: false });
-  });
-
   it("cuts past 2000 lines and saves the whole text, readable only by the user", async () => {
     const text = manyLines(2500);
     const result = await truncate(text, ".md");

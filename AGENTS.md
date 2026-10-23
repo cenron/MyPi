@@ -10,7 +10,7 @@ machine-specific paths out of tracked files.
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `index.ts`                  | Extension entry point at the repo root, so pi labels it `MyPi`. Creates `MyPi` and wires pi events to it; no logic.                                                                                    |
 | `src/mypi.ts`               | `MyPi` class. Handles pi events; on `session_start` it builds a `Session`, picks the modules, registers tools, runs the modules' `init()`, registers commands, then MCP servers.                                                                    |
-| `src/core/`                 | Per-session services (`Session`, `ModuleManager`, `Notifier`, `PromptManager`), shared types (`types.ts`: `Command`, `Module`, `ModuleInfo`, `ModuleLoadMode`), and `util/`. Imported as `#core/<file>`.                |
+| `src/core/`                 | Per-session services (`Session`, `ModuleManager`, `Notifier`, `PromptManager`, `ToolGuard`, `JobManager`), shared types (`types.ts`: `Command`, `Module`, `ModuleInfo`, `ModuleLoadMode`), and `util/`. Imported as `#core/<file>`.                |
 | `src/command/`              | Slash commands: one file (or folder) per command, listed in `createCommand` in `index.ts`. Imported as `#command/<file>`.                                                                              |
 | `src/tool/`                 | Built-in tools: one file (or folder) per tool, listed in `createTools` in `index.ts`; `registerTools` adds the running modules' `tools()`; `utils.ts` holds helpers the tools share. Imported as `#tool/<file>`. |
 | `src/mcp/`                  | MCP servers MyPi registers with pi: one function per server, listed in `createMcpServers` in `index.ts`. Imported as `#mcp/<file>`.                                                                    |
@@ -73,3 +73,5 @@ Test each behavior once, at the lowest level that shows it:
 - Display code (`renderCall`, `renderResult`, footers) gets a few tests, not one per line of output.
 - Check exact wording in one place; elsewhere match a key phrase, so rewording a message breaks one test.
 - Check a new test catches something: break the code it covers and watch it fail.
+- Coverage only has to stay at 85% (`vitest.config.ts`). Don't add a test just to cover a line; leave out tests for
+  plain glue and for paths a higher-level test already runs through.

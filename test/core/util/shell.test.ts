@@ -3,7 +3,6 @@ import { isReadOnlyCommand, tokenize } from "#core/util/shell";
 
 describe("tokenize", () => {
   it.each([
-    ["ls -la", [["ls", "-la"]]],
     ["cat a | grep b && wc -l; pwd", [["cat", "a"], ["grep", "b"], ["wc", "-l"], ["pwd"]]],
     ["a || b\nc", [["a"], ["b"], ["c"]]],
     ["echo 'a; b' \"c | d\"", [["echo", "a; b", "c | d"]]],
@@ -13,10 +12,8 @@ describe("tokenize", () => {
     ['echo "\\n"', [["echo", "\\n"]]],
     ["ls \\\n  -la", [["ls", "-la"]]],
     ["cat < in.txt", [["cat"]]],
-    ["ls 2>/dev/null", [["ls"]]],
     ["ls > /dev/null 2>&1", [["ls"]]],
     ["echo x >&2", [["echo", "x"]]],
-    ["git log @{u}..HEAD", [["git", "log", "@{u}..HEAD"]]],
     ["ls ;", [["ls"]]],
     ["", []],
   ])("splits %j", (command, expected) => {

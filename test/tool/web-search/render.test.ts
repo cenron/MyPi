@@ -9,9 +9,6 @@ const theme = {
   bold: (text: string) => `**${text}**`,
 } as unknown as Theme;
 
-/** A theme that adds nothing, for checking the words alone. */
-const plain = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as unknown as Theme;
-
 const MDN: SearchResult = {
   url: "https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal",
   title: "AbortSignal - Web APIs | MDN",
@@ -32,10 +29,6 @@ describe("formatCall", () => {
       '<toolTitle>**web_search**</toolTitle> <accent>"node fetch"</accent>',
     );
   });
-
-  it("shows just the tool before the query arrives", () => {
-    expect(formatCall({}, plain)).toBe("web_search");
-  });
 });
 
 describe("formatResult", () => {
@@ -48,14 +41,6 @@ describe("formatResult", () => {
         "https://www.example.com/page<muted> · example.com</muted> <dim>(ctrl+o to expand)</dim>",
       ].join("\n"),
     );
-  });
-
-  it("counts one result in the singular", () => {
-    expect(formatResult(searched([BARE]), false, false, plain)).toContain("\n1 result from Parallel\n");
-  });
-
-  it("leaves out the site of a URL that doesn't parse", () => {
-    expect(formatResult(searched([{ url: "not a url" }]), false, false, plain)).toContain("\nnot a url (ctrl+o");
   });
 
   it("shows each result's title, URL, date, and excerpt when expanded", () => {
@@ -82,9 +67,5 @@ describe("formatResult", () => {
   it("shows an error's text in the error color", () => {
     const failed = { content: [{ type: "text" as const, text: "Web search failed (Parallel): boom" }], details: {} };
     expect(formatResult(failed, false, true, theme)).toBe("\n<error>Web search failed (Parallel): boom</error>");
-  });
-
-  it("shows nothing without details", () => {
-    expect(formatResult({ content: [], details: undefined }, false, false, theme)).toBe("");
   });
 });

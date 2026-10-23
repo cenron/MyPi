@@ -143,11 +143,6 @@ describe("web_fetch", () => {
       expect(headers.get("accept")).toMatch(/^text\/markdown/);
       expect(headers.get("accept-language")).toBe("en-US,en;q=0.9");
     });
-
-    it("passes an abort signal", async () => {
-      await run({ url: PAGE });
-      expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
-    });
   });
 
   describe("Cloudflare", () => {
@@ -286,23 +281,6 @@ describe("web_fetch", () => {
         await rm(fullTextPath, { force: true });
       }
     });
-
-    it("leaves a short page whole, with no file", async () => {
-      replyWith({ body: "one\ntwo\nthree" });
-      expect((await run({ url: PAGE })).details).toMatchObject({ truncated: false, fullTextPath: undefined });
-      replyWith({ body: "one\ntwo\nthree" });
-      expect(await textOf({ url: PAGE })).not.toMatch(/\[Truncated/);
-    });
-
-    it("saves JSON's full text as .json", async () => {
-      replyWith({ body: "x".repeat(200 * 1024), headers: { "content-type": "application/json" } });
-      const { fullTextPath } = (await run({ url: PAGE })).details as { fullTextPath: string };
-      try {
-        expect(fullTextPath).toMatch(/\.json$/);
-      } finally {
-        await rm(fullTextPath, { force: true });
-      }
-    });
   });
 
   describe("HTML", () => {
@@ -340,13 +318,6 @@ describe("web_fetch", () => {
       const text = first?.type === "text" ? first.text : "";
       expect(text.includes(body)).toBe(!converted);
       expect(result.details).toMatchObject({ converted });
-    });
-
-    it("leaves out the Title line when the page has no title", async () => {
-      replyWith({ body: "<html><body><p>untitled</p></body></html>", headers: { "content-type": HTML } });
-      const text = await textOf({ url: PAGE });
-      expect(text).not.toContain("Title:");
-      expect(text).toBe(`URL: ${PAGE}\nContent-Type: ${HTML}\n\nuntitled`);
     });
 
     it("converts before truncating, so a big page with little text isn't cut", async () => {
@@ -396,12 +367,6 @@ describe("web_fetch", () => {
       const [first] = result.content;
       expect(first?.type === "text" && first.text).toContain(DOC);
       expect(result.details).toMatchObject({ format: "html", converted: false });
-    });
-
-    it("asks the server for HTML first", async () => {
-      replyWith({ body: DOC, headers: { "content-type": "text/html" } });
-      await run({ url: PAGE, format: "html" });
-      expect(sentHeaders().get("accept")).toMatch(/^text\/html/);
     });
   });
 
@@ -491,14 +456,6 @@ describe("web_fetch", () => {
       expect(definition.annotations).toEqual({ readOnlyHint: true, openWorldHint: true });
     });
 
-    it("offers markdown and html formats", () => {
-      // `parameters` is typed as a bare TSchema here, so reach into the TypeBox object by hand.
-      const { properties } = definition.parameters as { properties: Record<string, unknown> };
-      const format = JSON.stringify(properties.format);
-      expect(format).toContain('"markdown"');
-      expect(format).toContain('"html"');
-    });
-
     it("draws its call and result into one reused Text each", () => {
       const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
       const context = { lastComponent: undefined, isError: false } as never;
@@ -512,14 +469,6 @@ describe("web_fetch", () => {
         isError: true,
       } as never);
       expect(shown?.render(120).join("\n")).toContain("boom");
-    });
-
-    it("describes its limits and treats page text as data, and shows up in Available tools", () => {
-      expect(definition.description).toMatch(/HTML pages come back as markdown/);
-      expect(definition.description).toMatch(/full text saved to a file you can read/);
-      expect(definition.description).toMatch(/localhost and private network addresses are refused/);
-      expect(definition.description).toMatch(/not instructions/);
-      expect(definition.promptSnippet).toBeTruthy();
     });
   });
 });

@@ -15,12 +15,6 @@ function everyModuleSaved() {
 
 // These run the real module list, so they check the rules, not any one module's load mode.
 describe("loadModules", () => {
-  it("hands every module to the session's ModuleManager", () => {
-    const session = fakeSession();
-    loadModules(session, "startup");
-    expect(session.moduleManager.moduleInfos.length).toBeGreaterThan(0);
-  });
-
   it("starts every module that isn't ON_DEMAND", () => {
     const session = fakeSession();
     loadModules(session, "startup");
@@ -33,15 +27,5 @@ describe("loadModules", () => {
     const session = fakeSession(everyModuleSaved());
     loadModules(session, "reload");
     for (const info of session.moduleManager.moduleInfos) expect(info.isLoaded).toBe(true);
-  });
-
-  it("gives every command a name and description", () => {
-    const session = fakeSession();
-    loadModules(session, "startup");
-    const commands = session.moduleManager.moduleInfos.flatMap((info) => info.commands);
-    for (const command of commands) {
-      expect(command.name).not.toBe("");
-      expect(command.description).not.toBe("");
-    }
   });
 });

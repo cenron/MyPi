@@ -14,9 +14,17 @@ vi.mock("#tool/web-fetch/index", () => ({
   }),
 }));
 
+// `stopAll` is an instance field, not on the prototype, so the class is swapped rather than spied on.
+vi.mock("#core/job-manager", () => ({
+  JobManager: class {
+    stopAll = () => calls.push("stop jobs");
+  },
+}));
+
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
 
 describe("built-in tool hooks", () => {
+  // On shutdown, jobs stop before the tools' shutdown(), so nothing a job runs outlives the session.
   it("runs init() after every tool is registered and before the modules' init(), and shutdown() on shutdown", () => {
     const handlers = new Map<string, Handler>();
     const pi = {
@@ -51,6 +59,6 @@ describe("built-in tool hooks", () => {
       { type: "session_shutdown", reason: "quit" },
       ctx as unknown as ExtensionContext,
     );
-    expect(calls.at(-1)).toBe("shutdown");
+    expect(calls.slice(-2)).toEqual(["stop jobs", "shutdown"]);
   });
 });

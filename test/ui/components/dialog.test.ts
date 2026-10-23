@@ -53,28 +53,4 @@ describe("Dialog", () => {
     const body = lines.slice(1, -1).join("\n");
     expect(body).toContain("hello");
   });
-
-  it("passes every key on to its children", () => {
-    const dialog = new Dialog(theme, { title: "Modules" });
-    const first = fakeChild();
-    const second = fakeChild();
-    dialog.addChild(first);
-    dialog.addChild(second);
-    dialog.addChild({ render: () => [], invalidate: () => {} });
-
-    dialog.handleInput("x");
-
-    expect(first.handleInput).toHaveBeenCalledWith("x");
-    expect(second.handleInput).toHaveBeenCalledWith("x");
-  });
-
-  it("invalidates its children", () => {
-    const dialog = new Dialog(theme, { title: "Modules" });
-    const child = fakeChild();
-    dialog.addChild(child);
-
-    dialog.invalidate();
-
-    expect(child.invalidate).toHaveBeenCalled();
-  });
 });

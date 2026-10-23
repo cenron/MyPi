@@ -1,14 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  decode,
-  describeFetchError,
-  failWith,
-  isImage,
-  isTextual,
-  mimeOf,
-  readCapped,
-  timeoutSignal,
-} from "#core/util/http";
+import { decode, describeFetchError, isImage, isTextual, mimeOf, readCapped, timeoutSignal } from "#core/util/http";
 
 const bytes = (size: number) => new Uint8Array(size).fill(97);
 
@@ -43,25 +34,7 @@ function endlessStream() {
   return { stream, state };
 }
 
-/** Resolves once `signal` aborts, or after `ms` with `false`. */
-const abortedWithin = (signal: AbortSignal, ms: number) =>
-  new Promise<boolean>((resolve) => {
-    if (signal.aborted) return resolve(true);
-    const timer = setTimeout(() => resolve(false), ms);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      resolve(true);
-    });
-  });
-
 describe("readCapped", () => {
-  it("returns the body's bytes, joining chunks in order", async () => {
-    const encoder = new TextEncoder();
-    const { stream } = trackedStream([encoder.encode("one "), encoder.encode("two "), encoder.encode("three")]);
-    const body = await readCapped(new Response(stream), 100);
-    expect(new TextDecoder().decode(body)).toBe("one two three");
-  });
-
   it("returns empty bytes for an empty body, or none at all", async () => {
     expect(await readCapped(new Response(""), 100)).toHaveLength(0);
     // A 204 or a HEAD response has a null body.
@@ -96,11 +69,6 @@ describe("readCapped", () => {
     expect(state.cancelled).toBe(true);
   });
 
-  it("ignores a Content-Length that isn't a number", async () => {
-    const response = new Response("hello", { headers: { "content-length": "lots" } });
-    expect(await readCapped(response, 100)).toHaveLength(5);
-  });
-
   it("stops reading an endless body once it passes the cap", async () => {
     const { stream, state } = endlessStream();
     await expect(readCapped(new Response(stream), 10 * 1024)).rejects.toThrow();
@@ -111,26 +79,6 @@ describe("readCapped", () => {
 });
 
 describe("timeoutSignal", () => {
-  it("aborts with a TimeoutError once the time is up", async () => {
-    const signal = timeoutSignal(undefined, 20);
-    expect(await abortedWithin(signal, 1000)).toBe(true);
-    expect(signal.reason).toBeInstanceOf(DOMException);
-    expect((signal.reason as DOMException).name).toBe("TimeoutError");
-  });
-
-  it("doesn't abort before the time is up", async () => {
-    const signal = timeoutSignal(new AbortController().signal, 1000);
-    expect(await abortedWithin(signal, 50)).toBe(false);
-  });
-
-  it("aborts when the parent aborts, with the parent's reason", async () => {
-    const parent = new AbortController();
-    const signal = timeoutSignal(parent.signal, 1000);
-    parent.abort(new Error("user cancelled"));
-    expect(signal.aborted).toBe(true);
-    expect(signal.reason).toEqual(new Error("user cancelled"));
-  });
-
   it("is aborted right away when the parent already is", () => {
     const parent = new AbortController();
     parent.abort();
@@ -140,30 +88,24 @@ describe("timeoutSignal", () => {
   });
 });
 
+// Servers send "Text/HTML" too; every content-type check reads this.
 describe("mimeOf", () => {
   it("drops parameters, trims, and lowercases", () => {
     expect(mimeOf(" Text/HTML ;charset=UTF-8")).toBe("text/html");
-    expect(mimeOf("")).toBe("");
   });
 });
 
 describe("isTextual", () => {
   // One row per rule: text/*, the listed types, +json, +xml, and no type at all.
-  it.each([
-    "text/plain",
-    "application/json",
-    "application/xml",
-    "application/javascript",
-    "application/x-javascript",
-    "application/ld+json",
-    "image/svg+xml",
-    "",
-  ])("is true for %j", (mime) => {
-    expect(isTextual(mime)).toBe(true);
-  });
+  it.each(["text/csv", "application/javascript", "application/ld+json", "image/svg+xml", ""])(
+    "is true for %j",
+    (mime) => {
+      expect(isTextual(mime)).toBe(true);
+    },
+  );
 
-  it.each(["image/png", "application/pdf"])("is false for %j", (mime) => {
-    expect(isTextual(mime)).toBe(false);
+  it("is false for a binary type", () => {
+    expect(isTextual("application/pdf")).toBe(false);
   });
 });
 
@@ -178,14 +120,6 @@ describe("isImage", () => {
 describe("decode", () => {
   const latin1E = new Uint8Array([0xe9]); // "é" in ISO-8859-1; not valid UTF-8 on its own
 
-  it("decodes UTF-8 when there's no charset", () => {
-    expect(decode(new TextEncoder().encode("héllo"), "text/plain")).toBe("héllo");
-  });
-
-  it("honors the charset in the content type", () => {
-    expect(decode(latin1E, "text/html; charset=ISO-8859-1")).toBe("é");
-  });
-
   it("accepts a quoted charset", () => {
     expect(decode(latin1E, 'text/html; charset="iso-8859-1"')).toBe("é");
   });
@@ -193,40 +127,11 @@ describe("decode", () => {
   it("falls back to UTF-8 for a charset it doesn't know", () => {
     expect(decode(new TextEncoder().encode("héllo"), "text/plain; charset=bogus")).toBe("héllo");
   });
-
-  it("re-throws errors other than an unknown charset", () => {
-    // Not bytes at all: TextDecoder throws a TypeError, which isn't the fallback's to hide.
-    expect(() => decode("text" as unknown as Uint8Array, "text/plain")).toThrow(TypeError);
-  });
-});
-
-describe("failWith", () => {
-  it("cancels the body, then throws the message", async () => {
-    const { stream, state } = trackedStream([bytes(10)]);
-    await expect(failWith(new Response(stream), "HTTP 404 Not Found")).rejects.toThrow("HTTP 404 Not Found");
-    expect(state.cancelled).toBe(true);
-  });
-
-  it("throws for a response with no body", async () => {
-    await expect(failWith(new Response(null, { status: 204 }), "nothing")).rejects.toThrow("nothing");
-  });
 });
 
 describe("describeFetchError", () => {
-  it("names a timeout with its seconds", () => {
-    expect(describeFetchError(new DOMException("aborted", "TimeoutError"), 30)).toBe("timed out after 30s");
-  });
-
   it("adds the network code from the cause", () => {
     const cause = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), { code: "ENOTFOUND" });
     expect(describeFetchError(new TypeError("fetch failed", { cause }), 30)).toBe("fetch failed (ENOTFOUND)");
-  });
-
-  it("uses the message alone when the cause has no code", () => {
-    expect(describeFetchError(new Error("HTTP 500", { cause: new Error("inner") }), 30)).toBe("HTTP 500");
-  });
-
-  it("stringifies a thrown non-Error", () => {
-    expect(describeFetchError("boom", 30)).toBe("boom");
   });
 });

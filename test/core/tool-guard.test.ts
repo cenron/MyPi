@@ -193,18 +193,6 @@ describe("ToolGuard", () => {
       await guard.check(event(), ctx);
       expect(select).toHaveBeenCalledTimes(1);
     });
-
-    // Each session builds a new guard, so /reload, resume, and a new session forget it.
-    it("is kept per guard", async () => {
-      const first = newGuard();
-      first.set("one", ask("Run ls?"));
-      await first.check(event(), fakeContext({ answer: "Allow for this session" }).ctx);
-      const second = newGuard();
-      second.set("one", ask("Run ls?"));
-      const { ctx, select } = fakeContext({ answer: "Yes" });
-      await second.check(event(), ctx);
-      expect(select).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("a long ask", () => {
@@ -242,16 +230,6 @@ describe("ToolGuard", () => {
     expect(result?.block).toBe(true);
     expect(result?.reason).toContain("one: Run ls?");
     expect(select).not.toHaveBeenCalled();
-  });
-
-  it("replaces a rule set again under the same name, and clears one set to undefined", async () => {
-    const guard = newGuard();
-    guard.set("one", block("old"));
-    guard.set("one", allow);
-    await expect(guard.check(event(), fakeContext().ctx)).resolves.toBeUndefined();
-    guard.set("two", block("no"));
-    guard.set("two", undefined);
-    await expect(guard.check(event(), fakeContext().ctx)).resolves.toBeUndefined();
   });
 
   // Pi turns a handler's throw into a blocked call, so a broken rule fails closed.

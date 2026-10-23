@@ -101,6 +101,8 @@ gets around Plan mode.
 
 - How do children get models and credentials: adapt `ctx.modelRegistry`, or a separate `createModels()`?
 - Where does the SQLite file live, and is it one per pi session or one per project?
+  The [analytics](analytics.md) module plans a SQLite database under `~/.pi/` too: same folder, likely separate
+  files, since pi-durable wants one owning process per storage and analytics has several pi windows writing at once.
 - pi-durable is experimental. Pin an exact version?
 - Which agents ship with MyPi, and on which models?
 

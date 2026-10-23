@@ -67,18 +67,6 @@ describe("Editor", () => {
     await vi.waitFor(() => expect(handler).toHaveBeenCalledOnce());
   });
 
-  it("uses the latest handler for a key", async () => {
-    const { editor, installed } = fakeEditor();
-    const first = vi.fn();
-    const second = vi.fn();
-    editor.onKey("shift+tab", first);
-    editor.onKey("shift+tab", second);
-
-    installed().handleInput?.(SHIFT_TAB);
-    await vi.waitFor(() => expect(second).toHaveBeenCalledOnce());
-    expect(first).not.toHaveBeenCalled();
-  });
-
   it.each([
     [
       "throws",

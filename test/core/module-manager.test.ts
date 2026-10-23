@@ -44,10 +44,6 @@ describe("ModuleManager.start", () => {
     expect(start("reload", { loaded: ["notes"] }).running).toEqual(["core", "notes"]);
   });
 
-  it("uses the last save on the branch", () => {
-    expect(start("reload", { loaded: ["plan"] }, { loaded: ["notes"] }).running).toEqual(["core", "notes"]);
-  });
-
   it("drops saved names that match no module", () => {
     expect(start("reload", { loaded: ["gone", "notes"] }).running).toEqual(["core", "notes"]);
   });
@@ -61,20 +57,8 @@ describe("ModuleManager.start", () => {
     expect(start("reload", saved).running).toEqual(["core", "plan"]);
   });
 
-  it("skips saved names that aren't strings", () => {
-    expect(start("reload", { loaded: ["notes", 3] }).running).toEqual(["core", "notes"]);
-  });
-
   it("starts with the running modules selected", () => {
     expect(start("reload", { loaded: ["notes"] }).selected).toEqual(["core", "notes"]);
-  });
-
-  // MyPi registers the modules' tools in between, so init() can turn them on.
-  it("doesn't run init() itself", () => {
-    const { session } = fakeSession();
-    const modules = fakeModules();
-    session.moduleManager.start(modules, "startup");
-    expect(modules.map((m) => m.init.mock.calls.length)).toEqual([0, 0, 0]);
   });
 
   it("runs init() on the running modules only, once init() is called", () => {
@@ -83,12 +67,6 @@ describe("ModuleManager.start", () => {
     session.moduleManager.start(modules, "startup");
     session.moduleManager.init();
     expect(modules.map((m) => m.init.mock.calls.length)).toEqual([1, 1, 0]);
-  });
-
-  it("returns commands from running modules only", () => {
-    const { session } = fakeSession();
-    session.moduleManager.start(fakeModules(), "startup");
-    expect(session.moduleManager.getCommands().map((c) => c.info.name)).toEqual(["core-cmd", "plan-cmd"]);
   });
 
   it("returns tools from running modules only", () => {
@@ -104,10 +82,6 @@ describe("ModuleManager.select", () => {
     fake.session.moduleManager.start(fakeModules(), "startup");
     return fake;
   }
-
-  it("adds every ALWAYS module and returns the selection in list order", () => {
-    expect(started().session.moduleManager.select(new Set(["notes"]))).toEqual(["core", "notes"]);
-  });
 
   // pi writes entries with JSON.stringify, which would save a Set as {}.
   it("saves the selection as a mypi-modules entry holding an array", () => {

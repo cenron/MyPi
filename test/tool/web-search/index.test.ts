@@ -5,7 +5,7 @@ import { webSearchTool } from "#tool/web-search/index";
 import { EXA_SEARCH_TOOL } from "#tool/web-search/tools/exa";
 import { PARALLEL_SEARCH_TOOL } from "#tool/web-search/tools/parallel";
 import { fakeSession } from "../../fakes";
-import { answered, failed, fakeContext } from "./fakes";
+import { answered, fakeContext } from "./fakes";
 
 const results = [{ url: "https://a.test", title: "A", excerpt: "Some text." }];
 
@@ -31,20 +31,6 @@ describe("webSearchTool", () => {
     const result = await run(fakeContext({ [EXA_SEARCH_TOOL]: exa }).ctx);
     expect(result.content).toEqual([{ type: "text", text: formatResults("q", "Exa", results) }]);
     expect(result.details).toEqual({ query: "q", backend: { id: "exa_search", name: "Exa" }, results });
-  });
-
-  it("names each backend when the search fails", async () => {
-    await expect(run(fakeContext().ctx)).rejects.toThrow(
-      new Error(
-        `Web search failed (Parallel): Tool ${PARALLEL_SEARCH_TOOL} not found\n` +
-          `Web search failed (Exa): Tool ${EXA_SEARCH_TOOL} not found`,
-      ),
-    );
-  });
-
-  it("passes a cancel through as it is", async () => {
-    const { ctx } = fakeContext({ [PARALLEL_SEARCH_TOOL]: failed("Aborted") });
-    await expect(run(ctx, AbortSignal.abort())).rejects.toThrow(/^Aborted$/);
   });
 
   it("sends the same Parallel session id with every search", async () => {

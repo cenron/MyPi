@@ -60,8 +60,8 @@ describe("toResults", () => {
     expect(toResults({ results: [input] })).toEqual(expected);
   });
 
-  it.each([undefined, {}, { results: null }])("throws when the reply has no results list: %j", (reply) => {
-    expect(() => toResults(reply)).toThrow("Parallel's reply has no results list.");
+  it("throws when the reply has no results list", () => {
+    expect(() => toResults({ results: null })).toThrow("Parallel's reply has no results list.");
   });
 
   it("maps a recorded reply", () => {

@@ -42,9 +42,8 @@ afterEach(async () => {
 });
 
 describe("findPlan", () => {
+  // resolveToolPath has the table; this checks findPlan goes through it.
   it("resolves the argument the way the file tools do", async () => {
-    await expect(findPlan(cwd, ".pi/plans/a.md")).resolves.toBe(join(cwd, ".pi", "plans", "a.md"));
-    await expect(findPlan(cwd, "@notes/p.md")).resolves.toBe(join(cwd, "notes", "p.md"));
     await expect(findPlan(cwd, "~/p.md")).resolves.toBe(join(homedir(), "p.md"));
   });
 
@@ -73,13 +72,6 @@ describe("implementInNewSession", () => {
     expect(waitForIdle.mock.invocationCallOrder[0]).toBeLessThan(newSession.mock.invocationCallOrder[0] ?? 0);
   });
 
-  it("lets the caller seed the new session before it starts", async () => {
-    const { ctx, newManager } = fakeCommandContext(cwd);
-    const seed = vi.fn();
-    await implementInNewSession(ctx, await writePlan(), seed);
-    expect(seed).toHaveBeenCalledWith(newManager);
-  });
-
   it("sends the hand-off text, the plan's path, and the plan as the new session's first message", async () => {
     const { ctx, sendUserMessage } = fakeCommandContext(cwd);
     const path = await writePlan();
@@ -88,12 +80,6 @@ describe("implementInNewSession", () => {
     expect(implementMessage(path, "P")).toMatch(
       /^A previous agent produced the plan below[\s\S]*\nPlan file: .*\n\nP$/,
     );
-  });
-
-  // The message's promise resolves when the new run ends; the fake's never does, so awaiting it would hang here.
-  it("doesn't wait for the new session's run, and shows nothing after the switch", async () => {
-    const { ctx } = fakeCommandContext(cwd);
-    await expect(implementInNewSession(ctx, await writePlan(), () => {})).resolves.toBeUndefined();
   });
 
   it("shows a failed first message in the new session", async () => {

@@ -13,6 +13,7 @@ Each module has a doc here, named after its folder in `src/module/`. Start a doc
 
 | Module | Status | Summary |
 |---|---|---|
+| [analytics](analytics.md) | idea | Metrics across sessions and pi instances, per model and effort: tokens, cache, tool failures, shell commands without a tool; later, benchmarks for new models. SQLite under `~/.pi/` |
 | [lm-studio](lm-studio.md) | idea | LM Studio as a provider, with models read live from a local or remote server |
 | [lsp](lsp.md) | idea | Language-server diagnostics after edits, plus definition, references, and hover |
 | [notifications](notifications.md) | idea | A desktop notification when the agent is done or a dialog is waiting |

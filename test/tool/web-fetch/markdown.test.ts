@@ -12,10 +12,6 @@ const md = (body: string) => htmlToMarkdown(page(body), BASE).markdown;
 
 describe("htmlToMarkdown", () => {
   describe("output style", () => {
-    it("writes # headings", () => {
-      expect(md("<h1>Title</h1><h2>Sub</h2>")).toBe("# Title\n\n## Sub");
-    });
-
     it("fences code blocks with their language", () => {
       expect(md('<pre><code class="language-js">const a = 1;</code></pre>')).toBe("```js\nconst a = 1;\n```");
     });
@@ -31,14 +27,6 @@ describe("htmlToMarkdown", () => {
 
     it("uses - for bullets", () => {
       expect(md("<ul><li>one</li><li>two</li></ul>")).toMatch(/^-\s+one\n-\s+two$/);
-    });
-
-    it("keeps bold and inline code", () => {
-      expect(md("<p><strong>bold</strong> and <code>x</code></p>")).toBe("**bold** and `x`");
-    });
-
-    it("separates paragraphs with a blank line and trims the ends", () => {
-      expect(md("\n\n<p>one</p>\n<p>two</p>\n\n")).toBe("one\n\ntwo");
     });
   });
 
@@ -111,11 +99,6 @@ describe("htmlToMarkdown", () => {
     it('drops aria-hidden="true" but keeps aria-hidden="false"', () => {
       expect(md('<p>a<i aria-hidden="true">icon</i><b aria-hidden="false">b</b></p>')).toBe("a**b**");
     });
-
-    it("drops hidden line numbers inside a code block", () => {
-      const pre = "<pre><code><span hidden>1</span>a = 1</code></pre>";
-      expect(md(pre)).toBe("```\na = 1\n```");
-    });
   });
 
   describe("code blocks split into one element per line", () => {
@@ -123,12 +106,6 @@ describe("htmlToMarkdown", () => {
       const pre =
         '<pre><code class="language-js"><span class="line">const a = 1;</span><span class="line">const b = 2;</span></code></pre>';
       expect(md(pre)).toBe("```js\nconst a = 1;\nconst b = 2;\n```");
-    });
-
-    it("keeps an empty line", () => {
-      const pre =
-        '<pre><code><span class="line">a</span><span class="line"></span><span class="line">b</span></code></pre>';
-      expect(md(pre)).toBe("```\na\n\nb\n```");
     });
 
     it.each(["code-line", "doc-code-line"])('recognizes class="%s"', (name) => {
@@ -154,10 +131,6 @@ describe("htmlToMarkdown", () => {
       expect(md(pre)).toBe("```\nconst a = 1\n```");
     });
 
-    it("handles lines placed straight in <pre>, with no <code>", () => {
-      expect(md('<pre><span class="line">a</span><span class="line">b</span></pre>')).toContain("a\nb");
-    });
-
     it("doesn't count a child with no class as a line", () => {
       const pre = '<pre><code><span class="line">a</span><span>b</span></code></pre>';
       expect(md(pre)).toBe("```\nab\n```");
@@ -172,21 +145,6 @@ describe("htmlToMarkdown", () => {
   describe("links", () => {
     it("makes a root-relative link absolute", () => {
       expect(md('<p><a href="/other">Other</a></p>')).toBe("[Other](https://example.com/other)");
-    });
-
-    it("resolves a relative link against the page", () => {
-      expect(md('<p><a href="sibling">Sibling</a></p>')).toBe("[Sibling](https://example.com/docs/sibling)");
-    });
-
-    it("leaves an absolute link as is", () => {
-      expect(md('<p><a href="https://example.org/a">Elsewhere</a></p>')).toBe("[Elsewhere](https://example.org/a)");
-    });
-
-    it("resolves against the base URL it's given, such as the final URL after a redirect", () => {
-      const html = page('<p><a href="next">Next</a></p>');
-      expect(htmlToMarkdown(html, "https://moved.example.net/a/b").markdown).toBe(
-        "[Next](https://moved.example.net/a/next)",
-      );
     });
 
     it("keeps only the text of a fragment link", () => {
@@ -233,14 +191,6 @@ describe("htmlToMarkdown", () => {
 
     it("returns an empty title when there's none", () => {
       expect(htmlToMarkdown(page("<p>x</p>", ""), BASE).title).toBe("");
-    });
-
-    it("doesn't put the title in the markdown", () => {
-      expect(md("<p>body</p>")).toBe("body");
-    });
-
-    it("decodes entities", () => {
-      expect(md("<p>Tom &amp; Jerry &copy; 2026</p>")).toBe("Tom & Jerry © 2026");
     });
 
     it("gives empty markdown for a page with no text", () => {

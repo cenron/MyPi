@@ -57,12 +57,6 @@ const bashCall = {
 } as ToolCallEvent;
 
 describe("BaseModule", () => {
-  it("gives a module no-op init() and no commands by default", () => {
-    const module = new Counter(fakeSession().session);
-    expect(() => module.init()).not.toThrow();
-    expect(module.commands()).toEqual([]);
-  });
-
   it("saves the module's state as mypi-module-<name>", () => {
     const { session, appendEntry } = fakeSession();
     new Counter(session).save(1);
@@ -124,10 +118,6 @@ describe("BaseModule", () => {
     new Counter(session, "other").guard(() => ({ kind: "allow" }));
     new Counter(session).guard(() => ({ kind: "block", reason: "new" }));
     await expect(session.toolGuard.check(bashCall, ctx)).resolves.toEqual({ block: true, reason: "new" });
-  });
-
-  it("has no tools by default", () => {
-    expect(new Counter(fakeSession().session).tools()).toEqual([]);
   });
 
   it("adds a tool to the active tools and removes it, leaving the rest in order", () => {

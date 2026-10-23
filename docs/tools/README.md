@@ -30,7 +30,7 @@ The must-haves:
 | [web_search](web-search.md) | done | Search the web through keyless search services; returns titles, URLs, and excerpts |
 | [web_fetch](web-fetch.md) | done | Fetch a public URL and return readable markdown, capped, with the full text saved when cut |
 | [todo](todo.md) | idea | A checklist the agent keeps while it works, shown to the user |
-| [background process](background-process.md) | idea | Start long-running commands, read their output, stop them, and get told when they exit; monitor output |
+| [background process](background-process.md) | building | Start long-running commands, read their output, stop them, and get told when they exit; monitor output |
 | [apply_patch](apply-patch.md) | idea | Multi-file edits in Codex's patch format |
 | [worktree](worktree.md) | idea | Optionally work in a git worktree: create, enter, exit, remove |
 
@@ -57,7 +57,8 @@ Built (2026-10-21), the same way as `src/command/`:
   shutdown? }`, with `definition` built by `defineTool({ … })`.
 - `init()` runs on `session_start` once every tool is registered; `shutdown()` runs on `session_shutdown` and must be
   idempotent. Only tools that keep state or resources need them: web_fetch closes its connection pool in
-  `shutdown()`, and todo and background process will use both.
+  `shutdown()`, and todo will use both. Background process keeps its jobs in core instead (`session.jobs`), since
+  subagents will share them, and `MyPi.onSessionEnd` stops them.
 - `createTools(session)` in `src/tool/index.ts` lists them. `registerTools(pi, session)` registers that list, then the
   running modules' `tools()`.
 - `MyPi.onSessionStart` calls `registerTools` on every `session_start`, after the modules are picked and before their

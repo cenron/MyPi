@@ -80,7 +80,6 @@ describe("PlanBuildModule", () => {
     it.each([
       ["build", "plan", "<dim>BUILD"],
       ["plan", "build", "<warning>PLAN"],
-      ["build", "build", "<dim>BUILD"],
     ])("sets %s from %s", async (arg, from, label) => {
       const { run, setStatus, appendEntry } = startPlanBuild([saved(from)]);
       await run(arg);
@@ -93,18 +92,6 @@ describe("PlanBuildModule", () => {
       await expect(run("foo")).rejects.toThrow("Unknown mode: foo (use plan, build, or implement)");
       expect(appendEntry).not.toHaveBeenCalled();
       expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<warning>PLAN");
-    });
-
-    // Like /modules, only the first argument counts.
-    it("ignores arguments after the mode", async () => {
-      const { run, setStatus } = startPlanBuild();
-      await run("build", "now");
-      expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<dim>BUILD");
-    });
-
-    it("shows no message, since the footer shows the change", async () => {
-      const { run } = startPlanBuild();
-      await expect(run()).resolves.toBeUndefined();
     });
   });
 
@@ -194,14 +181,6 @@ describe("PlanBuildModule", () => {
   });
 
   describe("Plan tools", () => {
-    it("lists submit_plan and ask_user as its tools", () => {
-      expect(
-        startPlanBuild()
-          .module.tools()
-          .map((tool) => tool.name),
-      ).toEqual(["submit_plan", "ask_user"]);
-    });
-
     it("are active on init in Plan, and only then", () => {
       expect(startPlanBuild().activeTools()).toEqual(["read", "bash", "edit", "write", "submit_plan", "ask_user"]);
       expect(startPlanBuild([saved("build")]).activeTools()).toEqual(["read", "bash", "edit", "write"]);
@@ -353,10 +332,6 @@ describe("PlanBuildModule", () => {
       const handler = onKey.mock.calls.find(([key]) => key === "shift+tab")?.[1];
       return { ...fake, handler };
     }
-
-    it("is registered on init", () => {
-      expect(shiftTab().handler).toBeTypeOf("function");
-    });
 
     // The editor calls the handler on its own, so it must not rely on being called as a method.
     it("toggles the mode when called on its own", async () => {

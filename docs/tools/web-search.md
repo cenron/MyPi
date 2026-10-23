@@ -83,7 +83,7 @@ which is cleaner.
 | Tool | `webSearchTool(session)` in `src/tool/web-search/index.ts`, registered by `registerTools` (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. `promptSnippet` adds a line to pi's tool list in the system prompt. `reachesTools` lists the backend's tool, so pi waits for its server to connect. `details` is `SearchDetails { query; backend: { id, name }; results }`, for rendering. |
 | Backend | `SearchBackend { id; name; tool; search(ctx, query) → SearchResult[] }` and `SearchResult { url; title?; excerpt?; published? }` in `src/tool/web-search/types.ts` | One file per backend. `search` takes the tool's `ctx` and no signal: `ctx.executeTool` uses the calling tool's signal. A failed search throws. |
 | MCP call | Each backend is a server in MyPi's [MCP server list](../mcp/README.md), connected by pi's own client. A backend calls `callMcpTool(ctx, "mcp__parallel__web_search", …)` (`src/tool/utils.ts`), which runs `ctx.executeTool` and returns `structuredContent`: the whole MCP result, where the model's copy in `content` is cut at 20 KB. | Decided 2026-10-22, instead of OpenCode's `mcpCall` POST helper: pi already handles connecting, keys in headers, Exa's event stream, and turning a server off in `/mcp`. web_search declares `reachesTools`, so pi waits for the servers to connect before the call runs. Pi doesn't retry tool calls (only connecting, and read-only requests once), so an HTTP 429 reaches the backend as `MCP HTTP request failed with status 429: <body>`, without `Retry-After`. |
-| Backends | Parallel first, Exa as fallback | Both keyless. TinyFish and Tavily are keyless extras. A self-hosted SearXNG is the unmetered option. DuckDuckGo is out: it has no search API (the Instant Answer API returns topic summaries), only HTML scraping, which breaks with the page and meets CAPTCHAs; OpenCode doesn't use it either. |
+| Backends | Parallel first, Exa as fallback | Both keyless. TinyFish and Tavily are keyless extras. A self-hosted SearXNG is the unmetered option, for later (see [Later](#later)). Order decided 2026-10-22: Parallel, then Exa. DuckDuckGo is out: it has no search API (the Instant Answer API returns topic summaries), only HTML scraping, which breaks with the page and meets CAPTCHAs; OpenCode doesn't use it either. |
 | Fallback | `searchInOrder` in `src/tool/web-search/search.ts`: on HTTP 429, or the backend's tool not found (its server off in `/mcp` or not connected), try the next backend | A plain ordered list, tried from the top on every search. Skip OpenCode's random pick and cooldown map until rate limits actually hurt. |
 | Keys | `PARALLEL_API_KEY` and `EXA_API_KEY`, the same names as OpenCode. When one is set, the server's config gets a header naming it (`Authorization: Bearer ${PARALLEL_API_KEY}`, `x-api-key: ${EXA_API_KEY}`), and pi resolves it when it connects | Keyless without them. The key never appears in MyPi's code, config, or logs. A full `mcp.json` entry overrides anything else. See [Keys](../mcp/README.md#keys). |
 | Rendering | `renderCall` / `renderResult`, from `formatCall` and `formatResult` in `src/tool/web-search/render.ts` | `web_search "query"`, then `10 results from Parallel` and one `Title · site` line per result, collapsed, or each result's title, URL, date, and excerpt, expanded (slice 4). |
@@ -148,7 +148,7 @@ which is cleaner.
      true (`status 429`, or `Tool … not found`); any other error fails at once. A failure throws one
      `Web search failed (<name>): <text>` line per backend tried. A cancel is rethrown as it is.
    - `reachesTools` lists both backends' tools; the header and `details.backend` name the one that answered.
-   - Tests: `test/tool/utils.test.ts`, `test/core/util/guards.test.ts`, and under `test/tool/web-search/`, mirroring
+   - Tests: `test/tool/utils.test.ts`, and under `test/tool/web-search/`, mirroring
      `src/`: `tools/exa.test.ts` (a `parseExa` table and a recorded reply cut short), `search.test.ts` (a table of the
      fallback rules, and the order, with fake backends), and `index.test.ts` for wiring. Shared fakes in
      `test/tool/web-search/fakes.ts`: a `ctx` that answers by tool name, and says "not found" for any other, as pi does.
@@ -192,9 +192,22 @@ which is cleaner.
 
 ## Open questions
 
-- Backend order: Parallel then Exa, or SearXNG on the cluster first?
 - First-use consent like OpenCode's, or just on?
 - Can the user turn a built-in tool off (a `/tools` toggle like `/modules`), or is it always on?
+
+## Later
+
+- **A self-hosted SearXNG** (not now, 2026-10-22: no local install yet). It would be the unmetered backend, with no
+  rate limits and no third party seeing the queries, run on a machine on the local network. Notes for when it happens:
+  - SearXNG has no MCP server: it answers `GET /search?q=…&format=json` (the `json` format has to be enabled in its
+    `settings.yml`). So it would be the first backend that isn't an MCP server: a plain fetch through `undici`, like
+    web_fetch, rather than `callMcpTool`, and nothing for `reachesTools` to wait on.
+  - Its URL is per machine, so it would come from an environment variable (such as `SEARXNG_URL`), and the backend
+    would be in the list only when that's set, the way the key headers work.
+  - Order: probably first when it's configured, then Parallel and Exa as fallback. `searchInOrder` already handles
+    any order; `canFallBack` would need its own rule for a SearXNG that's down (a refused connection or a timeout).
+  - Its JSON results carry `url`, `title`, `content`, and sometimes `publishedDate`, which map to `SearchResult`
+    directly.
 
 ## References
 

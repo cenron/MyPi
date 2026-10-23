@@ -12,14 +12,9 @@ describe("formatResults", () => {
     ["links the title to the page", [{ url: "https://a.test", title: "A" }], "## [A](https://a.test)"],
     ["uses the URL as the heading when there's no title", [{ url: "https://a.test" }], "## <https://a.test>"],
     [
-      "adds the date",
-      [{ url: "https://a.test", title: "A", published: "2026-01-02" }],
-      "## [A](https://a.test)\nPublished: 2026-01-02",
-    ],
-    [
-      "puts the excerpt after a blank line",
-      [{ url: "https://a.test", title: "A", excerpt: "Some text." }],
-      "## [A](https://a.test)\n\nSome text.",
+      "adds the date, then the excerpt after a blank line",
+      [{ url: "https://a.test", title: "A", published: "2026-01-02", excerpt: "Some text." }],
+      "## [A](https://a.test)\nPublished: 2026-01-02\n\nSome text.",
     ],
     [
       "separates results with a rule",

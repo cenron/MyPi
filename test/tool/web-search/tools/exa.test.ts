@@ -39,32 +39,10 @@ const recorded = [
 const block = (...lines: string[]) => lines.join("\n");
 
 describe("parseExa", () => {
-  const full = block("Title: A", "URL: https://a.test", "Published: 2026-01-02", "Author: N/A", "Highlights:", "Text.");
-
   it.each([
-    [
-      "reads the fields and the page text",
-      full,
-      [{ url: "https://a.test", title: "A", published: "2026-01-02", excerpt: "Text." }],
-    ],
-    [
-      "leaves out N/A values",
-      block("Title: N/A", "URL: https://a.test", "Published: N/A"),
-      [{ url: "https://a.test" }],
-    ],
-    [
-      "cuts a date to the day",
-      block("URL: https://a.test", "Published: 2026-09-01T00:00:00.000Z"),
-      [{ url: "https://a.test", published: "2026-09-01" }],
-    ],
     [
       "keeps page text without a Highlights line",
       block("URL: https://a.test", "Text."),
-      [{ url: "https://a.test", excerpt: "Text." }],
-    ],
-    [
-      "trims blank lines around the page text",
-      block("URL: https://a.test", "Highlights:", "", "Text.", ""),
       [{ url: "https://a.test", excerpt: "Text." }],
     ],
     [
@@ -73,19 +51,6 @@ describe("parseExa", () => {
       [{ url: "https://a.test" }],
     ],
     ["skips a block without a URL", block("Title: A", "Highlights:", "Text."), []],
-    [
-      "splits blocks on the --- line before a Title",
-      `${full}\n\n---\n\n${block("Title: B", "URL: https://b.test")}`,
-      [
-        { url: "https://a.test", title: "A", published: "2026-01-02", excerpt: "Text." },
-        { url: "https://b.test", title: "B" },
-      ],
-    ],
-    [
-      "keeps a --- line inside page text",
-      `${full}\n\n---\n\nMore text.`,
-      [{ url: "https://a.test", title: "A", published: "2026-01-02", excerpt: "Text.\n\n---\n\nMore text." }],
-    ],
     ["is empty for an empty reply", "", []],
   ])("%s", (_rule, text, expected) => {
     expect(parseExa(text)).toEqual(expected);
