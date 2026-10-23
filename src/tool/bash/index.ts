@@ -91,7 +91,7 @@ export function bashTool(session: Session): Tool {
 }
 
 /** A job that runs `command` in `cwd` through pi's own shell, with no time limit. */
-export function shellJob(command: string, cwd: string): JobSpec {
+function shellJob(command: string, cwd: string): JobSpec {
   return {
     kind: "shell",
     label: command,

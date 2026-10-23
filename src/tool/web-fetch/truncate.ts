@@ -1,8 +1,6 @@
-import { randomBytes } from "node:crypto";
 import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, truncateHead } from "@earendil-works/pi-coding-agent";
+import { tempFilePath } from "#core/util/paths";
 
 /** What `truncate` returns: the text to send, whether it was cut, and where the whole text was saved if so. */
 export type Truncated = { text: string; truncated: boolean; fullTextPath?: string };
@@ -36,7 +34,7 @@ export async function truncate(text: string, extension: string): Promise<Truncat
  * there. `undefined` when it can't be written: the cut text still goes back, only without a path.
  */
 async function saveFullText(text: string, extension: string): Promise<string | undefined> {
-  const path = join(tmpdir(), `pi-web-fetch-${randomBytes(8).toString("hex")}${extension}`);
+  const path = tempFilePath("pi-web-fetch", extension);
   try {
     await writeFile(path, text, { mode: 0o600, flag: "wx" });
     return path;

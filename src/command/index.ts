@@ -4,7 +4,6 @@ import type { Session } from "#core/session";
 import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { modulesCmd } from "./modules";
-import { myPiCmd } from "./mypi";
 
 /** Registers MyPi's own commands, then the running modules', each wrapped in `runCommand`. */
 export function registerCommand(pi: ExtensionAPI, session: Session) {
@@ -21,7 +20,7 @@ export function registerCommand(pi: ExtensionAPI, session: Session) {
 
 /** MyPi's own commands. Add new ones here. */
 const createCommand = (session: Session): Command[] => {
-  return [myPiCmd(session), modulesCmd(session)];
+  return [modulesCmd(session)];
 };
 
 /** Runs a command, shows its returned message as `info`, and turns a thrown error into an `error` notification. */

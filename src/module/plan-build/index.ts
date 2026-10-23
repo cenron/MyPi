@@ -9,7 +9,7 @@ import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
 import { planCmd } from "./commands/plan";
-import { offerPlan, PLAN_CHOICES } from "./dialog";
+import { offerPlan } from "./dialog";
 import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
 import { planRule } from "./rule";
 import { ASK_USER, askUserTool } from "./tools/ask-user";
@@ -21,7 +21,8 @@ const PLAN_TOOLS = [SUBMIT_PLAN, ASK_USER];
 
 export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   private mode: Mode = Mode.PLAN;
-  private _submittedPlan: SubmittedPlan | undefined;
+  /** The plan `submit_plan` saved in this run, until the dialog takes it or the next run starts. In memory only. */
+  private submittedPlan: SubmittedPlan | undefined;
 
   private footerItems: Record<Mode, FooterItem> = {
     [Mode.PLAN]: { text: "PLAN", color: FooterColor.Warning },
@@ -56,11 +57,6 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
   }
 
-  /** The plan `submit_plan` saved in this run, until the dialog takes it or the next run starts. In memory only. */
-  get submittedPlan(): SubmittedPlan | undefined {
-    return this._submittedPlan;
-  }
-
   commands(): Command[] {
     return [
       planCmd({
@@ -74,13 +70,13 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   /** `submit_plan` and `ask_user`, registered inactive; `applyPlanTools` turns them on in Plan only. */
   tools(): ToolDefinition[] {
     // defineTool lets each tool's own parameter types fit in one list.
-    return [defineTool(submitPlanTool((plan) => (this._submittedPlan = plan))), defineTool(askUserTool())];
+    return [defineTool(submitPlanTool((plan) => (this.submittedPlan = plan))), defineTool(askUserTool())];
   }
 
   private initEventHandlers() {
     // before_agent_start fires once per run; agent_start fires again on each retry or continuation within it.
     this.session.pi.on("before_agent_start", () => {
-      this._submittedPlan = undefined;
+      this.submittedPlan = undefined;
     });
     this.session.pi.on("agent_settled", (ev, ctx) => this.onAgentSettled(ev, ctx));
   }
@@ -90,10 +86,10 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
    * meanwhile until the settle is done, so Implement's message starts a new run instead of joining this one.
    */
   private async onAgentSettled(ev: AgentSettledEvent, ctx: ExtensionContext) {
-    const plan = this._submittedPlan;
+    const plan = this.submittedPlan;
     if (ev.aborted || !plan || !ctx.hasUI || this.mode !== Mode.PLAN) return;
 
-    this._submittedPlan = undefined;
+    this.submittedPlan = undefined;
     const actions: PlanActions = {
       switchToBuild: () => this.setMode(Mode.BUILD),
       sendUserMessage: (text) => this.session.pi.sendUserMessage(text),
@@ -104,7 +100,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
           expandPromptTemplates: true,
         }),
     };
-    await offerPlan(ctx, plan, PLAN_CHOICES, actions);
+    await offerPlan(ctx, plan, actions);
   }
 
   private toggleMode() {

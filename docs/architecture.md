@@ -140,7 +140,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
       expand `~` and `~/` (not `~user`), convert `file://` URLs, then resolve against `cwd`. A test compares it with
       pi's own function, so a pi upgrade that changes resolution fails there. `isInside(dir, path)` is a
       `path.relative` check, since `startsWith` lets `.pi/plans-evil/` through. It's true for `dir` itself, and it
-      compares text only: a symlink under `dir` that points outside counts as inside.
+      compares text only: a symlink under `dir` that points outside counts as inside. `tempFilePath(prefix, ext)` is
+      a new random path in `os.tmpdir()` (`<prefix>-<16 hex><ext>`), for job logs and web_fetch's saved full text;
+      create it with `flag: "wx"`.
 - **`JobManager`** (`job-manager.ts`) is `session.jobs`: long-running work that goes on after the tool call that
   started it. A job is a `JobSpec` (`kind`, `label`, `run(signal, write)`; in `types.ts` with `JobInfo` and
   `JobStatus`); `start` gives it an id counting up from 1, a log file (`pi-job-<hex>.log` in `os.tmpdir()`, `0600`,
@@ -179,9 +181,8 @@ them from `commands()`.
 
 To add a command, create `src/command/<name>.ts` exporting a function that takes the `Session` and returns a `Command`,
 then add it to the list in `createCommand`. A command that needs more than one file gets a folder,
-`src/command/<name>/`, with the command in `index.ts`. `/myPi` is a placeholder showing the shape. `/modules` opens
-the module modal and `/modules list` prints each module as `loaded: <name>` or `not loaded: <name>`; see
-[Module loading](#module-loading).
+`src/command/<name>/`, with the command in `index.ts`. `/modules` opens the module modal and `/modules list` prints
+each module as `loaded: <name>` or `not loaded: <name>`; see [Module loading](#module-loading).
 
 ## Tools
 
@@ -214,6 +215,8 @@ the module modal and `/modules list` prints each module as `loaded: <name>` or `
 - Tools can't be unregistered (only withdrawn by registering again with `exposure: "hidden"`). As with commands, a
   tool that isn't registered on the next `session_start` is gone after `/reload`.
 - Set `annotations` truthfully: `ToolGuard` and plan-build's rule read `readOnlyHint`.
+- A renderer returns `reuseText(context.lastComponent, text)` (`src/tool/utils.ts`): one `Text` per slot, reused
+  across redraws, as pi's own tools do.
 - **Overriding a pi tool:** a tool registered with a built-in's name replaces it. `bash` (`src/tool/bash/`) builds pi's
   own with `createBashToolDefinition`, spreads it to keep its prompt text and `outputSchema`, adds its own parameters,
   and hands the calls it doesn't handle to pi's `execute`. pi's tool definitions carry no renderers: pi draws its
@@ -410,7 +413,7 @@ Imports use Node subpath imports, declared under `imports` in `package.json`:
 | Alias             | Resolves to             | Example                                           |
 |-------------------|-------------------------|---------------------------------------------------|
 | `#core/<file>`    | `src/core/<file>.ts`    | `import { Session } from "#core/session";`        |
-| `#command/<file>` | `src/command/<file>.ts` | `import { myPiCmd } from "#command/mypi";`        |
+| `#command/<file>` | `src/command/<file>.ts` | `import { modulesCmd } from "#command/modules";`  |
 | `#tool/<file>`    | `src/tool/<file>.ts`    | `import { registerTools } from "#tool/index";`    |
 | `#module/<file>`  | `src/module/<file>.ts`  | `import { loadModules } from "#module/index";`    |
 | `#ui/<file>`      | `src/ui/<file>.ts`      | `import { Dialog } from "#ui/components/dialog";` |

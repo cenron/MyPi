@@ -1,4 +1,5 @@
 import { type ExtensionToolContext, keyText } from "@earendil-works/pi-coding-agent";
+import { type Component, Text } from "@earendil-works/pi-tui";
 import type { JobInfo } from "#core/types";
 import { isRecord } from "#core/util/guards";
 
@@ -51,6 +52,21 @@ export function textOf(content: unknown): string {
  */
 export function expandKey(): string {
   return keyText("app.tools.expand") || "ctrl+o";
+}
+
+/**
+ * A renderer's `Text` with `content` set: the one pi passed back as `lastComponent`, or a new one the first time. One
+ * `Text` per slot, reused across redraws, as pi's own tools do.
+ *
+ * @example
+ * renderCall(args, theme, context) {
+ *   return reuseText(context.lastComponent, formatCall(args, theme));
+ * },
+ */
+export function reuseText(lastComponent: Component | undefined, content: string): Text {
+  const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
+  text.setText(content);
+  return text;
 }
 
 /**

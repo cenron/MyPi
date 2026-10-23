@@ -25,7 +25,7 @@ export class Session {
     this._moduleManager = new ModuleManager(this);
     this._footer = new Footer(this.ctx);
     this._editor = new Editor(this.ctx);
-    this._promptManager = new PromptManager(this.ctx);
+    this._promptManager = new PromptManager();
     this._toolGuard = new ToolGuard(this.pi);
     this._jobs = new JobManager();
     // How many jobs are running, of any kind, shown only while there are some.

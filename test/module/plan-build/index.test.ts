@@ -204,20 +204,6 @@ describe("PlanBuildModule", () => {
       await run("plan");
       expect(setActiveTools).not.toHaveBeenCalled();
     });
-
-    it("keeps the plan it saved as the submitted plan", async () => {
-      const { module, tools } = startPlanBuild();
-      expect(module.submittedPlan).toBeUndefined();
-      const cwd = await mkdtemp(join(tmpdir(), "mypi-plan-build-"));
-      try {
-        await tools.get("submit_plan")?.execute("call-1", { title: "T", plan: "P" }, undefined, undefined, {
-          cwd,
-        } as never);
-        expect(module.submittedPlan).toMatchObject({ title: "T", plan: "P", path: expect.stringContaining(cwd) });
-      } finally {
-        await rm(cwd, { recursive: true, force: true });
-      }
-    });
   });
 
   describe("plan dialog", () => {

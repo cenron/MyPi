@@ -1,15 +1,13 @@
-import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DEFAULT_MAX_BYTES } from "@earendil-works/pi-coding-agent";
 import type { JobInfo, JobSpec, JobStatus } from "#core/types";
 import { errorMessage } from "./util/errors";
+import { tempFilePath } from "./util/paths";
 
 /** A started job: its info as it changes, a promise that settles once it has ended, and its last output lines. */
 export type Job = { readonly info: JobInfo; readonly done: Promise<JobInfo>; tail(lines: number): string };
 
-/** A job and what only the registry touches: its stop switch, its log, and its output so far. */
+/** A job and what only the registry touches: its stop switch. */
 type Entry = Job & { controller: AbortController };
 
 /**
@@ -115,7 +113,7 @@ export class JobManager {
       label: spec.label,
       status: status,
       startedAt: Date.now(),
-      logPath: join(tmpdir(), `pi-job-${randomBytes(8).toString("hex")}.log`),
+      logPath: tempFilePath("pi-job", ".log"),
     };
 
     this.currentJobId++;

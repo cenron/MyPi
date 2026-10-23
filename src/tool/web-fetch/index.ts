@@ -5,11 +5,10 @@ import {
   defineTool,
   formatSize,
 } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { Agent, fetch } from "undici";
 import type { Session } from "#core/session";
-import { errorMessage } from "#core/util/errors";
+import { errorMessage, isNodeError } from "#core/util/errors";
 import {
   decode,
   describeFetchError,
@@ -21,6 +20,7 @@ import {
   timeoutSignal,
 } from "#core/util/http";
 import type { Tool } from "#tool/types";
+import { reuseText } from "#tool/utils";
 import { assertPublicHost, BLOCKED, publicLookup } from "./address";
 import { htmlToMarkdown } from "./markdown";
 import { formatCall, formatResult } from "./render";
@@ -74,17 +74,9 @@ export function webFetchTool(_session: Session): Tool {
     promptSnippet: "Fetch an http(s) URL and read its text",
     parameters,
     annotations: { readOnlyHint: true, openWorldHint: true },
-    // One Text per slot, reused across redraws, as pi's own tools do.
-    renderCall(args, theme, context) {
-      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-      text.setText(formatCall(args, theme));
-      return text;
-    },
-    renderResult(result, { expanded }, theme, context) {
-      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-      text.setText(formatResult(result, expanded, context.isError, theme));
-      return text;
-    },
+    renderCall: (args, theme, context) => reuseText(context.lastComponent, formatCall(args, theme)),
+    renderResult: (result, { expanded }, theme, context) =>
+      reuseText(context.lastComponent, formatResult(result, expanded, context.isError, theme)),
     async execute(_toolCallId, { url, timeout, format }, signal) {
       const parsedUrl = new URL(url);
       assertHttp(parsedUrl);
@@ -198,8 +190,7 @@ async function request(url: URL, userAgent: string, { format, signal, dispatcher
 }
 
 /** True for `publicLookup`'s refusal. */
-const isBlocked = (error: unknown): error is Error =>
-  error instanceof Error && (error as NodeJS.ErrnoException).code === BLOCKED;
+const isBlocked = (error: unknown): error is Error => isNodeError(error) && error.code === BLOCKED;
 
 /** The file extension for the saved full text: what the model would expect to `read`. */
 function extensionFor(mime: string, converted: boolean): string {

@@ -1,4 +1,3 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { PromptManager } from "#core/prompt-manager";
 
@@ -12,7 +11,7 @@ function applied(prompts: PromptManager) {
   return sections;
 }
 
-const newPromptManager = () => new PromptManager({} as ExtensionContext);
+const newPromptManager = () => new PromptManager();
 
 describe("PromptManager", () => {
   it("writes each prompt as the mypi-<name> section", () => {

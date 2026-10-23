@@ -18,7 +18,6 @@ const parameters = Type.Object({
  */
 export function submitPlanTool(
   onSubmit: (plan: SubmittedPlan) => void,
-  now: () => Date = () => new Date(),
 ): ToolDefinition<typeof parameters, { path: string }> {
   return {
     name: SUBMIT_PLAN,
@@ -29,7 +28,7 @@ export function submitPlanTool(
     parameters,
     defaultActive: false,
     async execute(_toolCallId, { title, plan }: Static<typeof parameters>, _signal, _onUpdate, ctx) {
-      const path = await savePlan(ctx.cwd, title, plan, now());
+      const path = await savePlan(ctx.cwd, title, plan, new Date());
       onSubmit({ title, plan, path });
       return { content: [{ type: "text", text: `Plan saved to ${path}.` }], details: { path } };
     },

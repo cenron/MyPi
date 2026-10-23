@@ -11,13 +11,16 @@ describe("submitPlanTool", () => {
   let cwd: string;
   beforeEach(async () => {
     cwd = await mkdtemp(join(tmpdir(), "mypi-submit-"));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
   });
   afterEach(async () => {
+    vi.useRealTimers();
     await rm(cwd, { recursive: true, force: true });
   });
 
   const run = (onSubmit = vi.fn()) =>
-    submitPlanTool(onSubmit, () => now).execute("call-1", { title: "Add it", plan: "Steps." }, undefined, undefined, {
+    submitPlanTool(onSubmit).execute("call-1", { title: "Add it", plan: "Steps." }, undefined, undefined, {
       cwd,
     } as ExtensionToolContext);
 

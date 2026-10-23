@@ -19,11 +19,7 @@ export class ModuleManager {
   start(modules: Module[], reason: SessionStartEvent["reason"]) {
     this.modules = modules;
 
-    this.running = this.pickLoaded(
-      reason,
-      this.savedSelection(),
-      modules.map((module) => module.info),
-    );
+    this.running = this.pickLoaded(reason, this.savedSelection());
     this.selected = new Set(this.running);
   }
 
@@ -32,9 +28,7 @@ export class ModuleManager {
    * ignores tool names that aren't registered yet.
    */
   init() {
-    for (const module of this.modules) {
-      if (this.running.has(module.info.name)) module.init();
-    }
+    for (const module of this.runningModules()) module.init();
   }
 
   /** Copies of every module's info, with `isLoaded` (running) and `isSelected` (chosen for the next reload). */
@@ -51,24 +45,25 @@ export class ModuleManager {
 
   /** Commands of the running modules only. */
   getCommands(): Command[] {
-    return this.modules.filter((module) => this.running.has(module.info.name)).flatMap((module) => module.commands());
+    return this.runningModules().flatMap((module) => module.commands());
   }
 
   /** Tools of the running modules only. */
   getTools(): ToolDefinition[] {
-    return this.modules.filter((module) => this.running.has(module.info.name)).flatMap((module) => module.tools());
+    return this.runningModules().flatMap((module) => module.tools());
   }
 
   /** Stores the user's selection with every `ALWAYS` module added, and returns it in list order. */
   select(names: Set<string>): string[] {
     // Same rule as restoring a saved set on reload.
-    this.selected = this.pickLoaded(
-      "reload",
-      names,
-      this.modules.map((module) => module.info),
-    );
+    this.selected = this.pickLoaded("reload", names);
     this.session.save("modules", { loaded: [...this.selected] });
     return [...this.selected];
+  }
+
+  /** The modules running in this session, in list order. */
+  private runningModules(): Module[] {
+    return this.modules.filter((module) => this.running.has(module.info.name));
   }
 
   /** The last saved selection, or `undefined` (the defaults) when nothing valid was saved. */
@@ -83,14 +78,11 @@ export class ModuleManager {
    * the reason isn't `reload` or nothing was saved. Saved names that match no module drop out; the result keeps list
    * order.
    */
-  private pickLoaded(
-    reason: SessionStartEvent["reason"],
-    saved: Set<string> | undefined,
-    modules: Pick<ModuleInfo, "name" | "loadType">[],
-  ): Set<string> {
+  private pickLoaded(reason: SessionStartEvent["reason"], saved: Set<string> | undefined): Set<string> {
     const restore = reason === "reload" ? saved : undefined;
     return new Set(
-      modules
+      this.modules
+        .map((module) => module.info)
         .filter(
           (m) =>
             m.loadType === ModuleLoadMode.ALWAYS ||
