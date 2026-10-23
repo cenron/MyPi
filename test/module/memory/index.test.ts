@@ -50,8 +50,11 @@ describe("MemoryModule", () => {
     return fake;
   }
 
-  it("is always loaded", () => {
-    expect(new MemoryModule(fakeSession().session).info.loadType).toBe(ModuleLoadMode.ALWAYS);
+  it("is always loaded, with /onboard and /memory-check", () => {
+    const module = new MemoryModule(fakeSession().session);
+    expect(module.info.loadType).toBe(ModuleLoadMode.ALWAYS);
+    expect(module.info.commands.map((command) => command.name)).toEqual(["onboard", "memory-check"]);
+    expect(module.commands().map((command) => command.info.name)).toEqual(["onboard", "memory-check"]);
   });
 
   it("registers both folders as writable in a read-only mode", async () => {
@@ -64,6 +67,19 @@ describe("MemoryModule", () => {
       expect.anything(),
       expect.objectContaining({ writableDirs: [projectDir(), globalDir()] }),
     );
+  });
+
+  // Reads the folders when run, so it sees a file written after the module started.
+  it("reports what /memory-check finds in both folders now", async () => {
+    const fake = fakeSession([], cwd);
+    const module = new MemoryModule(fake.session);
+    module.init();
+    await mkdir(globalDir());
+    await writeFile(join(globalDir(), "style.md"), `${MEMORY}See [[missing]].\n`);
+
+    const check = module.commands().find((command) => command.info.name === "memory-check");
+    const report = await check?.execute({} as never, []);
+    expect(report).toContain(`${join(globalDir(), "style")}.md: broken links: [[missing]]`);
   });
 
   it("lists the cwd's project memories and the agent dir's global ones in its prompt section", async () => {

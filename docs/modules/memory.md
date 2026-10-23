@@ -1,6 +1,6 @@
 # Memory
 
-**Status:** building (design agreed 2026-10-23; slices 1–3 built 2026-10-23; #1 on the [roadmap](../roadmap.md))
+**Status:** building (design agreed 2026-10-23; slices 1–5 built 2026-10-23; #1 on the [roadmap](../roadmap.md))
 
 ## Goal
 
@@ -111,9 +111,10 @@ Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
 | Module | `BaseModule`, `src/module/memory/` | `ALWAYS`. |
 | The list | `init()` reads both folders and calls `setPrompt(section)` | Sync reads (`readdirSync` with `recursive`, `readFileSync`): `ModuleManager.init()` doesn't await `init()`, so an async read could miss the first prompt. A file with no `description:` is listed by its path alone, not dropped. A missing folder is an empty scope; any other read error warns through `session.logWarning` (check permissions, then `/reload`) and lists that scope as unreadable, so the modules after memory still start. Empty scopes still get the conventions and their folder, so the agent knows where to write the first memory. Tests set `PI_CODING_AGENT_DIR` to a missing path in `vitest.config.ts`, so they never read real global memories. |
 | Refresh | `tool_result` on `write` / `edit` under a memory folder, subscribed through `session.pi.on` in `init()` | The next run (my next prompt) sees the new line: prompt sections apply at `before_agent_start`, once per run (`mypi.ts`), not on each request inside a run. Also creates the project folder's `.gitignore` with `keepOutOfGit` (`#core/util/git`, shared with plan-build); if that fails, it warns that project memories may be committed and still refreshes. Paths resolve with `resolveToolPath` against the call's cwd, like Plan's rule; the two folders are fields set when the module is built, since pi builds new modules on every `session_start`. `rm` in `bash` and hand edits show after `/reload` (agreed 2026-10-23: re-reading on every run would need a core change for one user). |
+| Link check | `linksIn` (pure, `links.ts`) on each file's whole text, so links survive invalid YAML; `memoryNames` across both scopes; `brokenLinks` flags them in the list and `checkReport` (in `commands/memory-check.ts`) for `/memory-check` | One rule, two outputs: the list for the agent, the command for me. |
 | Frontmatter | pi's `parseFrontmatter` | A non-string or missing `description` is no description. Invalid YAML (an unquoted `: ` is enough) is caught and listed as `(frontmatter isn't valid YAML; fix it)` instead of a description, so the agent sees and fixes it; the conventions say to quote a description with a colon. Slice 1 first shipped its own one-line parser, made without checking pi's exports; replaced the same day. |
 | Plan mode | `BaseModule.setWritable({ dirs, tools })`: a list in core (`ToolGuard`) of folders and tools a read-only mode may still write, merged into the rules' `env` (`writableDirs`, `writableTools`) on each call | Plan's rule used to hard-code `.pi/plans/` and `submit_plan`. Now plan-build adds those two and memory adds its folders; Plan's rule reads the list and never knows who added what. Tool names are in it so a memory system that saves through its own tool can add that tool. Any module on or off works: with memory off, Plan allows only plans; with plan-build off, nobody reads memory's entries. `PLAN_PROMPT` says "what other sections say plan mode allows", and memory's conventions say saving memories is allowed in plan mode, so neither prompt names the other module. |
-| Onboarding | A module command that sends the onboarding prompt with `pi.sendUserMessage()` | Not a template in `resources/prompts/`: those load whether or not the module does, so the prompt goes with the module (decision 7). |
+| Onboarding | A module command (`commands/onboard.ts`) that waits with `ctx.waitForIdle()`, then sends `ONBOARD_PROMPT` (`prompt.ts`) with `pi.sendUserMessage()`. The prompt names dependency and build folders for several languages to skip (`node_modules`, `vendor`, `.venv`, `target`, `bin`/`obj`, …) and points at `git ls-files` and `rg --files`, which skip what `.gitignore` ignores and are on Plan's read-only list; the first live run crawled `node_modules` with `find`. | Not a template in `resources/prompts/`: those load whether or not the module does, so the prompt goes with the module (decision 7). |
 
 ## Slices
 
@@ -124,8 +125,44 @@ Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
 3. **Done.** The writable list in core: plan-build adds `.pi/plans/` and `submit_plan`, memory adds both folders, and
    Plan's rule uses it. `PLAN_PROMPT` allows "what other sections say plan mode allows", and memory's conventions say
    saving memories is allowed in plan mode, so neither prompt names the other module.
-4. `/onboard`.
-5. A link check: `[[path]]` links to memories that don't exist.
+4. **Done.** `/onboard`, in the current session (agreed 2026-10-23; a new session like `/plan implement` was more code
+   for a command usually run at the start of one). The prompt reads existing memories and `AGENTS.md` first and updates
+   rather than repeats, so it doubles as a refresh; it reads build and test commands instead of running them (slow, side
+   effects, and every one asks in Plan). `pi.sendUserMessage` returns nothing and reports its own errors, so the
+   command doesn't catch.
+5. **Done.** A link check, two ways (agreed 2026-10-23): the list flags a memory whose `[[name]]` links point at no
+   memory in either scope, `(broken links: [[x]])`, so the agent fixes it on its next prompt; and `/memory-check`
+   reads both folders when run and reports every flag by file (unreadable folders, invalid frontmatter, broken links),
+   for when I want to look myself. A link is `[[name]]` with no whitespace inside, so bash's `[[ -f x ]]` isn't one
+   (`links.ts`; the report is `checkReport` in `commands/memory-check.ts`).
+
+## Saving without being asked
+
+Live tests on 2026-10-23, in an empty folder in pi, acting as a user who asks for a todo app and states a preference
+in passing (a test persona, not my real preferences):
+
+| Run | Model | Conventions | Result |
+|---|---|---|---|
+| 1 | gpt-6.1-sol | Without the trigger line | Saved the stated preference as a global memory during planning, unasked. Missed a gotcha it worked around (a missing tool). |
+| 2 | gpt-6-luna | With the trigger line ("When the user corrects you or states a preference, or you work around a problem … save it before you finish.") | Saved nothing: not the preference, not the gotcha (the same missing tool). |
+| 3 | gpt-6-luna | Trigger line, plus a temporary end-of-run nudge | The nudge ("did this task teach you anything a future session would need … save it now") fired once after the build, and the model saved the preference at once. |
+
+Saving on its own depends on the model; the trigger line stays, but isn't enough by itself. The nudge was removed
+after the test: measure first ([analytics](analytics.md#measuring-what-mypi-adds) counts runs that changed files
+without a memory save). How it worked, if it comes back: on `before_agent_start`, reset two flags and mark a run whose
+prompt is the nudge itself; on `tool_result`, a successful `write`/`edit` in a memory folder is a save and one outside
+`.pi/` is work; on `agent_settled`, send the nudge with `pi.sendUserMessage` when the run did work, saved nothing, and
+wasn't the nudge's own run. A plan-only run writes only `.pi/plans/`, so it never nudges.
+
+Also seen: in Build mode the agent piped a pnpm installer into `sh` (installing to `~/Library/pnpm` and editing
+`~/.bashrc`) when pnpm was missing. That's Build's full access working as designed, not a memory issue.
+
+## Not taking
+
+- **Serena's link rewrite on rename.** The agent renames by hand; the broken-link flag shows what to fix on the next
+  prompt, with no rename tracking.
+- **Serena's hidden memories** and a `readonly:` field: see decision 5.
+- **Types** (Claude Code's user, feedback, project, reference): see decision 3.
 
 ## References
 

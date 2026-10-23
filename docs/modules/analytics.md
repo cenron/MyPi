@@ -77,6 +77,11 @@ Two lessons from the [inspiration](../inspiration/README.md) projects:
   with the tool and with its built-ins, counts calls and output size, checks the edits with `git diff`, and reports
   where the tool helped and where it didn't. Use the same kind of prompt for each new MyPi tool or module until the
   benchmarks below exist.
+- **Memory saves.** Count, per model, runs that changed files (a successful `write`/`edit` outside `.pi/`) and how
+  many of those also wrote a memory, plus what a session's prompts said (a stated preference or correction) when no
+  memory followed. A temporary end-of-run nudge tested on 2026-10-23 got a model that saved nothing on its own to save
+  at once (see [memory](memory.md#saving-without-being-asked)); build that nudge only if these numbers show memories
+  being missed.
 
 ## Benchmarks (later)
 

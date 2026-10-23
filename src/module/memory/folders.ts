@@ -3,12 +3,13 @@ import { join, relative } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { isNodeError } from "#core/util/errors";
 import { isNonEmptyString } from "#core/util/guards";
+import { linksIn } from "./links";
 import type { Memory } from "./types";
 
 const MEMORY_EXTENSION = ".md";
 const MEMORY_FOLDER = "memories";
 /** Listed in place of a description, so the agent sees the error and fixes the file. */
-const INVALID_FRONTMATTER = "(frontmatter isn't valid YAML; fix it)";
+export const INVALID_FRONTMATTER = "(frontmatter isn't valid YAML; fix it)";
 
 /** Project memories, relative to the session's cwd. */
 export const PROJECT_MEMORY_DIR = join(".pi", MEMORY_FOLDER);
@@ -23,10 +24,14 @@ export function globalMemoryDir(): string {
  * and the list has to be in the prompt before the first run. Other read errors throw.
  */
 export function readMemories(dir: string): Memory[] {
-  return memoryFiles(dir).map((path) => ({
-    name: relative(dir, path).slice(0, -MEMORY_EXTENSION.length),
-    description: descriptionOf(readFileSync(path, "utf8")),
-  }));
+  return memoryFiles(dir).map((path) => {
+    const text = readFileSync(path, "utf8");
+    return {
+      name: relative(dir, path).slice(0, -MEMORY_EXTENSION.length),
+      description: descriptionOf(text),
+      links: linksIn(text),
+    };
+  });
 }
 
 /**

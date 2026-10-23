@@ -6,11 +6,13 @@ import {
   isWriteToolResult,
   type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import { type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
 import { isInside, resolveToolPath } from "#core/util/paths";
 import { BaseModule } from "../base";
+import { memoryCheckCmd } from "./commands/memory-check";
+import { onboardCmd } from "./commands/onboard";
 import { globalMemoryDir, PROJECT_MEMORY_DIR, readMemories } from "./folders";
 import { memoryPrompt } from "./prompt";
 import type { MemoryScope } from "./types";
@@ -20,12 +22,16 @@ export class MemoryModule extends BaseModule {
   private readonly projectDir = join(this.session.ctx.cwd, PROJECT_MEMORY_DIR);
   private readonly globalDir = globalMemoryDir();
 
+  // Built once: `info` lists their infos, and `info` is read on every footer, prompt, and state call.
+  private readonly onboardCommand = onboardCmd((text) => this.session.pi.sendUserMessage(text));
+  private readonly memoryCheckCommand = memoryCheckCmd(() => this.readScopes());
+
   get info(): ModuleInfo {
     return {
       name: "memory",
       description:
         "Markdown memories per project and global; the prompt lists them, and the agent reads what it needs.",
-      commands: [],
+      commands: [this.onboardCommand.info, this.memoryCheckCommand.info],
       loadType: ModuleLoadMode.ALWAYS,
     };
   }
@@ -36,9 +42,18 @@ export class MemoryModule extends BaseModule {
     this.session.pi.on("tool_result", (ev, ctx) => this.onToolResult(ev, ctx));
   }
 
+  commands(): Command[] {
+    return [this.onboardCommand, this.memoryCheckCommand];
+  }
+
   /** Rebuilds the prompt section from both folders; the next run sends it. */
   private refresh() {
-    this.setPrompt(memoryPrompt(this.readScope(this.projectDir), this.readScope(this.globalDir)));
+    this.setPrompt(memoryPrompt(...this.readScopes()));
+  }
+
+  /** Both scopes, read from disk now. */
+  private readScopes(): [MemoryScope, MemoryScope] {
+    return [this.readScope(this.projectDir), this.readScope(this.globalDir)];
   }
 
   /**
