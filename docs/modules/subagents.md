@@ -50,6 +50,9 @@ the fleet view, which also shows what's running.
    arrive as one message, and the main agent can wait for runs on purpose.
 9. **Parallel writers each get a worktree**, so [worktree](../tools/worktree.md) moves above subagents on the
    roadmap. Until a writer run has its own worktree, only one `write` run works in the main checkout at a time.
+10. **A writer's work comes back as a patch** (pi-subagents' way, not Radian's branch and merge): when the run ends,
+    its changes are captured as a patch file and a handoff file, the temporary worktree and branch are removed, and
+    the main agent applies the patch.
 
 ## Agents
 
@@ -121,8 +124,14 @@ access:
   blocks a `write` agent with a reason. pi's generic rule would ask every time, since `subagent` isn't read-only.
 - **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
   Without one, only one `write` run works in the main checkout at a time, and the main agent leaves its files alone.
-- **Children don't commit.** How a writer's work comes back is open: Radian's branch per writer, merged with my
-  approval, or pi-subagents' patch and handoff file applied by the main agent.
+- **Children don't commit. A writer's work comes back as a patch:**
+  1. The worktree branches from the main checkout's `HEAD`.
+  2. When the run ends, MyPi stages everything in the worktree (new files too) and writes `git diff --cached --binary`
+     to a patch file, plus a handoff file: the agent, the task, the base commit, the files changed, the patch's path,
+     and the child's summary.
+  3. The worktree and its branch are removed. The patch and handoff stay until the patch is applied or dropped.
+  4. The run's result names the patch and the files. The main agent reviews it and applies it with
+     `git apply --3way` (in Build; a clash is reported, not forced). Two writers' patches are applied one at a time.
 
 ## Creating and changing agents
 
@@ -214,7 +223,7 @@ Deferred until internal agents work. The design so far:
 **Milestone 2: the fleet view and parallel writers**
 
 7. The fleet view's runs: the collapsed line, the expanded list, open, stop.
-8. Parallel writers, each in its own worktree, and how their work comes back (branch and merge, or a patch).
+8. Parallel writers, each in its own worktree; their work comes back as a patch and a handoff file.
 
 **Milestone 3: creating agents**
 
@@ -230,8 +239,10 @@ Deferred until internal agents work. The design so far:
 
 - Where do child session files go: pi's session folder (they'd show in `/resume`), or a folder of their own?
 - How many background runs at once, and how many runs per prompt?
-- How a writer's work comes back from its worktree: a branch merged with my approval (Radian), or a patch the main
-  agent applies (pi-subagents)?
+- A writer started while my checkout has uncommitted changes: refuse, as pi-subagents does (the worktree comes from
+  `HEAD`, so the child wouldn't see that work), or branch from a snapshot of the working tree (`git stash create`
+  makes a commit of it without touching the checkout; untracked files aren't in it)?
+- Does the main agent apply a patch on its own, or does applying ask me first?
 - How close together is "close together" for grouped completions?
 - The fleet view's key, and whether `/agents` replaces `job_list` for runs.
 - Should the [done check](done-check.md) run when a `developer` run finishes?

@@ -63,8 +63,8 @@ paths against the cwd they were built with. Routes to check:
 - Base branch: the default branch, or the current `HEAD`?
 - [Subagents](../modules/subagents.md) depend on this (decided 2026-10-23): each sub-agent writer gets its own
   worktree so writers can run in parallel. Design the create and remove steps so the subagents module can call them
-  without moving the main session. Whether a writer's work comes back as a branch to merge (Radian) or a patch is
-  decided there.
+  without moving the main session. A writer's work comes back as a patch (decided 2026-10-23, see its doc), so
+  the worktree and branch are temporary: created for the run, removed once the patch is captured.
 
 ## References
 
