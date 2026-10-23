@@ -10,6 +10,6 @@ const modules: ModuleClass[] = [PlanBuildModule];
  * `moduleManager.init()` runs them later, once their tools are registered.
  */
 export function loadModules(session: Session, reason: SessionStartEvent["reason"]) {
-  const moduleList = modules.map((module: ModuleClass) => new module(session));
+  const moduleList = modules.map((module) => new module(session));
   session.moduleManager.start(moduleList, reason);
 }

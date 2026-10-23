@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { type Static, Type } from "typebox";
+import { Type } from "typebox";
 
 export const ASK_USER = "ask_user";
 
@@ -19,10 +19,12 @@ const parameters = Type.Object({
 
 type Details = { answer: string | undefined };
 
-const result = (text: string, answer?: string) => ({
-  content: [{ type: "text" as const, text }],
-  details: { answer },
-});
+function result(text: string, answer?: string) {
+  return {
+    content: [{ type: "text" as const, text }],
+    details: { answer },
+  };
+}
 
 /**
  * The `ask_user` tool: one question, answered from a list or in the user's own words, through pi's `select` and
@@ -40,7 +42,7 @@ export function askUserTool(): ToolDefinition<typeof parameters, Details> {
     defaultActive: false,
     // Two questions at once would open two dialogs.
     executionMode: "sequential",
-    async execute(_toolCallId, { question, options }: Static<typeof parameters>, signal, _onUpdate, ctx) {
+    async execute(_toolCallId, { question, options }, signal, _onUpdate, ctx) {
       if (!ctx.hasUI) return result("No UI to ask the user. Decide yourself and state the assumption in the plan.");
 
       // select only takes strings, so a description goes on its option's line, and the answer is mapped back by index.

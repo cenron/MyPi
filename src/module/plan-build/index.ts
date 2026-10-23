@@ -38,7 +38,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     return {
       name: "plan-build",
       description: "Plan changes in a restricted mode, then switch to Build to implement them.",
-      commands: this.commands().flatMap((command) => command.info),
+      commands: this.commands().map((command) => command.info),
       loadType: ModuleLoadMode.ALWAYS,
     };
   }

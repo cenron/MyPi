@@ -1,4 +1,3 @@
-import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { callMcpTool, textOf } from "#tool/utils";
 import type { SearchBackend, SearchResult } from "../types";
 
@@ -14,7 +13,7 @@ export function exaBackend(): SearchBackend {
     id: "exa_search",
     name: "Exa",
     tool: EXA_SEARCH_TOOL,
-    async search(ctx: ExtensionToolContext, query: string) {
+    async search(ctx, query) {
       // Exa requires an objective; the query is the best one there is. 10 results, as many as Parallel returns.
       const call = await callMcpTool(ctx, EXA_SEARCH_TOOL, { query, objective: query, numResults: 10 });
       return parseExa(textOf(call.content));
@@ -59,4 +58,6 @@ export function parseExa(text: string): SearchResult[] {
 }
 
 /** A field's value, or undefined when Exa sent `N/A` or nothing. */
-const known = (value: string | undefined) => (value && value !== "N/A" ? value : undefined);
+function known(value: string | undefined) {
+  return value && value !== "N/A" ? value : undefined;
+}

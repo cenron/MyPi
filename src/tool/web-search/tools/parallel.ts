@@ -1,4 +1,3 @@
-import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { isNonEmptyString, isRecord } from "#core/util/guards";
 import { callMcpTool } from "#tool/utils";
 import type { SearchBackend, SearchResult } from "../types";
@@ -15,7 +14,7 @@ export function parallelBackend(sessionId: string): SearchBackend {
     id: "parallel_search",
     name: "Parallel",
     tool: PARALLEL_SEARCH_TOOL,
-    async search(ctx: ExtensionToolContext, query: string) {
+    async search(ctx, query) {
       const call = await callMcpTool(ctx, PARALLEL_SEARCH_TOOL, {
         objective: query,
         search_queries: [query],

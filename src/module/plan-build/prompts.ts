@@ -6,11 +6,10 @@ Once the plan is settled, call submit_plan with a short title and the full plan:
 export const BUILD_PROMPT = `Build mode is active. Implement the agreed plan, or handle the request normally if there isn't one.`;
 
 /** The first message of a session started by `/plan implement`, taken from Codex's plan hand-off. */
-export const implementMessage = (
-  path: string,
-  plan: string,
-) => `A previous agent produced the plan below to accomplish the user's task. Implement the plan in a fresh context. Treat the plan as the source of user intent, re-read files as needed, and carry the work through implementation and verification.
+export function implementMessage(path: string, plan: string) {
+  return `A previous agent produced the plan below to accomplish the user's task. Implement the plan in a fresh context. Treat the plan as the source of user intent, re-read files as needed, and carry the work through implementation and verification.
 
 Plan file: ${path}
 
 ${plan}`;
+}

@@ -9,8 +9,8 @@ export function modulesCmd(session: Session): Command {
       name: "modules",
       description: "Choose which modules load (list: print them)",
     },
-    execute: (ctx: ExtensionCommandContext, args: string[]) => {
-      const [subcommand, ..._rest] = args;
+    execute: (ctx, args) => {
+      const [subcommand] = args;
 
       switch (subcommand) {
         case "list":
@@ -25,7 +25,7 @@ export function modulesCmd(session: Session): Command {
 }
 
 /** Opens the module modal. Save stores the selection and asks for `/reload`; Escape shows nothing. Needs TUI mode. */
-const openModal = async (ctx: ExtensionCommandContext, session: Session): Promise<string | undefined> => {
+async function openModal(ctx: ExtensionCommandContext, session: Session): Promise<string | undefined> {
   const selected = await openModulesModal(ctx, session);
 
   if (selected === undefined) return undefined; // Escape: show nothing
@@ -35,10 +35,11 @@ const openModal = async (ctx: ExtensionCommandContext, session: Session): Promis
   session.logWarning(`Need to /reload to enable/disable modules \n\t${loadedNames.join("\n\t")}`);
 
   return "";
-};
+}
 
 /** Every module, one per line, as `loaded: <name>` or `not loaded: <name>` (what's running, not the selection). */
-const listModules = (session: Session): string =>
-  session.moduleManager.moduleInfos
+function listModules(session: Session): string {
+  return session.moduleManager.moduleInfos
     .map((module) => `${module.isLoaded ? "loaded" : "not loaded"}: ${module.name}`)
     .join("\n");
+}

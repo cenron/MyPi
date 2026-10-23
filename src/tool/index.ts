@@ -35,6 +35,6 @@ export function shutdownTools(tools: Tool[], session: Session) {
 }
 
 /** MyPi's built-in tools. Add new ones here. */
-const createTools = (session: Session): Tool[] => {
+function createTools(session: Session): Tool[] {
   return [bashTool(session), jobListTool(session), jobStopTool(session), webSearchTool(session), webFetchTool(session)];
-};
+}

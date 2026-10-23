@@ -32,7 +32,7 @@ export function htmlToMarkdown(html: string, baseUrl: string): Converted {
   };
 }
 
-const createTurndown = (baseUrl: string): TurndownService => {
+function createTurndown(baseUrl: string): TurndownService {
   const turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-" });
 
   turndownService.remove(REMOVED_TAGS as TurndownService.TagName[]);
@@ -70,7 +70,7 @@ const createTurndown = (baseUrl: string): TurndownService => {
   // Use the gfm plugin
   turndownService.use(gfm);
   return turndownService;
-};
+}
 
 /** `url` resolved against `baseUrl`, or `undefined` when it isn't a valid URL. */
 function absolute(url: string, baseUrl: string): string | undefined {

@@ -190,7 +190,9 @@ async function request(url: URL, userAgent: string, { format, signal, dispatcher
 }
 
 /** True for `publicLookup`'s refusal. */
-const isBlocked = (error: unknown): error is Error => isNodeError(error) && error.code === BLOCKED;
+function isBlocked(error: unknown): error is Error {
+  return isNodeError(error) && error.code === BLOCKED;
+}
 
 /** The file extension for the saved full text: what the model would expect to `read`. */
 function extensionFor(mime: string, converted: boolean): string {

@@ -35,7 +35,7 @@ export async function searchInOrder(
  * True for errors another backend may not have: HTTP 429 (pi's MCP client says `status 429`), or the backend's tool
  * not found, which means its server is off in `/mcp` or not connected.
  */
-const canFallBack = (error: unknown): boolean => {
+function canFallBack(error: unknown): boolean {
   const message = errorMessage(error);
   return /\bstatus 429\b/.test(message) || /^Tool \S+ not found$/.test(message);
-};
+}

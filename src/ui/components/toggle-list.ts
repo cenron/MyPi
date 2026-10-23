@@ -32,9 +32,9 @@ export class ToggleList implements Component {
     const on = theme.fg("success", "●");
     const off = theme.fg("dim", "○");
 
-    const disabledItems = this.getDisabledItems(items);
+    const disabledItems = items.filter((item) => item.disabled);
     const disabledIds = new Set(disabledItems.map((item) => item.id));
-    const disabledLabels = new Set(disabledItems.map((item) => this.disabledLabel(item.label)));
+    const disabledLabels = new Set(disabledItems.map((item) => disabledLabel(item.label)));
 
     // Set our theme for the label, so it can show disabled items in dim text
     const settingsTheme = getSettingsListTheme();
@@ -48,9 +48,9 @@ export class ToggleList implements Component {
       const currentValue = item.on ? on : off;
       return {
         id: item.id,
-        label: item.disabled ? this.disabledLabel(item.label) : item.label,
+        label: item.disabled ? disabledLabel(item.label) : item.label,
         description: item.description,
-        currentValue: currentValue,
+        currentValue,
         values: item.disabled ? [currentValue] : [on, off],
       };
     });
@@ -88,8 +88,9 @@ export class ToggleList implements Component {
   handleInput(data: string): void {
     this.list.handleInput(data);
   }
+}
 
-  private disabledLabel = (label: string) => `${label} (locked)`;
-
-  private getDisabledItems = (items: ToggleItem[]): ToggleItem[] => items.filter((item) => item.disabled);
+/** A disabled row's label, marked so it reads as locked. */
+function disabledLabel(label: string): string {
+  return `${label} (locked)`;
 }

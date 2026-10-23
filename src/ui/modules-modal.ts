@@ -11,7 +11,7 @@ import { ToggleList } from "./components/toggle-list";
 export async function openModulesModal(ctx: ExtensionContext, session: Session): Promise<Set<string> | undefined> {
   if (ctx.mode !== "tui") throw new Error("/modules requires TUI mode");
 
-  return await ctx.ui.custom<Set<string> | undefined>(
+  return ctx.ui.custom<Set<string> | undefined>(
     (_tui, theme: Theme, _keybindings, done) => modal(theme, done, session.moduleManager.moduleInfos),
     {
       overlay: true,
@@ -25,7 +25,7 @@ export async function openModulesModal(ctx: ExtensionContext, session: Session):
 }
 
 /** Builds the dialog. Toggles edit a local copy of the selected set, so nothing outside changes until Save. */
-const modal = (theme: Theme, done: (selected: Set<string> | undefined) => void, modules: ModuleInfo[]) => {
+function modal(theme: Theme, done: (selected: Set<string> | undefined) => void, modules: ModuleInfo[]) {
   const container = new Dialog(theme, {
     title: "Modules",
   });
@@ -50,4 +50,4 @@ const modal = (theme: Theme, done: (selected: Set<string> | undefined) => void, 
 
   container.addChild(list);
   return container;
-};
+}

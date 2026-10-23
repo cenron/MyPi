@@ -129,32 +129,37 @@ export function isReadOnlyCommand(command: string): boolean {
 type ArgCheck = (args: string[]) => boolean;
 
 /** A `-abc` word: one dash, then short flags. */
-const isShortFlags = (w: string) => /^-[^-]/.test(w);
+function isShortFlags(w: string) {
+  return /^-[^-]/.test(w);
+}
 
 /** True when a short-flag word holds any of `letters`, since `-ro` is `-r -o`. */
-const hasShort = (args: string[], letters: string) =>
-  args.some((w) => isShortFlags(w) && [...w.slice(1)].some((c) => letters.includes(c)));
+function hasShort(args: string[], letters: string) {
+  return args.some((w) => isShortFlags(w) && [...w.slice(1)].some((c) => letters.includes(c)));
+}
 
 /**
  * True when a word is one of the long flags `names`, in full or abbreviated, with or without `=value`: GNU getopt and
  * git both accept `--out` for `--output`. A longer flag (`--pre-glob` for `--pre`) doesn't match.
  */
-const hasLong = (args: string[], names: string[]) =>
-  args.some((w) => {
+function hasLong(args: string[], names: string[]) {
+  return args.some((w) => {
     const flag = w.split("=")[0] ?? "";
     return names.some((n) => flag.length > 2 && n.startsWith(flag));
   });
+}
 
 /** Words that aren't flags. `-` alone is stdin, an operand. */
-const operands = (args: string[]) => args.filter((w) => w === "-" || !w.startsWith("-"));
+function operands(args: string[]) {
+  return args.filter((w) => w === "-" || !w.startsWith("-"));
+}
 
 /**
  * The list form of `git branch` or `git tag`: every flag is one of `shorts` or `longs` (with or without `=value`), and
  * operands, which would name a branch or tag to create, are allowed only with `-l` or `--list`, where they're patterns.
  */
-const listOnly =
-  (shorts: string, longs: string[]): ArgCheck =>
-  (args) => {
+function listOnly(shorts: string, longs: string[]): ArgCheck {
+  return (args) => {
     const flagsOk = args.every((w) => {
       if (w === "-" || !w.startsWith("-")) return true;
       if (isShortFlags(w)) return [...w.slice(1)].every((c) => shorts.includes(c));
@@ -163,6 +168,7 @@ const listOnly =
     const listing = args.includes("--list") || hasShort(args, "l");
     return flagsOk && (listing || operands(args).length === 0);
   };
+}
 
 const GIT_READERS = [
   "status",

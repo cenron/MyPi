@@ -60,6 +60,11 @@ Check that `pi --version` matches the pinned devDependency. If the docs and sour
   `#mcp/<file>` (the `imports` in `package.json`), never tsconfig `paths`, because pi doesn't apply them. Use relative
   imports inside a folder. Leave `.ts` off import paths.
 - Wrap every tool in pi's `defineTool` where it's built; without it `execute`'s arguments are silently `any`.
+- Name module-level helpers with `function` declarations. Keep a `const` only when a library's function type types it
+  (`LookupFunction`, `MessageRenderer`, `ToolRendererResolver`).
+- Class members are methods. Use an arrow property only for a callback that's passed around unbound
+  (`Editor.reportError`). Arrow properties aren't on the prototype, so `vi.spyOn(Class.prototype, …)` can't see them.
+- Expose a class's parts as `readonly` properties, not a private field plus a getter that only returns it.
 - Update the module's doc in `docs/modules/`, or the tool's doc in `docs/tools/`, when its design or status changes.
 
 ## Tests

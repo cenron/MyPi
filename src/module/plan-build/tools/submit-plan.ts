@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { type Static, Type } from "typebox";
+import { Type } from "typebox";
 import { savePlan } from "../plan-file";
 import type { SubmittedPlan } from "../types";
 
@@ -27,7 +27,7 @@ export function submitPlanTool(
     promptSnippet: "Submit the finished plan in plan mode",
     parameters,
     defaultActive: false,
-    async execute(_toolCallId, { title, plan }: Static<typeof parameters>, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, { title, plan }, _signal, _onUpdate, ctx) {
       const path = await savePlan(ctx.cwd, title, plan, new Date());
       onSubmit({ title, plan, path });
       return { content: [{ type: "text", text: `Plan saved to ${path}.` }], details: { path } };

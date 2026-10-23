@@ -41,23 +41,28 @@ export function previewAsk(ask: string): string {
   return shown.join("\n");
 }
 
-const returnBlock = (reason: string): ToolCallEventResult => {
+function returnBlock(reason: string): ToolCallEventResult {
   return { block: true, reason };
-};
+}
 
+/**
+ * Checks each tool call against the modules' rules, by module name: any block wins, and every ask goes into one
+ * permission dialog, whose "Allow for this session" lets the same ask lines run unasked until `/reload`.
+ */
 export class ToolGuard {
-  private readonly rules: Map<string, ToolRule> = new Map<string, ToolRule>();
+  private readonly rules = new Map<string, ToolRule>();
   /** Ask lines (`<module>: <question>`) allowed for this session. In memory, so `/reload` forgets them. */
   private readonly allowed = new Set<string>();
 
   constructor(readonly pi: ExtensionAPI) {}
 
-  public set(name: string, rule: ToolRule | undefined) {
-    if (rule === undefined) return this.rules.delete(name);
-    return this.rules.set(name, rule);
+  /** Sets the rule under `name`, or removes it with `undefined`. */
+  set(name: string, rule: ToolRule | undefined): void {
+    if (rule === undefined) this.rules.delete(name);
+    else this.rules.set(name, rule);
   }
 
-  public async check(ev: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> {
+  async check(ev: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> {
     const toolInfo = this.pi.getAllTools().find((tool) => tool.name === ev.toolName);
     const toolCall: ToolCall = { toolName: ev.toolName, input: ev.input, annotations: toolInfo?.annotations };
     const toolEnv: ToolEnv = { cwd: ctx.cwd, home: os.homedir() };
@@ -66,7 +71,7 @@ export class ToolGuard {
     for (const [name, rule] of this.rules) {
       const verdict = rule(toolCall, toolEnv);
       if (verdict.kind === "block") return returnBlock(verdict.reason);
-      if (verdict.kind === "ask") asks.push({ name: name, question: verdict.question });
+      if (verdict.kind === "ask") asks.push({ name, question: verdict.question });
     }
 
     return this.confirmToolRequests(ctx, asks);

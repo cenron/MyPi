@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { JobManager } from "#core/job-manager";
 import mypi from "../../index";
 import { fakeUI } from "../fakes";
 
@@ -14,19 +15,12 @@ vi.mock("#tool/web-fetch/index", () => ({
   }),
 }));
 
-// `stopAll` is an instance field, not on the prototype, so the class is swapped rather than spied on.
-vi.mock("#core/job-manager", () => ({
-  JobManager: class {
-    stopAll = () => calls.push("stop jobs");
-    onChange = () => () => {};
-  },
-}));
-
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
 
 describe("built-in tool hooks", () => {
   // On shutdown, jobs stop before the tools' shutdown(), so nothing a job runs outlives the session.
   it("runs init() after every tool is registered and before the modules' init(), and shutdown() on shutdown", () => {
+    vi.spyOn(JobManager.prototype, "stopAll").mockImplementation(() => calls.push("stop jobs"));
     const handlers = new Map<string, Handler>();
     const pi = {
       on: (event: string, handler: Handler) => {

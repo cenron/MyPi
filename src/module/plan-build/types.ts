@@ -8,7 +8,9 @@ export const Mode = {
 export type Mode = (typeof Mode)[keyof typeof Mode];
 
 /** True when `value` is a mode; checks a mode read from the session file or typed after `/plan`. */
-export const isMode = (value: unknown): value is Mode => (Object.values(Mode) as unknown[]).includes(value);
+export function isMode(value: unknown): value is Mode {
+  return (Object.values(Mode) as unknown[]).includes(value);
+}
 
 /** A plan the model submitted with `submit_plan`, and where it was saved. */
 export type SubmittedPlan = { title: string; plan: string; path: string };

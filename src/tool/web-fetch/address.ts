@@ -74,9 +74,12 @@ function nat64Target(address: string): string | undefined {
 }
 
 /** Why `host` can't be fetched, with the way around it for the model. */
-const notPublic = (host: string, address = host) =>
-  `${host === address ? host : `${host} resolves to ${address}, which`} is not a public address. web_fetch only ` +
-  "reads public sites; for a local server, use curl in bash.";
+function notPublic(host: string, address = host) {
+  return (
+    `${host === address ? host : `${host} resolves to ${address}, which`} is not a public address. web_fetch only ` +
+    "reads public sites; for a local server, use curl in bash."
+  );
+}
 
 /**
  * Throws unless `hostname` (as `URL.hostname` gives it, with IPv6 in brackets) is public: the address itself, or

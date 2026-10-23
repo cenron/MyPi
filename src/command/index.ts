@@ -13,25 +13,27 @@ export function registerCommand(pi: ExtensionAPI, session: Session) {
   for (const cmd of commandList) {
     pi.registerCommand(cmd.info.name, {
       description: cmd.info.description,
-      handler: async (args: string, ctx: ExtensionCommandContext) => await runCommand(cmd, args, ctx),
+      handler: (args, ctx) => runCommand(cmd, args, ctx),
     });
   }
 }
 
 /** MyPi's own commands. Add new ones here. */
-const createCommand = (session: Session): Command[] => {
+function createCommand(session: Session): Command[] {
   return [modulesCmd(session)];
-};
+}
 
 /** Runs a command, shows its returned message as `info`, and turns a thrown error into an `error` notification. */
-const runCommand = async (cmd: Command, args: string, ctx: ExtensionCommandContext) => {
+async function runCommand(cmd: Command, args: string, ctx: ExtensionCommandContext) {
   try {
     const message = await cmd.execute(ctx, splitArgs(args));
     if (message) ctx.ui.notify(message, "info");
   } catch (error) {
     ctx.ui.notify(errorMessage(error), "error");
   }
-};
+}
 
 /** Splits pi's raw argument string on whitespace, dropping empty parts. */
-const splitArgs = (args: string): string[] => args.trim().split(/\s+/).filter(Boolean);
+function splitArgs(args: string): string[] {
+  return args.trim().split(/\s+/).filter(Boolean);
+}

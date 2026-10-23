@@ -9,28 +9,34 @@ import { ToolGuard } from "./tool-guard";
 
 /** Per-session handle passed to commands and modules: pi's context and API, logging, saved state, and the modules. */
 export class Session {
-  private readonly _notifier: Notifier;
-  private readonly _moduleManager: ModuleManager;
-  private readonly _footer: Footer;
-  private readonly _editor: Editor;
-  private readonly _promptManager: PromptManager;
-  private readonly _toolGuard: ToolGuard;
-  private readonly _jobs: JobManager;
+  /** The session's modules: which are running, and which the user picked for the next `/reload`. */
+  readonly moduleManager: ModuleManager;
+  /** MyPi's footer items, by key. Modules set theirs with `BaseModule.setFooter`. */
+  readonly footer: Footer;
+  /** MyPi's editor, for key handlers. Modules add theirs with `BaseModule.onKey`. */
+  readonly editor: Editor;
+  /** The modules' system prompt sections, written on every run. Modules set theirs with `BaseModule.setPrompt`. */
+  readonly promptManager: PromptManager;
+  /** Rules that allow, ask about, or block tool calls. Modules add theirs with `BaseModule.onToolCall`. */
+  readonly toolGuard: ToolGuard;
+  /** The session's background jobs; every one still running is stopped on `session_shutdown`. */
+  readonly jobs: JobManager;
+  private readonly notifier: Notifier;
 
   constructor(
     readonly ctx: ExtensionContext,
     readonly pi: ExtensionAPI,
   ) {
-    this._notifier = new Notifier(this.ctx);
-    this._moduleManager = new ModuleManager(this);
-    this._footer = new Footer(this.ctx);
-    this._editor = new Editor(this.ctx);
-    this._promptManager = new PromptManager();
-    this._toolGuard = new ToolGuard(this.pi);
-    this._jobs = new JobManager();
+    this.notifier = new Notifier(ctx);
+    this.moduleManager = new ModuleManager(this);
+    this.footer = new Footer(ctx);
+    this.editor = new Editor(ctx);
+    this.promptManager = new PromptManager();
+    this.toolGuard = new ToolGuard(pi);
+    this.jobs = new JobManager();
     // How many jobs are running, of any kind, shown only while there are some.
-    this._jobs.onChange((running) =>
-      this._footer.set(
+    this.jobs.onChange((running) =>
+      this.footer.set(
         "jobs",
         running ? { text: running === 1 ? "1 job" : `${running} jobs`, color: FooterColor.Accent } : undefined,
       ),
@@ -60,44 +66,14 @@ export class Session {
   }
 
   log(msg: string) {
-    this._notifier.info(msg);
+    this.notifier.info(msg);
   }
 
   logWarning(msg: string) {
-    this._notifier.warn(msg);
+    this.notifier.warn(msg);
   }
 
   logError(msg: string) {
-    this._notifier.error(msg);
-  }
-
-  /** The session's modules: which are running, and which the user picked for the next `/reload`. */
-  get moduleManager(): ModuleManager {
-    return this._moduleManager;
-  }
-
-  /** MyPi's footer items, by key. Modules set theirs with `BaseModule.setFooter`. */
-  get footer(): Footer {
-    return this._footer;
-  }
-
-  /** MyPi's editor, for key handlers. Modules add theirs with `BaseModule.onKey`. */
-  get editor(): Editor {
-    return this._editor;
-  }
-
-  /** The modules' system prompt sections, written on every run. Modules set theirs with `BaseModule.setPrompt`. */
-  get promptManager(): PromptManager {
-    return this._promptManager;
-  }
-
-  /** Rules that allow, ask about, or block tool calls. Modules add theirs with `BaseModule.onToolCall`. */
-  get toolGuard(): ToolGuard {
-    return this._toolGuard;
-  }
-
-  /** The session's background jobs; every one still running is stopped on `session_shutdown`. */
-  get jobs(): JobManager {
-    return this._jobs;
+    this.notifier.error(msg);
   }
 }
