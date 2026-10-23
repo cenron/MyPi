@@ -151,9 +151,13 @@ frozen. The guard now shows at most 12 lines of an ask, each cut at 160 characte
 checks only the first word plus a denylist, so `ls; node …` and the 3a test cases run unasked.
 
 - Split on `|`, `&&`, `||`, `;` and newlines outside quotes, and remove quotes, so `ca't'` is `cat`. Ask on `$(` or
-  backticks (inside double quotes too, where they still run), `$'…'` (`$'-delete'` is `-delete`), brace expansion with
-  a comma or `..` (`-{delete,x}`; `@{u}` is fine), `<(`, `>(`, `(`, a lone `&`, `&>`, `>|`, `<>`, `<<`, an unterminated
-  quote, and any `>` / `>>` except `N>&M` and to `/dev/null`. `< file` is fine.
+  backticks (inside double quotes too, where they still run), `$'…'` (`$'-delete'` is `-delete`), `<(`, `>(`, `(`, a
+  lone `&`, `&>`, `>|`, `<>`, `<<`, an unterminated quote, and any `>` / `>>` except `N>&M` and to `/dev/null`.
+  `< file` is fine.
+- Expand comma braces as bash does, so the checks below see what runs: `wc -l docs/{a,b}.md` is
+  `wc -l docs/a.md docs/b.md` and runs unasked, while `find . -{delete,name}` is `find . -delete -name` and asks.
+  Braces without a comma stay text (`@{u}`). Ask on ranges (`{a..c}`), nested braces, quotes inside braces, a comma in
+  `${…}`, braces in a redirect target, and a word that expands to more than 256 words.
 - The first word of every segment must be listed below, so wrappers (`env`, `xargs`, `sh`, `sudo`, `timeout`, …),
   `FOO=1 cmd`, and `/bin/cat` ask without a separate list.
 - Plain readers: `cat head tail wc ls pwd stat du df which type whoami id date uname echo printf cut tr nl basename

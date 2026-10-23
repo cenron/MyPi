@@ -1,31 +1,40 @@
 /**
  * Splits a bash command into segments (split on `|`, `||`, `&&`, `;` and newlines) of words with their quotes
  * removed, or returns undefined when the command holds syntax that can run or write something the words don't show:
- * `$(`, backticks, `<(`, `>(`, `(`, a lone `&`, `$'…'`, brace expansion, or a redirect other than `N>&M`,
- * `>/dev/null` and `< file`. Redirect targets are dropped from the words.
+ * `$(`, backticks, `<(`, `>(`, `(`, a lone `&`, `$'…'`, or a redirect other than `N>&M`, `>/dev/null` and `< file`.
+ * Redirect targets are dropped from the words. Comma braces are expanded as bash does (`a{b,c}` is `ab ac`), so the
+ * words show what runs; ranges (`{a..c}`), nested or quoted braces, and braces in a redirect target return undefined.
  */
 export function tokenize(command: string): string[][] | undefined {
   const segments: string[][] = [];
   let segmentWords: string[] = [];
   let currentWord = "";
   let wordStarted = false; // A quote starts a word too, so '' is preserved.
-  let braceDepth = 0; // unquoted `{` in the current word
+  let wordParts: (string | string[])[] = []; // text, then each closed brace group's choices
+  let group: string[] | undefined; // the open brace group's choices; the last is being read
+  let paramDepth = 0; // inside `${…}`, which is parameter expansion, not braces
   let redirectTarget: "input" | "output" | undefined;
-  let unsafeRedirect = false;
+  let unsafe = false;
 
   const finishWord = () => {
     if (!wordStarted) return;
-    if (redirectTarget === "output" && currentWord !== "/dev/null") unsafeRedirect = true;
-    if (redirectTarget === undefined) segmentWords.push(currentWord);
+    // An unclosed group stays as typed, like `{a, b}`, which bash leaves alone.
+    if (group) currentWord += `{${group.join(",")}`;
+    const words = expandBraces([...wordParts, currentWord]);
+    if (words === undefined) unsafe = true;
+    else if (redirectTarget === undefined) segmentWords.push(...words);
+    else if (words.length !== 1 || (redirectTarget === "output" && words[0] !== "/dev/null")) unsafe = true;
     currentWord = "";
     wordStarted = false;
-    braceDepth = 0;
+    wordParts = [];
+    group = undefined;
+    paramDepth = 0;
     redirectTarget = undefined;
   };
 
   const finishSegment = () => {
     finishWord();
-    if (redirectTarget !== undefined) unsafeRedirect = true; // A redirect needs a target.
+    if (redirectTarget !== undefined) unsafe = true; // A redirect needs a target.
     if (segmentWords.length > 0) segments.push(segmentWords);
     segmentWords = [];
   };
@@ -35,7 +44,9 @@ export function tokenize(command: string): string[][] | undefined {
     const c = command.charAt(i);
     const next = command.charAt(i + 1);
 
-    if (c === "'") {
+    if (group && (c === "'" || c === '"' || c === "\\")) {
+      return undefined; // Quoted text inside braces isn't worth handling.
+    } else if (c === "'") {
       const end = command.indexOf("'", i + 1);
       if (end < 0) return undefined;
       currentWord += command.slice(i + 1, end);
@@ -82,7 +93,7 @@ export function tokenize(command: string): string[][] | undefined {
     } else if (c === ">") {
       if (redirectTarget !== undefined) return undefined;
       // `2>`: the digits name a file descriptor, not a word.
-      if (wordStarted && /^\d+$/.test(currentWord)) {
+      if (wordStarted && !group && wordParts.length === 0 && /^\d+$/.test(currentWord)) {
         currentWord = "";
         wordStarted = false;
       } else finishWord();
@@ -102,17 +113,57 @@ export function tokenize(command: string): string[][] | undefined {
     } else if (c === "`" || c === "(" || c === ")" || (c === "$" && (next === "(" || next === "'"))) {
       return undefined;
     } else {
-      // Brace expansion turns `-{delete,x}` into `-delete -x`, so a comma or `..` inside braces asks.
-      if (c === "{") braceDepth++;
-      else if (c === "}" && braceDepth > 0) braceDepth--;
-      else if (braceDepth > 0 && (c === "," || (c === "." && next === "."))) return undefined;
-      currentWord += c;
+      // A comma or `..` in `${…}` is parameter expansion (`${x,,}`), and `..` in braces is a range: both ask.
+      if ((paramDepth > 0 || group) && c === "." && next === ".") return undefined;
+      if (paramDepth > 0) {
+        if (c === ",") return undefined;
+        if (c === "{") paramDepth++;
+        else if (c === "}") paramDepth--;
+        currentWord += c;
+      } else if (c === "{") {
+        if (group) return undefined; // nested braces, `${` included
+        if (command.charAt(i - 1) === "$") {
+          paramDepth = 1;
+          currentWord += c;
+        } else group = [""];
+      } else if (group && c === ",") {
+        group.push("");
+      } else if (group && c === "}") {
+        // Without a comma it's plain text, like `@{u}`.
+        if (group.length === 1) currentWord += `{${group[0]}}`;
+        else {
+          wordParts.push(currentWord, group);
+          currentWord = "";
+        }
+        group = undefined;
+      } else if (group) {
+        group[group.length - 1] += c;
+      } else {
+        currentWord += c;
+      }
       wordStarted = true;
       i++;
     }
   }
   finishSegment();
-  return unsafeRedirect ? undefined : segments;
+  return unsafe ? undefined : segments;
+}
+
+/** Most words one brace-expanded word may become before the command just asks. */
+const MAX_BRACE_WORDS = 256;
+
+/**
+ * The words a word of text and brace groups expands to, in bash's order: `a{b,c}{1,2}` is `ab1 ab2 ac1 ac2`. Bash
+ * drops empty results from braces, so `x{,y}` is `x xy` and `{,}` is nothing; a word with no group, like `''`, stays
+ * as is. Undefined when there would be more than `MAX_BRACE_WORDS`.
+ */
+function expandBraces(parts: (string | string[])[]): string[] | undefined {
+  let words = [""];
+  for (const part of parts) {
+    words = typeof part === "string" ? words.map((w) => w + part) : words.flatMap((w) => part.map((p) => w + p));
+    if (words.length > MAX_BRACE_WORDS) return undefined;
+  }
+  return parts.some((p) => typeof p !== "string") ? words.filter((w) => w !== "") : words;
 }
 
 /**

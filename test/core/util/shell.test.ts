@@ -15,6 +15,10 @@ describe("tokenize", () => {
     ["ls > /dev/null 2>&1", [["ls"]]],
     ["echo x >&2", [["echo", "x"]]],
     ["ls ;", [["ls"]]],
+    ["wc -l docs/{cli,settings}.md", [["wc", "-l", "docs/cli.md", "docs/settings.md"]]],
+    ["echo {a,b}{1,2}", [["echo", "a1", "a2", "b1", "b2"]]],
+    ["echo x{,y} {,}", [["echo", "x", "xy"]]],
+    ["echo {a, b} @{u}", [["echo", "{a,", "b}", "@{u}"]]],
     ["", []],
   ])("splits %j", (command, expected) => {
     expect(tokenize(command)).toEqual(expected);
@@ -27,8 +31,13 @@ describe("tokenize", () => {
     ["substitution in double quotes", 'echo "$(whoami)"'],
     ["backticks in double quotes", 'echo "`whoami`"'],
     ["ANSI-C quoting", "find . $'-delete'"],
-    ["brace expansion with a comma", "find . -{delete,name}"],
     ["brace expansion with a range", "echo {a..c}"],
+    ["nested braces", "echo {a,{b,c}}"],
+    ["quotes inside braces", "echo {a,'b'}"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a bash parameter expansion, not a template.
+    ["a comma in a parameter expansion", "echo ${x,,}"],
+    ["braces in a redirect target", "cat < {a,b}"],
+    ["too many brace words", `echo ${"{a,b}".repeat(9)}`],
     ["process substitution in", "diff <(ls) b"],
     ["process substitution out", "ls >(cat)"],
     ["a subshell", "(ls)"],
@@ -55,6 +64,7 @@ describe("isReadOnlyCommand", () => {
   // Pi's plan-mode example runs all of these without asking.
   it.each([
     ["find -delete", "find . -name '*.tmp' -delete"],
+    ["find -{delete,…}", "find . -{delete,name}"],
     ["awk system()", "awk 'BEGIN{system(\"rm -rf x\")}'"],
     ["curl -o", "curl -o out https://example.com"],
     ["sort -o", "sort -o out in.txt"],
@@ -74,6 +84,7 @@ describe("isReadOnlyCommand", () => {
     "ls -la",
     "pwd",
     "cat a.txt | grep foo | wc -l",
+    "wc -l docs/{cli,settings,models}.md",
     "grep -rn foo src 2>/dev/null | head -20",
     "echo 'a; rm b'",
     "tree -L 2",
