@@ -27,9 +27,9 @@ export function fakeUI() {
  * pi does, so whatever a test saves can be loaded back. `activeTools` holds the active tool names, starting with
  * pi's defaults, `tools` what was registered, and `mcpServers` the MCP servers registered, by name. Like pi, `setActiveTools` drops names that aren't registered (pi's
  * defaults count as registered). `emit` runs the handlers registered with `pi.on`, with the session's
- * own context unless one is given.
+ * own context unless one is given. `cwd` is the context's working directory.
  */
-export function fakeSession(branch: unknown[] = []) {
+export function fakeSession(branch: unknown[] = [], cwd = "/project") {
   const ui = fakeUI();
   const appendEntry = vi.fn((customType: string, data: unknown) => {
     branch.push(customEntry(customType, data));
@@ -60,7 +60,7 @@ export function fakeSession(branch: unknown[] = []) {
   };
   const ctx = {
     hasUI: true,
-    cwd: "/project",
+    cwd,
     ui,
     sessionManager: { getBranch: () => branch },
   } as unknown as ExtensionContext;

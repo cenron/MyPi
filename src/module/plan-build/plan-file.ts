@@ -1,6 +1,7 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isNodeError } from "#core/util/errors";
+import { keepOutOfGit } from "#core/util/git";
 /** Where plans are saved, and the one place Plan may write, relative to the session's cwd. */
 export const PLANS_DIR = join(".pi", "plans");
 
@@ -26,15 +27,13 @@ export function planFileName(title: string, now: Date): string {
 }
 
 /**
- * Writes the plan to `<cwd>/.pi/plans/` and returns its path. Creating the folder also writes a `.gitignore` of `*`,
- * so plans stay out of git without touching the project's own `.gitignore`. Neither file is ever overwritten.
+ * Writes the plan to `<cwd>/.pi/plans/` and returns its path, keeping the folder out of git with `keepOutOfGit`. The
+ * plan file is never overwritten.
  */
 export async function savePlan(cwd: string, title: string, plan: string, now: Date): Promise<string> {
   const dir = join(cwd, PLANS_DIR);
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, ".gitignore"), "*\n", { flag: "wx" }).catch((error: unknown) => {
-    if (!isNodeError(error) || error.code !== "EEXIST") throw error;
-  });
+  await keepOutOfGit(dir);
 
   const path = join(dir, planFileName(title, now));
   await writeFile(path, `# ${title}\n\n${plan.trim()}\n`, { flag: "wx" });

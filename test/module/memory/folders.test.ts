@@ -13,15 +13,17 @@ describe("readMemories", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("lists every .md file by its path without .md, sorted, with its description", async () => {
+  it("lists every .md file by its path without .md, sorted, with its description or a flag for invalid YAML", async () => {
     await mkdir(join(dir, "build"));
     await writeFile(join(dir, "build", "tests.md"), "---\ndescription: How to run the tests\n---\n");
     await writeFile(join(dir, "workflow.md"), "No frontmatter.\n");
+    await writeFile(join(dir, "colon.md"), "---\ndescription: Run: npm test\n---\n");
     await writeFile(join(dir, ".gitignore"), "*\n");
     await writeFile(join(dir, "notes.txt"), "not a memory\n");
 
     expect(readMemories(dir)).toEqual([
       { name: "build/tests", description: "How to run the tests" },
+      { name: "colon", description: "(frontmatter isn't valid YAML; fix it)" },
       { name: "workflow", description: undefined },
     ]);
   });

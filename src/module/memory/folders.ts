@@ -1,12 +1,14 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { isNodeError } from "#core/util/errors";
-import { parseDescription } from "./frontmatter";
+import { isNonEmptyString } from "#core/util/guards";
 import type { Memory } from "./types";
 
 const MEMORY_EXTENSION = ".md";
 const MEMORY_FOLDER = "memories";
+/** Listed in place of a description, so the agent sees the error and fixes the file. */
+const INVALID_FRONTMATTER = "(frontmatter isn't valid YAML; fix it)";
 
 /** Project memories, relative to the session's cwd. */
 export const PROJECT_MEMORY_DIR = join(".pi", MEMORY_FOLDER);
@@ -23,8 +25,21 @@ export function globalMemoryDir(): string {
 export function readMemories(dir: string): Memory[] {
   return memoryFiles(dir).map((path) => ({
     name: relative(dir, path).slice(0, -MEMORY_EXTENSION.length),
-    description: parseDescription(readFileSync(path, "utf8")),
+    description: descriptionOf(readFileSync(path, "utf8")),
   }));
+}
+
+/**
+ * The `description:` from the memory's frontmatter, through pi's own parser; undefined when there's none or it isn't a
+ * string. Pi's parser throws on invalid YAML (an unquoted `: ` is enough), which is flagged instead of dropped.
+ */
+function descriptionOf(text: string): string | undefined {
+  try {
+    const { description } = parseFrontmatter(text).frontmatter;
+    return isNonEmptyString(description) ? description : undefined;
+  } catch {
+    return INVALID_FRONTMATTER;
+  }
 }
 
 /** The `.md` files under `dir`, at any depth, sorted by path. */

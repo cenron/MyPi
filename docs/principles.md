@@ -33,8 +33,9 @@ asked for. It never argues against the structure above.
 - **Look before you write.** In order: what pi exports, what Node has built in, a helper MyPi already has, a
   dependency (by the rule in [AGENTS.md](../AGENTS.md#rules)). New code comes last.
 - **Build the slice, not the framework.** Code for the need in front of us. No option, config key, or flag without
-  someone using it today. A helper waits for its third use; three similar lines beat a premature helper. (Seams are
-  different; see [Modular](#modular).)
+  someone using it today. A helper waits for its third use inside one part; three similar lines beat a premature
+  helper. Code that two parts need, when the roadmap says more will, goes to `src/core/util/` at once
+  (`keepOutOfGit`: plan-build and memory, then worktree). (Seams are different; see [Modular](#modular).)
 - **One way to do a thing.** A second path to the same result needs a reason the first can't meet. Convenience isn't
   one.
 - **Hard cutovers.** When something changes, the old way goes: no aliases, shims, compatibility modes, or tests that

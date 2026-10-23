@@ -161,6 +161,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`util/errors.ts`** has `errorMessage` (any thrown value to a string) and `isNodeError` (narrows to
   `NodeJS.ErrnoException`).
 - **`util/guards.ts`** has `isRecord` (a plain object, before reading fields off JSON) and `isNonEmptyString`.
+- **`util/git.ts`** has `keepOutOfGit(dir)`: a `.gitignore` of `*` in a folder MyPi writes into, written with `wx`
+  so an edited one is kept. Used by plan-build's `.pi/plans/` and memory's `.pi/memories/`; the worktree tool's git
+  helpers go here too.
 
 ## Commands
 

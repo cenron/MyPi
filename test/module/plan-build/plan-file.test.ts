@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -63,33 +63,10 @@ describe("savePlan", () => {
     expect(await readFile(join(plansDir(), ".gitignore"), "utf8")).toBe("*\n");
   });
 
-  it("never overwrites an existing .gitignore", async () => {
-    await savePlan(cwd, "a", "x", now);
-    await writeFile(join(plansDir(), ".gitignore"), "edited\n");
-    await savePlan(cwd, "b", "x", now);
-    expect(await readFile(join(plansDir(), ".gitignore"), "utf8")).toBe("edited\n");
-    expect((await readdir(plansDir())).sort()).toEqual([
-      ".gitignore",
-      "2026-10-20-143205-a.md",
-      "2026-10-20-143205-b.md",
-    ]);
-  });
-
   it("fails instead of overwriting a plan with the same name", async () => {
     await savePlan(cwd, "a", "first", now);
     await expect(savePlan(cwd, "a", "second", now)).rejects.toMatchObject({ code: "EEXIST" });
     expect(await readFile(join(plansDir(), "2026-10-20-143205-a.md"), "utf8")).toBe("# a\n\nfirst\n");
-  });
-
-  // A read-only folder makes the .gitignore write fail with EACCES, which must not be swallowed like EEXIST.
-  it("passes on a .gitignore error other than EEXIST", async () => {
-    await mkdir(plansDir(), { recursive: true });
-    await chmod(plansDir(), 0o500);
-    try {
-      await expect(savePlan(cwd, "a", "x", now)).rejects.toMatchObject({ code: "EACCES" });
-    } finally {
-      await chmod(plansDir(), 0o700);
-    }
   });
 });
 
