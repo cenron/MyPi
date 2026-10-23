@@ -27,8 +27,10 @@ const IPV4_RANGES: [string, number][] = [
   ["240.0.0.0", 4],
 ];
 
-/** IPv6 ranges that aren't on the public internet: unspecified, loopback, discard, documentation, unique local,
- * link-local, the old site-local, and multicast. */
+/**
+ * IPv6 ranges that aren't on the public internet: unspecified, loopback, discard, documentation, unique local,
+ * link-local, the old site-local, and multicast.
+ */
 const IPV6_RANGES: [string, number][] = [
   ["::", 128],
   ["::1", 128],
@@ -91,6 +93,7 @@ export async function assertPublicHost(hostname: string): Promise<void> {
     if (!isPublicAddress(host)) throw new Error(notPublic(host));
     return;
   }
+
   const addresses = await lookup(host, { all: true, verbatim: true });
   const blocked = addresses.find(({ address }) => !isPublicAddress(address));
   if (blocked) throw new Error(notPublic(host, blocked.address));

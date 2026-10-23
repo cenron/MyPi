@@ -16,7 +16,7 @@ Each module has a doc here, named after its folder in `src/module/`. Start a doc
 | [analytics](analytics.md) | idea | Metrics across sessions and pi instances, per model and effort: tokens, cache, tool failures, shell commands without a tool; later, benchmarks for new models. SQLite under `~/.pi/` |
 | [done-check](done-check.md) | idea | When the agent says it's done, run the typecheck and nearby tests, report only what got worse, and send it back |
 | [lsp](lsp.md) | idea | Language-server diagnostics after edits, plus definition, references, and hover |
-| [memory](memory.md) | building | Markdown memories per project (git-ignored) and global; the prompt lists them, the agent reads what it needs. `ALWAYS`, replaceable |
+| [memory](memory.md) | done | Markdown memories per project (git-ignored) and global; the prompt lists them, the agent reads what it needs. `ALWAYS`, replaceable |
 | [notifications](notifications.md) | idea | A desktop notification when the agent is done or a dialog is waiting |
 | [pair-programmer](pair-programmer.md) | idea | A pair-programming mode where the agent navigates and I drive |
 | [plan-build](plan-build.md) | done | Plan and Build modes with an "Implement this plan?" dialog |

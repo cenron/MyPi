@@ -1,6 +1,7 @@
 import type { SessionStartEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Session } from "./session";
 import { type Command, type Module, type ModuleInfo, ModuleLoadMode } from "./types";
+import { isRecord } from "./util/guards";
 
 /** Owns the session's modules: which ones are running, and which the user selected for the next `/reload`. */
 export class ModuleManager {
@@ -68,8 +69,8 @@ export class ModuleManager {
 
   /** The last saved selection, or `undefined` (the defaults) when nothing valid was saved. */
   private savedSelection(): Set<string> | undefined {
-    const saved = this.session.load("modules") as { loaded?: unknown } | undefined;
-    if (!Array.isArray(saved?.loaded)) return undefined;
+    const saved = this.session.load("modules");
+    if (!isRecord(saved) || !Array.isArray(saved.loaded)) return undefined;
     return new Set(saved.loaded.filter((name) => typeof name === "string"));
   }
 
@@ -84,11 +85,11 @@ export class ModuleManager {
       this.modules
         .map((module) => module.info)
         .filter(
-          (m) =>
-            m.loadType === ModuleLoadMode.ALWAYS ||
-            (restore ? restore.has(m.name) : m.loadType === ModuleLoadMode.ON_LOAD),
+          (info) =>
+            info.loadType === ModuleLoadMode.ALWAYS ||
+            (restore ? restore.has(info.name) : info.loadType === ModuleLoadMode.ON_LOAD),
         )
-        .map((m) => m.name),
+        .map((info) => info.name),
     );
   }
 }

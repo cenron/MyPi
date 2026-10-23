@@ -2,7 +2,8 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isNodeError } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
-/** Where plans are saved, and the one place Plan may write, relative to the session's cwd. */
+
+/** Where plans are saved, relative to the session's cwd; plan-build registers it as writable in Plan. */
 export const PLANS_DIR = join(".pi", "plans");
 
 const MAX_SLUG = 50;

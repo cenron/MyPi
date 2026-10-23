@@ -67,7 +67,6 @@ function createTurndown(baseUrl: string): TurndownService {
     },
   });
 
-  // Use the gfm plugin
   turndownService.use(gfm);
   return turndownService;
 }

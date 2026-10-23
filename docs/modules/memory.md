@@ -1,6 +1,6 @@
 # Memory
 
-**Status:** building (design agreed 2026-10-23; slices 1–5 built 2026-10-23; #1 on the [roadmap](../roadmap.md))
+**Status:** done (design agreed and slices 1–5 built 2026-10-23; #1 on the [roadmap](../roadmap.md))
 
 ## Goal
 

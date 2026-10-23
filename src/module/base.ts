@@ -16,8 +16,10 @@ export abstract class BaseModule<State = never> implements Module {
 
   abstract get info(): ModuleInfo;
 
+  /** Does nothing by default. Runs once per session, after every tool is registered. */
   init(): void {}
 
+  /** None by default. */
   commands(): Command[] {
     return [];
   }
@@ -42,14 +44,17 @@ export abstract class BaseModule<State = never> implements Module {
     return this.session.load(this.stateName) as State | undefined;
   }
 
+  /** Sets this module's footer item, or clears it with `undefined`. */
   protected setFooter(item: FooterItem | undefined) {
     this.session.footer.set(this.info.name, item);
   }
 
+  /** Runs `handler` when `key` is pressed in the editor, before pi sees it. */
   protected onKey(key: KeyId, handler: KeyHandler) {
     this.session.editor.onKey(key, handler);
   }
 
+  /** Sets this module's rule on every tool call; a block from any module wins. */
   protected onToolCall(rule: ToolRule) {
     this.session.toolGuard.set(this.info.name, rule);
   }
@@ -59,6 +64,7 @@ export abstract class BaseModule<State = never> implements Module {
     this.session.toolGuard.setWritable(this.info.name, writable);
   }
 
+  /** Sets this module's system prompt section, or removes it with `undefined`; the next run sends it. */
   protected setPrompt(prompt: string | undefined) {
     this.session.promptManager.set(this.info.name, prompt);
   }

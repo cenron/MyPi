@@ -81,7 +81,7 @@ export type JobInfo = {
 };
 
 /** What to run. `kind` is `shell` today, and `subagent` later. */
-export interface JobSpec {
+export type JobSpec = {
   kind: string;
   /** What the job is, for lists and notices, such as the command. */
   label: string;
@@ -90,7 +90,7 @@ export interface JobSpec {
    * aborts.
    */
   run(signal: AbortSignal, write: (chunk: Buffer | string) => void): Promise<number>;
-}
+};
 
 /** A started job: its info as it changes, a promise that settles once it has ended, and its last output lines. */
 export type Job = { readonly info: JobInfo; readonly done: Promise<JobInfo>; tail(lines: number): string };

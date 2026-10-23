@@ -10,7 +10,7 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 
 | # | What | Kind | Why at this point | Needs first |
 |---|---|---|---|---|
-| 1 | [memory](modules/memory.md) | module | Small, no dependencies, and every later session gets better from it. Also answers pair-programmer's "how does it remember how I work". | Nothing |
+| 1 | [memory](modules/memory.md) | module | **Done 2026-10-23.** Small, no dependencies, and every later session gets better from it. Also answers pair-programmer's "how does it remember how I work". | Nothing |
 | 2 | [lsp](modules/lsp.md) | module | Exact navigation by symbol, and the diagnostics the done check wants. | Microsoft's `vscode-jsonrpc` and `vscode-languageserver-protocol` |
 | 3 | [done-check](modules/done-check.md) | module | Catches broken work before I see it. Can start with commands only (typecheck, tests) and add LSP diagnostics once 2 is done. | Nothing; LSP makes it better |
 | 4 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
@@ -31,9 +31,11 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 
 ## Done
 
-- Core: module loading (`/modules`), `PromptManager`, `ToolGuard` with "Allow for this session", the shared footer
-  and editor, `JobManager`. See [architecture](architecture.md).
+- Core: module loading (`/modules`), `PromptManager`, `ToolGuard` with "Allow for this session" and the writable list
+  (`setWritable`), the shared footer and editor, `JobManager`, `keepOutOfGit`. See [architecture](architecture.md).
 - [plan-build](modules/plan-build.md), with Plan's shell check.
+- [memory](modules/memory.md): project and global memories in the prompt, `/onboard`, `/memory-check`. Whether the
+  agent saves on its own depends on the model; [analytics](modules/analytics.md) measures it before any nudge.
 - Built-in tools: [web_search](tools/web-search.md), [web_fetch](tools/web-fetch.md),
   [background process](tools/background-process.md) (`bash` with `background: true`, `job_list`, `job_stop`).
 - [MCP server list](mcp/README.md): Parallel and Exa.

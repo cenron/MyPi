@@ -3,6 +3,7 @@ import type { Session } from "#core/session";
 import type { Command } from "#core/types";
 import { openModulesModal } from "#ui/modules-modal";
 
+/** `/modules`: opens the module dialog, or prints every module with `list`. */
 export function modulesCmd(session: Session): Command {
   return {
     info: {

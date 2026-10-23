@@ -322,14 +322,15 @@ const GIT_SUBCOMMANDS = new Map<string, ArgCheck>([
  * subcommand goes, so it never matches one. `--no-pager` is skipped: agents add it often, and it only turns the pager
  * off.
  */
-const git: ArgCheck = (words) => {
+function git(words: string[]): boolean {
   const [sub = "", ...args] = words[0] === "--no-pager" ? words.slice(1) : words;
   return !hasLong(args, ["--output"]) && (GIT_SUBCOMMANDS.get(sub)?.(args) ?? false);
-};
+}
 
 /** `sed -n 'Np'` or `sed -n 'N,Mp'` (`$` for the last line), then files. Rejects `w`, `-i`, `-e`, …. */
-const sed: ArgCheck = ([n, script = "", ...files]) =>
-  n === "-n" && /^(\d+|\$)(,(\d+|\$))?p$/.test(script) && files.every((f) => !f.startsWith("-"));
+function sed([n, script = "", ...files]: string[]): boolean {
+  return n === "-n" && /^(\d+|\$)(,(\d+|\$))?p$/.test(script) && files.every((f) => !f.startsWith("-"));
+}
 
 const PLAIN_READERS = [
   "cat",

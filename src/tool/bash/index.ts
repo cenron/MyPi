@@ -66,6 +66,7 @@ export function bashTool(session: Session): Tool {
       // The turn's signal isn't passed on, so Escape doesn't stop the job; `job_stop` and session end do.
       const job = session.jobs.start(shellJob(command, ctx.cwd));
       noticeOnEnd(job);
+
       const { info } = job;
       const text =
         `Started job ${info.id} in the background: ${command}\nOutput: ${info.logPath}\n` +

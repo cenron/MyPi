@@ -20,11 +20,12 @@ function formatBackgroundResult({ jobId, logPath }: BackgroundDetails, theme: Th
  * every other call, and an error, is drawn by `next()`, pi's own `bash` renderer. Other tools get `next()` as is.
  */
 export const backgroundRenderer: ToolRendererResolver = (toolName, next) => {
-  const pi = next();
-  if (toolName !== "bash" || !pi?.renderCall || !pi.renderResult) return pi;
-  const { renderCall, renderResult } = pi;
+  const piRenderer = next();
+  if (toolName !== "bash" || !piRenderer?.renderCall || !piRenderer.renderResult) return piRenderer;
+
+  const { renderCall, renderResult } = piRenderer;
   return {
-    ...pi,
+    ...piRenderer,
     renderCall(args, theme, context) {
       if (!(args as CallArgs).background) return renderCall(args, theme, context);
       return reuseText(context.lastComponent, formatBackgroundCall(args as CallArgs, theme));

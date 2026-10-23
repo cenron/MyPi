@@ -1,4 +1,4 @@
-import * as os from "node:os";
+import { homedir } from "node:os";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -7,12 +7,16 @@ import type {
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 
+/** A rule's answer: no objection, a block with the reason the model sees, or a question for the user. */
 export type Verdict = { kind: "allow" } | { kind: "block"; reason: string } | { kind: "ask"; question: string };
+
+/** A tool call as rules see it; `annotations` are the tool author's hints, unverified. */
 export type ToolCall = { toolName: string; input: Record<string, unknown>; annotations?: ToolAnnotations };
 
 /** Where a read-only mode (Plan) still lets a module write: folders (absolute paths) and tools that only write there. */
 export type Writable = { readonly dirs: readonly string[]; readonly tools: readonly string[] };
 
+/** What a rule may need beyond the call, passed in so rules stay pure. */
 export type ToolEnv = {
   cwd: string;
   home: string;
@@ -22,6 +26,7 @@ export type ToolEnv = {
   writableTools: ReadonlySet<string>;
 };
 
+/** A module's objection check, run on every tool call; it must be cheap and side-effect free. */
 export type ToolRule = (call: ToolCall, env: ToolEnv) => Verdict;
 
 type ToolApprovalRequest = { name: string; question: string };
@@ -97,7 +102,7 @@ export class ToolGuard {
 
     const toolEnv: ToolEnv = {
       cwd: ctx.cwd,
-      home: os.homedir(),
+      home: homedir(),
       writableDirs: writables.flatMap((writable) => writable.dirs),
       writableTools: new Set(writables.flatMap((writable) => writable.tools)),
     };

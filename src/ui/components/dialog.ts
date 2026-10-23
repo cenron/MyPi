@@ -9,14 +9,12 @@ type DialogOptions = {
 /** A titled, bordered frame on a background. Children go inside the frame and receive every key. */
 export class Dialog extends Container {
   private readonly content: Box;
-  private readonly options: DialogOptions;
 
   constructor(
     readonly theme: Theme,
-    opt: DialogOptions,
+    private readonly options: DialogOptions,
   ) {
     super();
-    this.options = opt;
     this.content = new Box(2, 1, (text) => theme.bg("customMessageBg", text));
     super.addChild(this.content);
   }

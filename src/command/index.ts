@@ -1,5 +1,4 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-
 import type { Session } from "#core/session";
 import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
@@ -13,7 +12,7 @@ export function registerCommands(pi: ExtensionAPI, session: Session) {
   for (const cmd of commandList) {
     pi.registerCommand(cmd.info.name, {
       description: cmd.info.description,
-      handler: (args, ctx) => runCommand(cmd, args, ctx),
+      handler: (args, ctx) => runCommand(cmd, args, ctx, session),
     });
   }
 }
@@ -23,13 +22,16 @@ function createCommands(session: Session): Command[] {
   return [modulesCmd(session)];
 }
 
-/** Runs a command, shows its returned message as `info`, and turns a thrown error into an `error` notification. */
-async function runCommand(cmd: Command, args: string, ctx: ExtensionCommandContext) {
+/**
+ * Runs a command, shows its returned message as `info`, and turns a thrown error into an `error` notification, both
+ * through `Session`, which skips them when there's no UI.
+ */
+async function runCommand(cmd: Command, args: string, ctx: ExtensionCommandContext, session: Session) {
   try {
     const message = await cmd.execute(ctx, splitArgs(args));
-    if (message) ctx.ui.notify(message, "info");
+    if (message) session.log(message);
   } catch (error) {
-    ctx.ui.notify(errorMessage(error), "error");
+    session.logError(errorMessage(error));
   }
 }
 

@@ -15,6 +15,7 @@ export function registerTools(pi: ExtensionAPI, session: Session): Tool[] {
   for (const definition of definitions) {
     pi.registerTool(definition);
   }
+
   return tools;
 }
 

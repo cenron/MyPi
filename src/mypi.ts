@@ -17,6 +17,7 @@ import { registerCommands } from "./command";
 import { initTools, registerTools, shutdownTools } from "./tool";
 
 export class MyPi {
+  // Set on session_start, which pi always runs before any other handler here.
   private session!: Session;
   /** The built-in tools `registerTools` returned, kept to run their `shutdown()` on `session_shutdown`. */
   private tools: Tool[] = [];

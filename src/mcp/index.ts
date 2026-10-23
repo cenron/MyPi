@@ -16,6 +16,7 @@ export function registerMcpServers(pi: ExtensionAPI, session: Session): void {
   }
 }
 
+/** MyPi's MCP servers. Add new ones here. */
 function createMcpServers(): McpServer[] {
   return [parallelServer(), exaServer()];
 }

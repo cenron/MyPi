@@ -44,7 +44,9 @@ asked for. It never argues against the structure above.
   list for exactly that.
 - **Size is a signal.** A file past about 250 lines, or a function that doesn't fit on one screen (about 40 lines), is a
   prompt to ask whether it's two things, not a hard limit. `src/core/util/shell.ts` is long on purpose: it's a
-  security check, and its rules read best together.
+  security check, and its rules read best together. Its scanner (`scan`) is exempt from the function size, the
+  early-return rule, and the naming rule too: a lexer reads best as one `if … else if` chain over `c`, `i`, and
+  `next`, and rewriting a security check for style risks the check.
 - **Watch growth.** A slice that adds more than a few hundred lines reports its lines added and removed, with the
   reason it needs them. A slice that only removes code is a good slice.
 
@@ -71,7 +73,8 @@ asked for. It never argues against the structure above.
 Loosely after *Clean Code*: the parts that make code easier to read, not ceremony.
 
 - **Names say what, not how.** A reader shouldn't need the body to know what a function returns or a variable holds.
-  No abbreviations beyond the common ones (`ctx`, `id`, `args`).
+  No abbreviations beyond the common ones (`ctx`, `id`, `args`, and `cmd`, which names command factories:
+  `planCmd`).
 - **A function does one thing.** If its name needs "and", it's two functions. Prefer two functions to a boolean
   parameter that switches behavior.
 - **Narrative code.** Guard clauses at the top, then orchestrators that read like an outline, with helpers doing the
@@ -92,7 +95,8 @@ where these rules don't say otherwise:
 - **Strict, and no `any`.** Values from outside start as `unknown` and are narrowed with guards
   (`src/core/util/guards.ts`) or TypeBox schemas.
 - **Casts only at boundaries**, where a library or saved data can't be typed better, with the reason clear from the
-  code around it. No non-null assertions (`!`).
+  code around it. No non-null assertions (`!`). The one allowed form is a definite-assignment `!:` on a class field
+  that pi's lifecycle sets before any use, with a comment saying where (`MyPi.session`, set on `session_start`).
 - **`type` for shapes and unions; `interface` only for a contract classes implement** (`Module`).
 - **Const objects, not `enum`:** `as const`, with `satisfies` when the values must fit a type (`FooterColor`). A
   discriminated union (`Verdict`) for results that can go several ways.

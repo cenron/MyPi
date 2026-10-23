@@ -5,7 +5,7 @@ import { Dialog } from "./components/dialog";
 import { ToggleList } from "./components/toggle-list";
 
 /**
- * Opens the module dialog as a centred overlay. Resolves to the selected names in list order on Save, or `undefined`
+ * Opens the module dialog as a centered overlay. Resolves to the selected names in list order on Save, or `undefined`
  * on Escape.
  */
 export async function openModulesModal(ctx: ExtensionContext, session: Session): Promise<Set<string> | undefined> {
@@ -30,20 +30,20 @@ function modal(theme: Theme, done: (selected: Set<string> | undefined) => void, 
     title: "Modules",
   });
 
-  const loaded = new Set(modules.filter((m) => m.isSelected).map((m) => m.name));
+  const loaded = new Set(modules.filter((info) => info.isSelected).map((info) => info.name));
 
   const list = new ToggleList(
     theme,
-    modules.map((m) => ({
-      id: m.name,
-      label: m.name,
-      description: m.description,
-      on: loaded.has(m.name),
-      disabled: m.loadType === ModuleLoadMode.ALWAYS,
+    modules.map((info) => ({
+      id: info.name,
+      label: info.name,
+      description: info.description,
+      on: loaded.has(info.name),
+      disabled: info.loadType === ModuleLoadMode.ALWAYS,
     })),
     {
       onToggle: (id, on) => (on ? loaded.add(id) : loaded.delete(id)),
-      onAccept: () => done(new Set(modules.filter((m) => loaded.has(m.name)).map((m) => m.name))),
+      onAccept: () => done(new Set(modules.filter((info) => loaded.has(info.name)).map((info) => info.name))),
       onCancel: () => done(undefined),
     },
   );

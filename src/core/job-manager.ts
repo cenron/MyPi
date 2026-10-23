@@ -62,6 +62,7 @@ export class JobManager {
   async stop(id: string): Promise<JobInfo | undefined> {
     const job = this.jobs.get(id);
     if (!job) return undefined;
+
     job.controller.abort();
     return job.done;
   }
@@ -101,6 +102,7 @@ export class JobManager {
       if (signal.aborted) info.status = "stopped";
       else Object.assign(info, { status: "failed", error: errorMessage(error) });
     }
+
     info.endedAt = Date.now();
     await new Promise<void>((resolve) => log.end(resolve));
   }

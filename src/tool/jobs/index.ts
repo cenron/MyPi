@@ -46,6 +46,7 @@ export function jobStopTool(session: Session): Tool {
       const wasRunning = session.jobs.get(id)?.info.status === "running";
       const info = await session.jobs.stop(id);
       if (!info) throw new Error(`No job ${id} in this session; job_list shows them.`);
+
       // A job that exits on its own as the stop arrives keeps its exit code, so report how it actually ended.
       const text =
         wasRunning && info.status === "stopped"

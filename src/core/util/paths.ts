@@ -11,13 +11,13 @@ const UNICODE_SPACES = /[  -   　]/g;
  * branch. `home` is a parameter so rules stay pure.
  */
 export function resolveToolPath(path: string, cwd: string, home: string): string {
-  let p = path.replace(UNICODE_SPACES, " ");
-  if (p.startsWith("@")) p = p.slice(1);
-  if (p === "~") p = home;
-  else if (p.startsWith("~/")) p = join(home, p.slice(2));
-  else if (p.startsWith("file://")) p = fileURLToPath(p);
+  let resolved = path.replace(UNICODE_SPACES, " ");
+  if (resolved.startsWith("@")) resolved = resolved.slice(1);
+  if (resolved === "~") resolved = home;
+  else if (resolved.startsWith("~/")) resolved = join(home, resolved.slice(2));
+  else if (resolved.startsWith("file://")) resolved = fileURLToPath(resolved);
 
-  return isAbsolute(p) ? resolve(p) : resolve(cwd, p);
+  return isAbsolute(resolved) ? resolve(resolved) : resolve(cwd, resolved);
 }
 
 /**
