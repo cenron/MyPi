@@ -67,9 +67,16 @@ Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
    they say "save a memory", and only memory's own prompt section says how. Memory only plugs into core seams
    (`PromptManager`, a `tool_result` hook, the writable list in `ToolGuard`), so a different system (SQLite, a vector
    index) replaces this module and nothing else changes. The same goes the other way: memory never imports
-   plan-build, so either can be turned off, changed to another load type, or replaced without breaking the other. If another part ever needs memory in code, that goes through a core seam,
-   not an import. Existing memories would need a one-time import. The likeliest next step keeps the Markdown files as
-   the source of truth and adds a search index over them.
+   plan-build, so either can be turned off, changed to another load type, or replaced without breaking the other. If
+   another part ever needs memory in code, that goes through a core seam, not an import. Existing memories would need
+   a one-time import. The likeliest next step keeps the Markdown files as the source of truth and adds a search index
+   over them.
+8. **No project-trust check,** like pi. Pi loads a project's `.pi/` resources only once the folder is trusted
+   (`ctx.isProjectTrusted()`), but it loads `AGENTS.md` and `CLAUDE.md` whatever the decision (pi's
+   `docs/security.md` § Project trust). Memory reads `.pi/memories/` the same way: a cloned repo with committed
+   memories puts their descriptions in the prompt. Gating the project scope was rejected: one-line descriptions are a
+   smaller channel than the context files pi already loads untrusted, project memories are git-ignored by default, and
+   it would be a rule pi doesn't have. Revisit if pi starts gating context files.
 
 ## Behavior
 
@@ -79,7 +86,9 @@ Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
   description. Serena gives names only; a description makes the right read likelier for a few tokens. The agent reads
   what looks relevant with `read`. The harness never puts memory content in the prompt (Serena's rule).
 - **Conventions in the same section:**
-  - When to write one, and where: how I work goes global, facts about the project go in the project.
+  - Memories can be out of date: check one against the code before relying on it; fix or delete it if wrong.
+  - When to write one: only what a future session needs and can't get from the code, git history, or `AGENTS.md`;
+    not details of the current task. Where: how I work goes global, facts about the project go in the project.
   - One fact per file. A correction or preference says why and how to apply it.
   - Use an existing topic before making a new one. The description is one short line.
   - Update instead of duplicating, delete wrong ones, link related ones with `[[path]]`.

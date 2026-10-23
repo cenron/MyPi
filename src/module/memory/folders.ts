@@ -5,14 +5,15 @@ import { isNodeError } from "#core/util/errors";
 import { parseDescription } from "./frontmatter";
 import type { Memory } from "./types";
 
-/** Project memories, relative to the session's cwd. */
-export const PROJECT_MEMORY_DIR = join(".pi", "memories");
-
 const MEMORY_EXTENSION = ".md";
+const MEMORY_FOLDER = "memories";
+
+/** Project memories, relative to the session's cwd. */
+export const PROJECT_MEMORY_DIR = join(".pi", MEMORY_FOLDER);
 
 /** Global memories: `<agent-dir>/memories`, so they follow `PI_CODING_AGENT_DIR` like the rest of pi's user files. */
 export function globalMemoryDir(): string {
-  return join(getAgentDir(), "memories");
+  return join(getAgentDir(), MEMORY_FOLDER);
 }
 
 /**
