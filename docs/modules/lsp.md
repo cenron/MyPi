@@ -46,7 +46,7 @@ step. A module, so it can be turned on or off.
 | Piece | pi hook | Notes |
 |---|---|---|
 | Module | `BaseModule`, `src/module/lsp/` | Load type `ON_DEMAND`? Open question. |
-| Client | JSON-RPC over the server's stdio | Microsoft's `vscode-jsonrpc` and `vscode-languageserver-protocol` (decided 2026-10-22, under the dependency rule in AGENTS.md), not a hand-written client. Started from a tool or `session_start`, closed in `session_shutdown`. |
+| Client | JSON-RPC over the server's stdio | Microsoft's `vscode-languageserver-protocol` at `^3.18.5`, not a hand-written client (passed the dependency rule in AGENTS.md 2026-10-23). Import from `vscode-languageserver-protocol/node`: it re-exports `vscode-jsonrpc/node` and pins its own copy, so `vscode-jsonrpc` isn't declared separately; a second range could drift and install a mismatched copy. Started from a tool or `session_start`, closed in `session_shutdown`. |
 | Diagnostics after a turn | Asked for by the [done check](done-check.md) | Pi lets an extension rewrite another tool's result (`tool_result` returns `content`, checked in pi 1.2.0's `types.d.ts`), so per-edit diagnostics stay possible if they're ever wanted. |
 | Tools | Returned from the module's `tools()`, in `src/module/lsp/tools/` | `readOnlyHint: true` on the readers, so they work in Plan mode. |
 | Server config | A map of language → command, with defaults | Per-project settings only for trusted projects. Where it lives is open. |

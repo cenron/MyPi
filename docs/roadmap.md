@@ -11,7 +11,7 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 | # | What | Kind | Why at this point | Needs first |
 |---|---|---|---|---|
 | 1 | [memory](modules/memory.md) | module | **Done 2026-10-23.** Small, no dependencies, and every later session gets better from it. Also answers pair-programmer's "how does it remember how I work". | Nothing |
-| 2 | [lsp](modules/lsp.md) | module | Exact navigation by symbol, and the diagnostics the done check wants. | Microsoft's `vscode-jsonrpc` and `vscode-languageserver-protocol` |
+| 2 | [lsp](modules/lsp.md) | module | Exact navigation by symbol, and the diagnostics the done check wants. | Microsoft's `vscode-languageserver-protocol` (passed the dependency check 2026-10-23) |
 | 3 | [done-check](modules/done-check.md) | module | Catches broken work before I see it. Can start with commands only (typecheck, tests) and add LSP diagnostics once 2 is done. | Nothing; LSP makes it better |
 | 4 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
 | 5 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 4 (worktree) for parallel writers |
