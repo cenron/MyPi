@@ -53,6 +53,8 @@ the fleet view, which also shows what's running.
 10. **A writer's work comes back as a patch** (pi-subagents' way, not Radian's branch and merge): when the run ends,
     its changes are captured as a patch file and a handoff file, the temporary worktree and branch are removed, and
     the main agent applies the patch.
+11. **A writer won't start in a worktree while my checkout has uncommitted changes** (pi-subagents' rule); the
+    refusal lists the files so I can commit or stash first. **Applying a patch always asks me first.**
 
 ## Agents
 
@@ -130,8 +132,16 @@ access:
      to a patch file, plus a handoff file: the agent, the task, the base commit, the files changed, the patch's path,
      and the child's summary.
   3. The worktree and its branch are removed. The patch and handoff stay until the patch is applied or dropped.
-  4. The run's result names the patch and the files. The main agent reviews it and applies it with
-     `git apply --3way` (in Build; a clash is reported, not forced). Two writers' patches are applied one at a time.
+  4. The run's result names the patch and the files. The main agent reviews it and calls `subagent_apply`, which
+     asks me first: a dialog with the agent, the task, the files and their diff stat, and the child's summary, and
+     Apply, Drop, or Cancel (Cancel is the default, as in Radian's merge dialog). Apply runs `git apply --3way` (Build
+     only); a clash is reported, never forced. Patches are applied one at a time.
+- **Uncommitted changes refuse a worktree writer:** the worktree comes from `HEAD`, so the child wouldn't see work I
+  haven't committed, and its patch could clash with it. Before launch, `git status --porcelain` must be empty
+  (MyPi's own state folders aside); otherwise the run is refused with the list of files. Nothing falls back to the
+  main checkout on its own.
+- **No `git apply` through `bash`:** the prompt section tells the main agent to apply patches only with
+  `subagent_apply`, since a `bash` call in Build wouldn't ask me.
 
 ## Creating and changing agents
 
@@ -200,6 +210,7 @@ Deferred until internal agents work. The design so far:
 | Prompt section | `BaseModule.setPrompt` | The agent list; refreshed when an agent changes. |
 | `subagent` | `src/module/subagents/tools/`, from `tools()` | `direct` exposure. Streams progress with `onUpdate`, passes the `signal` to the child's `abort()`. |
 | `agent_manage` | Same folder | `deferred` exposure; the confirm comes from a rule on `ToolGuard` that always asks. |
+| `subagent_apply` | Same folder | Applies or drops a writer's patch after a dialog with the diff stat and summary; never applies without my answer. |
 | Plan rule | `onToolCall` in `init()` | Read-only runs allowed, write runs blocked, while the parent is in Plan. |
 | Child session | `createAgentSession`, `ModelRuntime`, `SessionManager`, `resolveCliModel`, `DefaultResourceLoader` | All exported by pi 1.2.0. Dispose a child by emitting `session_shutdown`, then `dispose()`. |
 | Background | `session.jobs` (`JobManager`), with run details on the job | One list for `job_list`, `job_stop`, the footer, and the fleet view. |
@@ -223,7 +234,8 @@ Deferred until internal agents work. The design so far:
 **Milestone 2: the fleet view and parallel writers**
 
 7. The fleet view's runs: the collapsed line, the expanded list, open, stop.
-8. Parallel writers, each in its own worktree; their work comes back as a patch and a handoff file.
+8. Parallel writers, each in its own worktree (refused while the checkout has uncommitted changes); their work comes
+   back as a patch and a handoff file, applied through `subagent_apply` after I approve.
 
 **Milestone 3: creating agents**
 
@@ -239,10 +251,6 @@ Deferred until internal agents work. The design so far:
 
 - Where do child session files go: pi's session folder (they'd show in `/resume`), or a folder of their own?
 - How many background runs at once, and how many runs per prompt?
-- A writer started while my checkout has uncommitted changes: refuse, as pi-subagents does (the worktree comes from
-  `HEAD`, so the child wouldn't see that work), or branch from a snapshot of the working tree (`git stash create`
-  makes a commit of it without touching the checkout; untracked files aren't in it)?
-- Does the main agent apply a patch on its own, or does applying ask me first?
 - How close together is "close together" for grouped completions?
 - The fleet view's key, and whether `/agents` replaces `job_list` for runs.
 - Should the [done check](done-check.md) run when a `developer` run finishes?
