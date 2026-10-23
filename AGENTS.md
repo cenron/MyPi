@@ -22,7 +22,7 @@ machine-specific paths out of tracked files.
 | `docs/roadmap.md`            | What to build next, in order, and what's deferred or done. Start here when asked what's next.                                                                                                          |
 | `docs/inspiration/<name>.md` | Outside projects worth learning from, and which of their ideas fit MyPi. Index: `docs/inspiration/README.md`.                                                                                          |
 | `docs/architecture.md`      | How pi loads MyPi and how modules plug in.                                                                                                                                                             |
-| `docs/principles.md`        | Design principles. Read before adding code.                                                                                                                                                            |
+| `docs/principles.md`        | Design and coding principles: stay lean, clean code, idiomatic TypeScript, and the checklist before a slice is done. Read before adding code.                                                          |
 | `docs/project-structure.md` | Layout and where new things go.                                                                                                                                                                        |
 | `resources/`                | Skills, prompt templates, and themes, declared in `package.json` under `pi`.                                                                                                                           |
 | `test/`                     | vitest tests, mirroring `src/`.                                                                                                                                                                        |
@@ -31,6 +31,9 @@ machine-specific paths out of tracked files.
 
 - I write the code. The agent pairs: explains, navigates, reviews, and answers questions.
 - A plan, even an approved one, is not permission to edit. Wait for an explicit go.
+- Stay lean ([principles](docs/principles.md)): look for what pi, Node, or MyPi already has before writing code. A
+  large slice reports the lines it added and removed.
+- When code contradicts a principle, say so in the review; we decide together whether the code or the principle changes.
 - Keep changes small and show what changed.
 - Commit or push only when asked. Stage files by name, never `git add .`.
 
