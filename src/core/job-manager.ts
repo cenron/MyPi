@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLocalBashOperations, DEFAULT_MAX_BYTES } from "@earendil-works/pi-coding-agent";
+import { DEFAULT_MAX_BYTES } from "@earendil-works/pi-coding-agent";
 import type { JobInfo, JobSpec, JobStatus } from "#core/types";
 import { errorMessage } from "./util/errors";
 
@@ -19,6 +19,7 @@ type Entry = Job & { controller: AbortController };
 export class JobManager {
   private currentJobId = 1;
   private readonly jobs = new Map<string, Entry>();
+  private readonly listeners = new Set<(running: number) => void>();
 
   /** Starts `spec` at once. Ids count up from 1 in this session. */
   start(spec: JobSpec): Job {
@@ -40,11 +41,13 @@ export class JobManager {
     const controller = new AbortController();
     const done = this.settle(spec, info, controller.signal, write, log).then(() => {
       tail = this.appendTail(tail, decoder.decode());
+      this.notify();
       return info;
     });
 
     const entry: Entry = { info, done, controller, tail: (lines) => lastLines(tail, lines) };
     this.jobs.set(info.id, entry);
+    this.notify();
     return entry;
   }
 
@@ -61,8 +64,21 @@ export class JobManager {
     return job.done;
   }
 
-  /** Stops every running job without waiting, so `session_shutdown` stays synchronous. Safe to call twice. */
+  /**
+   * Calls `listener` with the number of running jobs whenever a job starts or ends. Returns a function that removes
+   * it. `stopAll()` drops every listener, since it runs only when the session ends.
+   */
+  onChange(listener: (running: number) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Stops every running job without waiting, so `session_shutdown` stays synchronous. Safe to call twice. Drops the
+   * listeners first: the jobs end after the session has, when nothing should reach its UI.
+   */
   stopAll = (): void => {
+    this.listeners.clear();
     for (const job of this.jobs.values()) job.controller.abort();
   };
 
@@ -85,6 +101,11 @@ export class JobManager {
     }
     info.endedAt = Date.now();
     await new Promise<void>((resolve) => log.end(resolve));
+  }
+
+  private notify() {
+    const running = [...this.jobs.values()].filter((job) => job.info.status === "running").length;
+    for (const listener of this.listeners) listener(running);
   }
 
   private createJobInfo(spec: JobSpec, status: JobStatus): JobInfo {
@@ -110,17 +131,6 @@ export class JobManager {
   }
 
   private appendTail = (tail: string, text: string) => (tail + text).slice(-DEFAULT_MAX_BYTES);
-}
-
-/** A job that runs `command` in `cwd` through pi's own shell, with no time limit. */
-export function shellJob(command: string, cwd: string): JobSpec {
-  return {
-    kind: "shell",
-    label: command,
-    // pi kills the whole process tree when `signal` aborts. A null exit code is a failed command, as in pi's bash.
-    run: async (signal, write) =>
-      (await createLocalBashOperations().exec(command, cwd, { onData: write, signal })).exitCode ?? 1,
-  };
 }
 
 /** The last `count` lines of `text`, without its final newline. */

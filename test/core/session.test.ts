@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
@@ -55,5 +56,26 @@ describe("Session", () => {
       customEntry("other-ext", { loaded: ["z"] }),
     ]);
     expect(session.load("modules")).toEqual({ loaded: ["a"] });
+  });
+
+  it("shows how many jobs are running in the footer, only while some are", async () => {
+    const { session, setStatus } = fakeSession();
+    let finish!: (code: number) => void;
+    const first = session.jobs.start({
+      kind: "test",
+      label: "a",
+      run: () => new Promise((resolve) => (finish = resolve)),
+    });
+    const second = session.jobs.start({ kind: "test", label: "b", run: async () => 0 });
+    await second.done;
+    finish(0);
+    await first.done;
+    expect(setStatus.mock.calls).toEqual([
+      ["mypi-jobs", "<accent>1 job"],
+      ["mypi-jobs", "<accent>2 jobs"],
+      ["mypi-jobs", "<accent>1 job"],
+      ["mypi-jobs", undefined],
+    ]);
+    await Promise.all([first, second].map((job) => rm(job.info.logPath, { force: true })));
   });
 });

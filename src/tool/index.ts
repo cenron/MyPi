@@ -1,6 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
 import { errorMessage } from "#core/util/errors";
+import { bashTool } from "./bash";
+import { jobListTool, jobStopTool } from "./jobs";
 import type { Tool } from "./types";
 import { webFetchTool } from "./web-fetch";
 import { webSearchTool } from "./web-search";
@@ -34,5 +36,5 @@ export function shutdownTools(tools: Tool[], session: Session) {
 
 /** MyPi's built-in tools. Add new ones here. */
 const createTools = (session: Session): Tool[] => {
-  return [webSearchTool(session), webFetchTool(session)];
+  return [bashTool(session), jobListTool(session), jobStopTool(session), webSearchTool(session), webFetchTool(session)];
 };

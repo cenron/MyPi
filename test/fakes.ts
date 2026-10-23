@@ -45,6 +45,8 @@ export function fakeSession(branch: unknown[] = []) {
       return () => {};
     },
     sendUserMessage: vi.fn(),
+    sendMessage: vi.fn(),
+    registerMessageRenderer: vi.fn(),
     appendEntry,
     getAllTools: () => [],
     registerTool: (tool: ToolDefinition) => tools.set(tool.name, tool),
@@ -78,6 +80,8 @@ export function fakeSession(branch: unknown[] = []) {
     setActiveTools: pi.setActiveTools,
     activeTools: () => activeTools,
     sendUserMessage: pi.sendUserMessage,
+    sendMessage: pi.sendMessage,
+    registerMessageRenderer: pi.registerMessageRenderer,
     select: ui.select,
     emit,
   };

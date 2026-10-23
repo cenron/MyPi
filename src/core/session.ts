@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Editor } from "#ui/editor";
-import { Footer } from "#ui/footer";
+import { Footer, FooterColor } from "#ui/footer";
 import { JobManager } from "./job-manager";
 import { ModuleManager } from "./module-manager";
 import { Notifier } from "./notifier";
@@ -28,6 +28,13 @@ export class Session {
     this._promptManager = new PromptManager(this.ctx);
     this._toolGuard = new ToolGuard(this.pi);
     this._jobs = new JobManager();
+    // How many jobs are running, of any kind, shown only while there are some.
+    this._jobs.onChange((running) =>
+      this._footer.set(
+        "jobs",
+        running ? { text: running === 1 ? "1 job" : `${running} jobs`, color: FooterColor.Accent } : undefined,
+      ),
+    );
   }
 
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */

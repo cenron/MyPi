@@ -1,6 +1,6 @@
 import { readFile, rm, stat } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
-import { JobManager, shellJob } from "#core/job-manager";
+import { JobManager } from "#core/job-manager";
 import type { JobSpec } from "#core/types";
 
 /** Log files the tests made, removed after each test. */
@@ -131,34 +131,32 @@ describe("JobManager", () => {
     expect(await jobs.stop("9")).toBeUndefined();
   });
 
+  it("reports the running count when a job starts or ends, until removed or stopAll() runs", async () => {
+    const jobs = new JobManager();
+    const counts: number[] = [];
+    const remove = jobs.onChange((running) => counts.push(running));
+    const first = controlled();
+    start(jobs, first.spec);
+    const second = start(jobs, controlled().spec);
+    first.end(0);
+    await jobs.get("1")?.done;
+    expect(counts).toEqual([1, 2, 1]);
+
+    remove();
+    start(jobs, controlled().spec);
+    expect(counts).toEqual([1, 2, 1]);
+
+    jobs.onChange((running) => counts.push(running));
+    jobs.stopAll();
+    await second.done;
+    expect(counts).toEqual([1, 2, 1]);
+  });
+
   it("stops every running job, and a second call is harmless", async () => {
     const jobs = new JobManager();
     const done = [start(jobs, controlled().spec), start(jobs, controlled().spec)].map((job) => job.done);
     jobs.stopAll();
     jobs.stopAll();
     expect((await Promise.all(done)).map((info) => info.status)).toEqual(["stopped", "stopped"]);
-  });
-});
-
-// Real processes, through pi's own shell.
-describe("shellJob", () => {
-  it("runs a command to the end, with its output", async () => {
-    const job = start(new JobManager(), shellJob("printf 'a\\nb\\n'", process.cwd()));
-    expect(await job.done).toMatchObject({
-      kind: "shell",
-      label: "printf 'a\\nb\\n'",
-      status: "completed",
-      exitCode: 0,
-    });
-    expect(job.tail(5)).toBe("a\nb");
-    expect(await readFile(job.info.logPath, "utf8")).toBe("a\nb\n");
-  });
-
-  it("stops a command that would run on", async () => {
-    const jobs = new JobManager();
-    const job = start(jobs, shellJob("sleep 30", process.cwd()));
-    const started = Date.now();
-    expect(await jobs.stop(job.info.id)).toMatchObject({ status: "stopped" });
-    expect(Date.now() - started).toBeLessThan(1000);
   });
 });

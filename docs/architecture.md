@@ -145,10 +145,11 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   started it. A job is a `JobSpec` (`kind`, `label`, `run(signal, write)`; in `types.ts` with `JobInfo` and
   `JobStatus`); `start` gives it an id counting up from 1, a log file (`pi-job-<hex>.log` in `os.tmpdir()`, `0600`,
   kept after it ends), and a 50K-character tail in memory, and records how it ended: `completed`, `failed` (an exit
-  code or a thrown error), or `stopped`. `shellJob(command, cwd)` runs a command through pi's own
-  `createLocalBashOperations().exec`, which kills the process tree on abort. Generic on purpose, so subagents can be a
-  second kind. `MyPi.onSessionEnd` calls `stopAll()` before the tools' shutdown. See
-  [background process](tools/background-process.md).
+  code or a thrown error), or `stopped`. `onChange` tells listeners the running count on every start and end;
+  `Session` uses it for the `jobs` footer item, and `stopAll()` drops the listeners. Generic on purpose: shell
+  commands are one kind (`shellJob` in `src/tool/bash/`, through pi's own `createLocalBashOperations().exec`, which
+  kills the process tree on abort), and subagents can be a second. `MyPi.onSessionEnd` calls `stopAll()` before the
+  tools' shutdown. See [background process](tools/background-process.md).
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
   `enum`.
@@ -213,6 +214,16 @@ the module modal and `/modules list` prints each module as `loaded: <name>` or `
 - Tools can't be unregistered (only withdrawn by registering again with `exposure: "hidden"`). As with commands, a
   tool that isn't registered on the next `session_start` is gone after `/reload`.
 - Set `annotations` truthfully: `ToolGuard` and plan-build's rule read `readOnlyHint`.
+- **Overriding a pi tool:** a tool registered with a built-in's name replaces it. `bash` (`src/tool/bash/`) builds pi's
+  own with `createBashToolDefinition`, spreads it to keep its prompt text and `outputSchema`, adds its own parameters,
+  and hands the calls it doesn't handle to pi's `execute`. pi's tool definitions carry no renderers: pi draws its
+  built-in tools by name (`withBuiltInRenderers`) whenever the definition supplies none, so an override that sets
+  `renderCall` replaces the drawing of every call. To change only some calls, register a resolver with
+  `pi.registerToolRenderer((toolName, next) => …)` that delegates to `next()` (`backgroundRenderer`, registered once
+  in `MyPi`'s constructor, since pi keeps resolvers in a list). A tool that declares an `outputSchema` must set
+  `structuredContent` on every successful result; codemode scripts read it instead of the text.
+- A tool that sends custom messages registers their renderer from `init()` with `session.pi.registerMessageRenderer`
+  (`bash`'s job notices, `mypi-job`); pi accepts it during `session_start` and looks renderers up when it draws.
 
 To add a tool, create `src/tool/<name>.ts` (or a folder, `src/tool/<name>/index.ts`, once it needs more than one
 file), then add it to the list in `createTools`. A module's tools live in `src/module/<name>/tools/` and are returned

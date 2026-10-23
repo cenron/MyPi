@@ -1,6 +1,7 @@
 # Background process
 
-**Status:** building (slice 1 done 2026-10-22: the job registry)
+**Status:** done (slices 1–5, 2026-10-22: the job registry, `bash` with `background: true`, the exit notice,
+`job_list` / `job_stop`, and the footer and display). Slice 6 is for later.
 
 ## Goal
 
@@ -89,11 +90,11 @@ Decided 2026-10-22.
 
 1. **Done.** **The job registry**, in core: start, list, stop, stop all, a log file and an in-memory tail per job, and
    how each job ended. Shell jobs run on pi's `exec`. Everything stops on `session_shutdown`.
-2. **The `bash` override:** `background: true` starts a shell job and returns its id and log path; foreground calls
+2. **Done.** **The `bash` override:** `background: true` starts a shell job and returns its id and log path; foreground calls
    are pi's `bash` unchanged.
-3. **The exit notice** through `sendMessage`, with its own message renderer.
-4. **`job_list` and `job_stop`**, and plan-build's rule for them.
-5. **The footer item, and rendering** for background starts and the job tools.
+3. **Done.** **The exit notice** through `sendMessage`, with its own message renderer.
+4. **Done.** **`job_list` and `job_stop`**, and plan-build's rule for them.
+5. **Done.** **The footer item, and rendering** for background starts (the job tools kept pi's default drawing).
 6. **Later:** Monitor (output lines streamed back as events, with a deadline), and a foreground command that hits its
    timeout moving to the background, as in Claude Code.
 
@@ -102,9 +103,9 @@ Decided 2026-10-22.
 Done 2026-10-22. A `JobManager` in core runs jobs, keeps each job's output in a log file and an in-memory tail,
 and records how it ended. Nothing the model can call yet; slice 2 adds `bash` with `background: true`.
 
-Files: `src/core/job-manager.ts` (new: `JobManager`, `Job`, and `shellJob`), `JobStatus`, `JobSpec`, and `JobInfo` in
-`src/core/types.ts`, `session.jobs` in `src/core/session.ts`, `stopAll()` in `MyPi.onSessionEnd`, and
-`test/core/job-manager.test.ts`.
+Files: `src/core/job-manager.ts` (new: `JobManager`, `Job`, and `shellJob`, which slice 2 moved to
+`src/tool/bash/`), `JobStatus`, `JobSpec`, and `JobInfo` in `src/core/types.ts`, `session.jobs` in
+`src/core/session.ts`, `stopAll()` in `MyPi.onSessionEnd`, and `test/core/job-manager.test.ts`.
 
 ```ts
 // src/core/types.ts
@@ -187,6 +188,229 @@ log file is `0600`. Two use a real shell: `printf 'a\nb\n'` completes with exit 
 log; `sleep 30` stopped ends within a second as `stopped`. No live test: nothing in pi starts a job until slice 2. Also
 `test/tool/lifecycle.test.ts` checks `session_shutdown` stops the jobs before the tools' `shutdown()`. All 18 mutations
 caught, once a test for output written after the end was added.
+
+## Slice 2: the `bash` override
+
+Done 2026-10-22. MyPi's `bash` is pi's own plus `background: true`, which starts the command as a job and returns at
+once with its id and log file. Without it, the call goes to pi's `bash` unchanged.
+
+Files: `src/tool/bash/index.ts` (new: `bashTool`, and `shellJob` moved from `job-manager.ts`), `bashTool(session)` first
+in `createTools` (`src/tool/index.ts`), and `test/tool/bash/index.test.ts`.
+
+```ts
+/** What a background start returns. Built on pi's `BashToolDetails` (all optional), so pi's renderer takes it. */
+export type BackgroundDetails = BashToolDetails & { jobId: string; logPath: string };
+
+/**
+ * pi's `bash` plus `background: true`, which starts the command as a job in `session.jobs` and returns at once with
+ * its id and log file. Without it, the call is pi's own `bash`, unchanged.
+ */
+export function bashTool(session: Session): Tool;
+
+/** A job that runs `command` in `cwd` through pi's own shell, with no time limit. */
+export function shellJob(command: string, cwd: string): JobSpec;
+```
+
+How it works:
+
+1. `createBashToolDefinition(session.ctx.cwd)` builds pi's `bash`. MyPi's spreads it, so it keeps pi's prompt snippet
+   and guidelines, `outputSchema`, and `constrainedSampling`. pi's definition has no renderer: pi draws `bash` with its
+   built-in one (`withBuiltInRenderers`) because MyPi's supplies none. (This said "keeps pi's renderer" until slice 5
+   found otherwise.)
+2. `parameters` are pi's (`command`, `timeout`) plus `background?: boolean`, whose description says it's for dev
+   servers, watchers, and anything that doesn't exit, and that `timeout` doesn't apply. The tool description adds one
+   sentence pointing to it.
+3. Without `background`, `execute` passes `{ command, timeout }` and the call's signal, `onUpdate`, and `ctx` to pi's
+   `execute`, and returns its result as is.
+4. With it, `execute` starts `shellJob(command, ctx.cwd)` in `session.jobs` and returns `Started job <id> in the
+   background: <command>\nOutput: <logPath>\nRead that file for its output.`, with `details: { jobId, logPath }` and a
+   `structuredContent` in pi's `outputSchema` shape (`output` is the same text, `exit_code` 0), since a tool that
+   declares one must always set it. The turn's signal isn't passed on, so Escape doesn't stop the job.
+5. A background job runs in the call's `cwd` with pi's shell environment (`getShellEnv()`, which `exec` uses by
+   default), but without the `PI_*` session variables pi's own `execute` adds.
+
+Decided with it: `shellJob` lives with `bash`, and `JobManager` stays generic in core; `timeout` is ignored with
+`background`; no `PI_*` variables in background jobs; pi's renderer until slice 5; details carry `jobId` and `logPath`
+for slices 3 and 5; Plan mode checks a background command like any other (`npm run dev` is asked about).
+
+Tests (`test/tool/bash/index.test.ts`, real processes): a foreground `echo hi` returns `hi` and starts no job; a
+background `pwd` in the temp folder returns the start text and details, ends `completed`, and logs the temp folder's
+real path (the cwd and `shellJob` together); a background `sleep 30` keeps running after the call's signal aborts, and
+`stop` ends it within a second. `shellJob`'s two tests moved here, merged into those. The lifecycle and `registerTools`
+tests list `bash` first. Mutations caught: always running in the foreground, the session's cwd instead of the call's,
+and changing the foreground command.
+
+## Slice 3: the exit notice
+
+Done 2026-10-22. When a background job ends, a `mypi-job` message tells the model how it ended, how long it ran, its
+last lines, and its log file. It's queued for after the current run while the agent works, and starts a turn when the
+agent is idle, so the model never polls.
+
+Files: `src/tool/bash/notice.ts` (new: `jobNotice`, `formatNotice`, `renderNotice`), the notice and the renderer in
+`src/tool/bash/index.ts`, `test/tool/bash/notice.test.ts` (new), `test/tool/bash/index.test.ts`, and
+`sendMessage` / `registerMessageRenderer` in the fake pi (`test/fakes.ts`, `test/index.test.ts`,
+`test/tool/lifecycle.test.ts`).
+
+```ts
+/** The custom message type of a job's exit notice. */
+export const JOB_NOTICE = "mypi-job";
+
+/** How many of a job's last lines a notice carries. */
+export const NOTICE_LINES = 20;
+
+/** What a notice carries for its renderer: the job as it ended, and its last lines with escape codes stripped. */
+export type NoticeDetails = { job: JobInfo; tail: string };
+
+/**
+ * The exit notice for a job that ended: the model's text and the details its renderer draws. `tail` is the job's last
+ * lines as written; escape codes are stripped and it's cut to its last 2,000 characters.
+ */
+export function jobNotice(job: JobInfo, tail: string): { content: string; details: NoticeDetails };
+
+/** Draws a notice: one line collapsed, in green or red, with its last lines expanded. Undefined without details. */
+export const renderNotice: MessageRenderer<NoticeDetails>;
+```
+
+The model's text, for a job that completed:
+
+```
+Background job 1 completed (exit code 0) after 3.0s: for i in 1 2 3; do echo tick $i; sleep 1; done
+Last lines:
+tick 1
+tick 2
+tick 3
+done
+Full output: /…/pi-job-ac88….log
+```
+
+A failed job reads `failed (exit code 3)`; one whose command couldn't run reads `failed`, with an `Error: …` line after
+the first. No output gives `No output.` in place of the last lines.
+
+How it works:
+
+1. Each background start attaches `noticeOnEnd(job)`: once `job.done` settles, unless the job was `stopped` or the tool
+   has shut down, it calls `session.pi.sendMessage({ customType: JOB_NOTICE, display: true, content, details },
+   { deliverAs: "followUp", triggerTurn: true })` with `jobNotice(info, job.tail(NOTICE_LINES))`. A failure there is
+   logged, never left as an unhandled rejection.
+2. The tool's `init()` registers `renderNotice` for `mypi-job` (pi accepts it during `session_start`; it looks
+   renderers up when it draws), and its `shutdown()` sets `closed`, so a job that ends while the session closes sends
+   nothing.
+3. pi delivers the notice to the model as a user message. A run it starts has `messageType: "custom"`, on which MyPi
+   writes its prompt sections, so plan-build's prompt still applies.
+4. Collapsed, the renderer shows `job 1 completed · exit 0 · 3.0s · <command>` (green, or red for `failed`, with the
+   error on the next line), plus `(ctrl+o to expand)` when there's output; expanded, it adds the last lines.
+5. The `background` parameter's description now says a message comes when the job ends, and not to poll or sleep.
+
+Decided with it: notices for `completed` and `failed` only, since a stop is reported by whatever stopped it; the last
+20 lines, at most 2,000 characters; escape codes stripped in the notice, the log file kept raw; each start attaches its
+own `job.done` handler, and a generic `JobManager` listener waits for slice 5; the renderer is registered from the
+tool's `init()`; the notice says how long the job ran. The spec's `noticeText(job, tail)` became `jobNotice(job, tail)`,
+returning the text and the details together so the tail is cleaned once.
+
+Tests: a `jobNotice` table (completed, a failed exit code, a command that couldn't run with no output) and one test
+for stripping and the cut; `formatNotice` collapsed and expanded; through the tool, a background `printf` sends one
+notice with the text and options above and `init()` registers the renderer; a stopped job and a job that ends after
+`shutdown()` send nothing. Mutations caught: dropping either guard, `nextTurn` delivery, no renderer, no strip, no cut,
+no error line, and no collapsed form.
+
+## Slice 4: `job_list` and `job_stop`
+
+Done 2026-10-22. The model can list the session's background jobs and stop one. Plan mode needs no rule change:
+plan-build's default allows a tool marked `readOnlyHint: true` and asks about the rest, so `job_list` runs and
+`job_stop` asks.
+
+Files: `src/tool/jobs/index.ts` (new: `jobListTool`, `jobStopTool`), both in `createTools` after `bash`; `jobEnding`
+and `jobDuration` moved from `bash/notice.ts` to `src/tool/utils.ts`, which the notice and both tools use; `bash`'s
+start text and `background` description mention `job_stop`; `test/tool/jobs/index.test.ts` (new).
+
+```ts
+/** `job_list`: every background job of this session, running or ended, oldest first, with its log file. */
+export function jobListTool(session: Session): Tool;
+
+/** `job_stop`: stops a running background job and waits for it to end; its log file is kept. */
+export function jobStopTool(session: Session): Tool;
+
+/** How a job ended, or `running`: `completed (exit code 0)`, `failed (exit code 3)`, `failed`, `stopped`. */
+export function jobEnding(job: JobInfo): string;
+
+/** How long a job ran, or has run so far while it's running, such as `3.0s`. */
+export function jobDuration(job: JobInfo): string;
+```
+
+How it works:
+
+1. `job_list` takes no parameters and is `{ readOnlyHint: true }`. It returns `Background jobs in this session, oldest
+   first:` and one line per job, `<id> · <ending> · <duration> · <command> · <log file>`, or `No background jobs in
+   this session.`
+2. `job_stop` takes `{ id }` and is `{ readOnlyHint: false, destructiveHint: false }` (stopping kills a process but
+   changes no files). It calls `session.jobs.stop(id)`, which aborts the job and waits for it to end, and returns
+   `Stopped job <id> after <duration>: <command>\nOutput: <log file>`. A job that had already ended, or that exited on
+   its own just as the stop arrived (its exit code wins), gives `Job <id> had already ended: <ending>.`; an unknown id
+   throws `No job <id> in this session; job_list shows them.`
+3. A stop sends no exit notice (slice 3), so `job_stop`'s result is how the model learns the job stopped.
+4. `bash`'s start text ends `Read that file for its output; stop it with job_stop.`, and the `background` description
+   says to stop it with `job_stop`.
+
+Decided with it: both tools in `src/tool/jobs/`, over `session.jobs` for any job kind, so subagent jobs show up later
+unchanged; Plan allows `job_list` and asks about `job_stop` (adding `job_stop` to plan-build's `ALLOWED` would let the
+model stop a dev server the user started in Build without asking); stopping an ended job is a normal result, an
+unknown id an error; the list shows every job with its log file, with no filter; pi's default display until slice 5.
+
+Tests (`test/tool/jobs/index.test.ts`, fake `JobSpec`s and a fixed clock): `job_list` empty, then with a running and an
+ended job (its exact text); `job_stop` stops a running job; on an ended job, one that exits as the stop arrives, and an
+unknown id; the two tools' annotations. The lifecycle and `registerTools` lists gain both names. Mutations caught:
+always "Stopped", reporting a racing exit as stopped, a line without its log file, a running job's duration frozen at
+0, no annotations, and the tools left out of `createTools`.
+
+## Slice 5: the footer item and display
+
+Done 2026-10-22. The footer shows how many jobs are running, and background `bash` calls get their own short drawing;
+foreground calls keep pi's.
+
+Files: `onChange` in `src/core/job-manager.ts`, the footer wiring in `src/core/session.ts`, `src/tool/bash/render.ts`
+(new: `backgroundRenderer`), its registration in `MyPi`'s constructor (`src/mypi.ts`), the corrected comment in
+`src/tool/bash/index.ts`; tests in `test/core/job-manager.test.ts`, `test/core/session.test.ts`,
+`test/tool/bash/render.test.ts` (new), and `test/index.test.ts`.
+
+```ts
+// job-manager.ts
+/**
+ * Calls `listener` with the number of running jobs whenever a job starts or ends. Returns a function that removes it.
+ * `stopAll()` drops every listener, since it runs only when the session ends.
+ */
+onChange(listener: (running: number) => void): () => void;
+
+// bash/render.ts
+/**
+ * Draws background `bash` calls as `$ <command> (background)` and their result as `job <id> started · <log file>`;
+ * every other call, and an error, is drawn by `next()`, pi's own `bash` renderer. Other tools get `next()` as is.
+ */
+export const backgroundRenderer: ToolRendererResolver;
+```
+
+How it works:
+
+1. `JobManager` keeps a set of listeners and calls each with the number of `running` jobs after `start` adds a job and
+   after a job's `done` settles. `stopAll()` clears them before aborting, since the jobs end after the session has.
+2. `Session`'s constructor subscribes its footer: `1 job` or `<n> jobs` in accent under the `jobs` key (drawn as the
+   `mypi-jobs` status on pi's footer line, just before `PLAN`/`BUILD`), cleared at 0.
+3. `backgroundRenderer` is a `pi.registerToolRenderer` resolver. For `bash`, it wraps `next()`'s renderers: a call with
+   `background: true` is drawn `$ <command>` in pi's call style plus a dim `(background)`, and a result with `jobId` and
+   `logPath` in its details as a muted `job <id> started · <log file>`, in place of the model's hint text and pi's
+   `Took 0.0s`. Everything else goes to pi's renderer, so foreground calls keep pi's look, timer, and truncation.
+4. `MyPi`'s constructor registers it, once per extension load. The spec had `bash`'s `init()` do it, but pi keeps
+   resolvers in a list (`extension.toolRenderers.push`), so one registered on every `session_start` would stack.
+
+Decided with it: `Session` sets the footer, since the count covers every job kind; `1 job` / `<n> jobs` in accent,
+only while a job runs; `stopAll()` drops the listeners; a resolver that delegates to `next()`, not a renderer of our
+own for every `bash` call; `job_list` and `job_stop` keep pi's default drawing; slice 2's wrong comment and docs fixed.
+
+Tests: `onChange` reports 1, 2, 1 as jobs start and one ends, stops after its remover runs, and hears nothing once
+`stopAll()` has run; the session footer goes `1 job`, `2 jobs`, `1 job`, cleared; the renderer draws a background call
+and its start, and leaves a foreground call, an error, a result without job details, and other tools to pi; the
+resolver is registered once however many sessions start. Mutations caught: no notify on start or on end, listeners
+kept by `stopAll()`, a remover that does nothing, counting ended jobs, `1 jobs`, background drawing for every call,
+errors drawn as starts, other tools wrapped, and no registration.
 
 ## Decided
 

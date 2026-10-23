@@ -11,6 +11,7 @@ import type {
 import { Session } from "#core/session";
 import { registerMcpServers } from "#mcp/index";
 import { loadModules } from "#module/index";
+import { backgroundRenderer } from "#tool/bash/render";
 import type { Tool } from "#tool/types";
 import { registerCommand } from "./command";
 import { initTools, registerTools, shutdownTools } from "./tool";
@@ -20,7 +21,10 @@ export class MyPi {
   /** The built-in tools `registerTools` returned, kept to run their `shutdown()` on `session_shutdown`. */
   private tools: Tool[] = [];
 
-  constructor(readonly pi: ExtensionAPI) {}
+  constructor(readonly pi: ExtensionAPI) {
+    // Once per extension load: pi keeps resolvers in a list, so registering on every session_start would stack them.
+    pi.registerToolRenderer(backgroundRenderer);
+  }
 
   onSessionStart(ev: SessionStartEvent, ctx: ExtensionContext) {
     this.session = new Session(ctx, this.pi);

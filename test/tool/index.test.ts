@@ -16,7 +16,13 @@ describe("registerTools", () => {
   it("returns the built-in tools only", () => {
     const { session } = fakeSession();
     session.moduleManager.start([fakeModule("core", ModuleLoadMode.ALWAYS)], "startup");
-    expect(registerTools(session.pi, session).map((tool) => tool.definition.name)).toEqual(["web_search", "web_fetch"]);
+    expect(registerTools(session.pi, session).map((tool) => tool.definition.name)).toEqual([
+      "bash",
+      "job_list",
+      "job_stop",
+      "web_search",
+      "web_fetch",
+    ]);
   });
 });
 

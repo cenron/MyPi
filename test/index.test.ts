@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
 import { ToolGuard } from "#core/tool-guard";
 import { loadModules } from "#module/index";
+import { backgroundRenderer } from "#tool/bash/render";
 import mypi from "../index";
 import { fakeUI } from "./fakes";
 
@@ -27,6 +28,7 @@ function loadExtension() {
   const handlers = new Map<string, Handler>();
   const registered = new Set(["read", "bash", "edit", "write"]);
   const mcpServers: string[] = [];
+  const toolRenderers: unknown[] = [];
   let active = [...registered];
   const pi = {
     // Keeps the entry point's own handler: modules subscribe later, from init(), and would replace it here.
@@ -46,13 +48,17 @@ function loadExtension() {
       mcpServers.push(name);
     },
     sendUserMessage: () => {},
+    registerMessageRenderer: () => {},
+    registerToolRenderer: (resolver: unknown) => {
+      toolRenderers.push(resolver);
+    },
     getActiveTools: () => [...active],
     setActiveTools: (names: string[]) => {
       active = names.filter((name) => registered.has(name));
     },
   } as unknown as ExtensionAPI;
   mypi(pi);
-  return { pi, commands, handlers, activeTools: () => active, mcpServers };
+  return { pi, commands, handlers, activeTools: () => active, mcpServers, toolRenderers };
 }
 
 function fakeContext() {
@@ -120,6 +126,14 @@ describe("mypi extension", () => {
     const event = { type: "before_agent_start", messageType, systemPromptOptions: { sections: {} } };
     handlers.get("before_agent_start")?.(event, fakeContext());
     expect(Object.keys(event.systemPromptOptions.sections)).toContain("mypi-plan-build");
+  });
+
+  // pi keeps resolvers in a list, so one added on every session_start would stack.
+  it("registers the background bash renderer once, when loaded", () => {
+    const { handlers, toolRenderers } = loadExtension();
+    startSession(handlers);
+    startSession(handlers);
+    expect(toolRenderers).toEqual([backgroundRenderer]);
   });
 
   it("registers MyPi's MCP servers when a session starts", () => {

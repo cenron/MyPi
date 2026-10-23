@@ -18,6 +18,7 @@ vi.mock("#tool/web-fetch/index", () => ({
 vi.mock("#core/job-manager", () => ({
   JobManager: class {
     stopAll = () => calls.push("stop jobs");
+    onChange = () => () => {};
   },
 }));
 
@@ -40,12 +41,17 @@ describe("built-in tool hooks", () => {
       // plan-build's init() turns its tools on here, one call per tool.
       setActiveTools: () => calls.push("module init"),
       sendUserMessage: () => {},
+      registerMessageRenderer: () => {},
+      registerToolRenderer: () => {},
     } as unknown as ExtensionAPI;
     const ctx = { hasUI: true, ui: fakeUI(), cwd: "/project", sessionManager: { getBranch: () => [] } };
     mypi(pi);
 
     handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, ctx as unknown as ExtensionContext);
     expect(calls).toEqual([
+      "register bash",
+      "register job_list",
+      "register job_stop",
       "register web_search",
       "register web_fetch",
       "register submit_plan",
