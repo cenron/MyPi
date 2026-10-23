@@ -1,13 +1,15 @@
 # Memory
 
-**Status:** idea (recorded 2026-10-22)
+**Status:** building (design agreed 2026-10-23; slice 1 built 2026-10-23; #1 on the [roadmap](../roadmap.md))
 
 ## Goal
 
 Knowledge that lasts across sessions: what the agent learned about a project (how to build and test it, its
 conventions, the gotchas already paid for) and how I like to work. Kept as plain Markdown files that I can read and
-edit too. Pi only has context files (`AGENTS.md`, `CLAUDE.md`): one file per directory, always loaded whole. A module,
-so it can be turned off.
+edit too. Pi only has context files (`AGENTS.md`, `CLAUDE.md`): one file per directory, always loaded whole.
+
+A foundational module, `ALWAYS` like plan-build: every session gets it. It's a module, not core, so it can be replaced
+by a better memory system without the rest of MyPi noticing (see [Decisions](#decisions-2026-10-23), 7).
 
 ## Where the idea comes from
 
@@ -24,59 +26,93 @@ so it can be turned off.
 
 ## What pi offers
 
-Checked against the installed pi 1.2.0 (2026-10-22):
+Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
 
 - **Context files only:** `AGENTS.md` / `CLAUDE.md` from the agent dir, the cwd, and its parents (pi's
   `docs/configuration.md` § Context files). No memory feature.
+- **The agent dir:** `getAgentDir()`, exported by pi, is `~/.pi/agent` unless `PI_CODING_AGENT_DIR` moves it
+  (`dist/config.js`). Pi keeps every user-level folder there (`prompts/`, `themes/`, `sessions/`).
 - **A prompt section:** MyPi's `PromptManager`, through `BaseModule.setPrompt`, is where the list goes.
-- **No new tools needed to start:** pi's `read`, `write`, and `edit` work on any path.
-- **Prompt templates:** a Markdown file in `resources/prompts/` becomes a `/` command named after the file, already
-  declared in `package.json` under `pi.prompts`.
+- **No new tools needed to start:** pi's `read`, `write`, and `edit` work on any path. `write` and `edit` write in place
+  with `fs.writeFile` (`dist/core/tools/write.js`, `edit.js`), so a file without write permission fails with `EACCES`.
+- **Sending a prompt from a command:** `pi.sendUserMessage()`.
+
+## Decisions (2026-10-23)
+
+1. **Global folder: `<agent-dir>/memories/`,** found with `join(getAgentDir(), "memories")`. It pairs with the
+   project's `.pi/memories/` the way pi pairs `<agent-dir>/prompts/` with `.pi/prompts/`, and it follows
+   `PI_CODING_AGENT_DIR`, so a sandbox agent dir gets its own memories. `~/.pi/memories/` was rejected: a second rule
+   for where user-level files live.
+2. **Project memories are git-ignored,** through a `.gitignore` of `*` inside `.pi/memories/`, the same mechanism as
+   `.pi/plans/`. The agent writes memories without review and some repos are public, so private is the default. The
+   refresh hook (slice 2) creates the file with `wx` when a write lands in the folder, never overwriting it: to share a
+   project's memories, edit that `.gitignore`. `init()` doesn't create it, since that would create `.pi/memories/` in
+   every folder pi opens. Committed (Serena) and outside the repo (Claude Code's per-project folder) were rejected.
+   For [worktree](../tools/worktree.md): ignored memories aren't in a new worktree, so it has to copy them in.
+3. **Free topics, not types.** A memory is `[<topic>/]<name>.md`; the topic folder is optional. Its name is its path
+   in the scope folder without `.md` (`build/test-commands`), and `[[build/test-commands]]` links use it. The only
+   frontmatter field is `description:`; a `name:` field would repeat the path and drift on a rename. Claude Code's
+   types mostly repeat the two scopes (user and feedback are global, project is project), so what's worth keeping
+   from them moves into the conventions instead of a `type:` field.
+4. **No limit on the list** for now. Every memory gets its line; nothing is ever dropped silently (Claude Code cuts
+   `MEMORY.md` at 200 lines). Revisit when one scope passes about 100 lines (~3k tokens), with
+   [analytics](analytics.md) showing whether listed memories get read: then collapse that scope to topic names and
+   counts, and the agent lists a topic's folder.
+5. **Read-only means file permissions:** `chmod a-w` on the file. `write` and `edit` fail with `EACCES`, and the
+   conventions say a memory the agent can't write is read-only, not to work around. No code. A `readonly:` field
+   enforced by a `ToolGuard` rule was rejected for now: it stops no more than permissions do (neither stops `rm` in
+   `bash`). Build it if the agent works around permissions.
+6. **Load type: `ALWAYS`.** Memory is foundational, like plan-build.
+7. **Replaceable.** Nothing imports `#module/memory`, and no other module's prompt names memory's folders or format:
+   they say "save a memory", and only memory's own prompt section says how. Memory only plugs into core seams
+   (`PromptManager`, a `tool_result` hook, the writable list in `ToolGuard`), so a different system (SQLite, a vector
+   index) replaces this module and nothing else changes. The same goes the other way: memory never imports
+   plan-build, so either can be turned off, changed to another load type, or replaced without breaking the other. If another part ever needs memory in code, that goes through a core seam,
+   not an import. Existing memories would need a one-time import. The likeliest next step keeps the Markdown files as
+   the source of truth and adds a search index over them.
 
 ## Behavior
 
-- **Two scopes:** project memories in `<cwd>/.pi/memories/`, global ones in a folder under `~/.pi/` (path open).
-- **One memory per file**, `<topic>/<name>.md`, with frontmatter `name` and `description`.
-- **The list, not the content:** the module's prompt section lists every memory as one line, its name and
+- **Two scopes:** project memories in `<cwd>/.pi/memories/` (git-ignored), global ones in `<agent-dir>/memories/`.
+- **One memory per file**, named by its path, with frontmatter `description:`.
+- **The list, not the content:** the module's prompt section lists every memory as one line, by scope: its path and
   description. Serena gives names only; a description makes the right read likelier for a few tokens. The agent reads
   what looks relevant with `read`. The harness never puts memory content in the prompt (Serena's rule).
-- **Conventions in the same section:** when to write one, one fact per file, update instead of duplicating, delete
-  wrong ones, link related ones with `[[name]]`, and never secrets.
+- **Conventions in the same section:**
+  - When to write one, and where: how I work goes global, facts about the project go in the project.
+  - One fact per file. A correction or preference says why and how to apply it.
+  - Use an existing topic before making a new one. The description is one short line.
+  - Update instead of duplicating, delete wrong ones, link related ones with `[[path]]`.
+  - Never secrets.
+  - A memory the agent can't write is read-only: leave it, don't work around it.
 - **Writing:** the agent uses pi's own `write` and `edit`. Plan mode allows writes in the memory folders, like
-  `.pi/plans/`.
-- **`/onboard`:** a prompt template that has the agent learn a project (layout, build, tests, conventions) and write
-  the first memories. It fills the context, so start a fresh session after.
+  `.pi/plans/`, through a list in core that both modules add to.
+- **`/onboard`:** has the agent learn a project (layout, build, tests, conventions) and write the first memories. It
+  fills the context, so start a fresh session after.
 - **Pair programmer:** how I like to work goes in global memories, which answers
-  [pair-programmer](pair-programmer.md)'s "how does it remember how I like to work".
+  [pair-programmer](pair-programmer.md)'s "how does it remember how I like to work". Its prompt says "save a memory",
+  never where (decision 7).
 
 ## Design in pi
 
 | Piece | pi hook | Notes |
 |---|---|---|
-| Module | `BaseModule`, `src/module/memory/` | Load type open. |
-| The list | `init()` reads both folders and calls `setPrompt(section)` | A file with bad frontmatter is listed by its file name, not dropped. |
-| Refresh | `tool_result` on `write` / `edit` under a memory folder, subscribed through `session.pi.on` in `init()` | The next request sees the new line. |
-| Frontmatter | A small pure parser for `name:` and `description:` | Or `yaml`, which is in pi's dependency tree (allowed by the dependency rule in AGENTS.md). Open question. |
-| Plan mode | plan-build's Plan rule allows the memory folders | Today it allows `.pi/plans/` only. |
-| Onboarding | `resources/prompts/onboard.md` | No code. |
+| Module | `BaseModule`, `src/module/memory/` | `ALWAYS`. |
+| The list | `init()` reads both folders and calls `setPrompt(section)` | Sync reads (`readdirSync` with `recursive`, `readFileSync`): `ModuleManager.init()` doesn't await `init()`, so an async read could miss the first prompt. A file with no `description:` is listed by its path alone, not dropped. A missing folder is an empty scope; any other read error warns through `session.logWarning` (check permissions, then `/reload`) and lists that scope as unreadable, so the modules after memory still start. Empty scopes still get the conventions and their folder, so the agent knows where to write the first memory. Tests set `PI_CODING_AGENT_DIR` to a missing path in `vitest.config.ts`, so they never read real global memories. |
+| Refresh | `tool_result` on `write` / `edit` under a memory folder, subscribed through `session.pi.on` in `init()` | The next run (my next prompt) sees the new line: prompt sections apply at `before_agent_start`, once per run (`mypi.ts`), not on each request inside a run. Also creates the project folder's `.gitignore` (`*`, `wx`). |
+| Frontmatter | A small pure parser for `description:` | One field, so no `yaml` dependency. |
+| Plan mode | A list in core (`ToolGuard`) of paths and tool names that a read-only mode may still write, passed to rules with `{ cwd, home }` | Plan's rule (`rule.ts`) allows `.pi/plans/` and `submit_plan` today, hard-coded, and `PLAN_PROMPT` names `.pi/plans/`. Instead, plan-build adds those two and memory adds its folders; Plan's rule reads the list and never knows who added what. Tool names are in it so a memory system that saves through its own tool can add that tool. Any module on or off works: with memory off, Plan allows only plans; with plan-build off, nobody reads memory's entries. Two things to get right: the rule reads the list on each tool call, not a copy taken in `init()`, so module init order doesn't matter; and `PLAN_PROMPT` must not contradict memory's section ("write only in `.pi/plans/`" vs "save memories"), either by naming what's on the list or by a generic wording. Designed in slice 3. |
+| Onboarding | A module command that sends the onboarding prompt with `pi.sendUserMessage()` | Not a template in `resources/prompts/`: those load whether or not the module does, so the prompt goes with the module (decision 7). |
 
 ## Slices
 
-1. Read both folders, parse frontmatter, and set the prompt section: the list and the conventions.
-2. Refresh the list after the agent writes or edits a memory.
-3. Plan rule: allow writes in the memory folders.
-4. `/onboard` prompt template.
-5. A link check: `[[name]]` links to memories that don't exist.
-
-## Open questions
-
-- Global folder: `~/.pi/memories/` or `~/.pi/agent/memories/`?
-- Project memories: committed with the project (Serena), or git-ignored, since they can hold personal notes and some
-  repos are public?
-- Types like Claude Code (user, feedback, project, reference), free topics like Serena, or both?
-- How long can the list get before the section shows topics only?
-- Read-only memories (Serena's patterns): needed?
-- Load type: `ON_LOAD` or `ON_DEMAND`?
+1. **Done.** Read both folders, parse `description:`, and set the prompt section: the list and the conventions
+   (`src/module/memory/`: `folders.ts` reads, `frontmatter.ts` and `prompt.ts` are pure, `types.ts`).
+2. Refresh the list after the agent writes or edits a memory, and create the project `.gitignore`.
+3. The writable list in core: plan-build adds `.pi/plans/` and `submit_plan`, memory adds both folders, and Plan's
+   rule and prompt use it.
+4. `/onboard`.
+5. A link check: `[[path]]` links to memories that don't exist.
 
 ## References
 
