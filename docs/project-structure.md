@@ -15,6 +15,7 @@ MyPi/
 │   ├── architecture.md
 │   ├── principles.md
 │   ├── project-structure.md
+│   ├── roadmap.md         # What to build next, in order
 │   ├── inspiration/       # One doc per outside project worth learning from, and the ideas it gives MyPi
 │   ├── mcp/               # README.md: the MCP servers MyPi registers, with a status each
 │   ├── modules/           # One doc per module, built or planned

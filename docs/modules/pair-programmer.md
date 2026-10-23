@@ -21,4 +21,5 @@ Notes from pairing while building MyPi, to feed the design:
 - How is the mode switched on and off: a command, a flag, or a session setting?
 - What does the agent do by default in this mode: wait for questions, or comment on changes as they happen?
 - Should it have edit tools at all, or only read and search tools plus suggestions?
-- How does it remember how I like to work across sessions?
+- How does it remember how I like to work across sessions? Likely through global memories in the
+  [memory](memory.md) module.

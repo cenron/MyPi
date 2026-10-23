@@ -180,8 +180,12 @@ checks only the first word plus a denylist, so `ls; node …` and the 3a test ca
   cluster counts (`sort -ro out`, `fd -HX`), and so does an abbreviated long flag (`sort --out=f`; GNU getopt and git
   accept unambiguous prefixes). `uniq -f 1 f` asks, since `1` looks like a second operand.
 - Everything else asks: `awk`, `curl`, `wget`, `node`, `python`, `npx`, `npm run`/`test`, `make`, `tee`, ….
-- Known gap: a glob can expand to a file named like a flag (`find . *` with a file called `-delete`). Creating that
-  file needs a write, which Plan asks about first.
+- Tried and rejected (2026-10-22): tree-sitter's bash grammar (`web-tree-sitter` + `tree-sitter-bash`) in place of
+  the hand-written tokenizer. It passed every test unchanged and caught `$x`, but the tokenizer only went from 143
+  code lines to 119, brace expansion and backslashes stayed ours (tree-sitter only parses), it added about 1.6 MB of
+  WASM and a 20 MB package, and Plan had to ask until the grammar loaded. It also has a quirk to work around: in
+  `ls 2>/dev/null -la` it puts `-la` inside the redirect. What it taught us (variables, `$"…"`, globs) went into the
+  tokenizer instead.
 
 `isInside` is true for the plans folder itself (writing to a directory fails anyway). It compares text, not the file
 system, so a symlink inside `.pi/plans/` that points outside counts as inside; following links would need `fs`, and the

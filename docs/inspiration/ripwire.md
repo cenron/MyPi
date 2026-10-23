@@ -31,10 +31,14 @@ tests reach the change). ~190 flags, 17 task-shaped skills, an optional MCP serv
 
 ## Using ripwire itself
 
-ripwire works from any agent that can run shell commands, so pi can use it today with no MyPi code: install the
-binary and its skills. If it proves useful, a later step is a MyPi skill or a thin tool over the CLI. The LSP module
-and ripwire overlap (callers, references) but differ: LSP is exact and per-language with a server running; ripwire
-is fast, offline, cross-language, and ranks by task.
+Decided 2026-10-22: run ripwire, don't wrap it. It works from any agent that can run shell commands, and pi reads
+skills from `~/.agents/skills/` (pi's `docs/skills.md`), which is where `skills/install.sh --codex` puts ripwire's
+task skills. So it needs no MyPi code: install the binary, install the skills, and pi uses them like any other skill.
+Its MCP server stays off, per its own advice. Check whether it helps with the analytics module before building
+anything around it. The install is deferred: I'll do it myself later (see the [roadmap](../roadmap.md#deferred)).
+
+ripwire and the LSP module overlap (callers, references) but differ: LSP is exact and per-language with a server
+running; ripwire is fast, offline, cross-language, and ranks by task.
 
 ## Not for MyPi
 

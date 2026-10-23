@@ -20,6 +20,16 @@ are the same as for modules:
 - No paid key required. A key may raise a service's limits, but the tool works without one.
 - Sets `annotations` truthfully (`readOnlyHint`, `destructiveHint`, `openWorldHint`), because the tool guard and
   plan-build's rule read them.
+- Its output is honest about its limits (from [ripwire](../inspiration/ripwire.md)):
+  - A cut result says what was cut and how to get the rest, such as the file holding the full text (web_fetch and
+    background jobs do this).
+  - Nothing found reads as "none found", never "none exist".
+  - Every count says what it counts.
+  - A partial list never reads as complete.
+- One call should answer the question: enough to act on without a follow-up call. Short output that forces three
+  more calls costs more than a longer answer.
+- Every tool's schema rides in every request, so a narrow helper may be better as a skill over a shell command than as
+  a tool.
 
 ## Index
 

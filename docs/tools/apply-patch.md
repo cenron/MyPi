@@ -56,6 +56,10 @@ With `*** End of File`, it tries the end of the file first.
 - One call, many files: add, delete, update, rename.
 - All or nothing: every hunk is checked against the files before anything is written.
 - An error names the file and the hunk that didn't match, so the model can retry with more context.
+- The result is a receipt (from [ripwire](../inspiration/ripwire.md)): each changed region with a few lines around it,
+  so the model doesn't read the file again to check its work.
+- Writes are atomic: each file goes to a temporary file that's renamed over the original, so a failure leaves it as
+  it was.
 - Not allowed in Plan mode, except under `.pi/plans/`, the same as `write` and `edit`.
 
 ## Design in pi
@@ -82,6 +86,7 @@ With `*** End of File`, it tries the end of the file first.
 - Always on, or only for models trained on it (GPT), swapping it with `edit`/`write` through `setActiveTools` when
   the model changes?
 - Name: `apply_patch` (Codex, what GPT models expect) or `patch` (OpenCode)?
+- Refuse when a file changed since the model last read it, as ripwire's edits do? Needs a record of what was read.
 - Port Codex's parser and matcher (Rust, Apache-2.0) to TypeScript, or start from OpenCode's TypeScript (MIT)?
 
 ## References

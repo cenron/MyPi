@@ -20,6 +20,10 @@ it can be turned off. Later, the same metrics measured on a fixed set of tasks, 
 - **Shell commands without a tool**: the command names inside `bash` calls (`git`, `curl`, `jq`, `sed`, …), counted.
   A command the agent runs often is a candidate for a built-in tool. `tokenize` in `src/core/util/shell.ts` already
   splits commands, so each part of a pipeline or `&&` chain counts.
+- **Sub-agent runs** (the [subagents](subagents.md) module comes first, so this is built in from the start): tokens,
+  cost, time and outcome per run, keyed by agent, model and effort, and added up under the parent prompt that started
+  them. A child's usage comes from its own session's events, not the parent's `message_end`. This is how "which
+  model is worth it for reviews" becomes a number.
 - Later, possibly: turns per prompt, time per tool, compactions, which modules were loaded.
 
 ## What pi offers
@@ -61,6 +65,19 @@ Checked against the installed pi 1.2.0 (2026-10-22):
   and the most-run shell commands that have no tool.
 - Can be turned off with `/modules`, and the database deleted to start over.
 
+## Measuring what MyPi adds
+
+Two lessons from the [inspiration](../inspiration/README.md) projects:
+
+- **Measure before steering.** ripwire nudged agents toward its tool when they reached for grep or a whole-file
+  read, then ran a randomized A/B over hundreds of sessions and found the nudge did nothing, so it was removed. Serena
+  ships the same kind of nudge. So no hints or blocks that push the agent toward a tool (LSP instead of grep, ripwire
+  instead of read) until this module shows how often the agent uses the tool and whether a hint changes that.
+- **A cheap check for each new tool.** Serena's evaluation is one prompt: the agent does about 20 tasks both ways,
+  with the tool and with its built-ins, counts calls and output size, checks the edits with `git diff`, and reports
+  where the tool helped and where it didn't. Use the same kind of prompt for each new MyPi tool or module until the
+  benchmarks below exist.
+
 ## Benchmarks (later)
 
 When a new model comes out, run it through a fixed set of tasks and compare it with the others on the same metrics:
@@ -75,7 +92,7 @@ the passive numbers above come from everyday work, so they can't tell two models
 - **Results:** into the same database, tagged with the benchmark run, so `/analytics` can show a model's everyday
   numbers next to its benchmark ones: pass rate, tokens and cost per task, cache share, tool failures, turns, time.
 - **Uses:** pick defaults per task kind (which model for planning, which for small edits), see whether a MyPi change
-  helped (run the same suite before and after), and check a local model (LM Studio) against hosted ones.
+  helped (run the same suite before and after), and check a local model against hosted ones.
 - Open: where the tasks live (in this repo under `bench/`, or their own repo), how to keep a fixture from leaking into
   the model's context as a known answer, and what a run costs on paid models.
 

@@ -1,115 +1,224 @@
 # Sub-agents
 
-**Status:** idea (deferred: designed and built later)
+**Status:** planned (design agreed 2026-10-23; #4 on the [roadmap](../roadmap.md), milestone 1 first)
 
 **Load type:** `ON_LOAD`. On by default, so the agent can use the `subagent` tool whenever the module is loaded; the user
 can turn it off in `/modules`.
 
 ## Goal
 
-Let the agent hand a task to a sub-agent that runs with its own context window, tools and model, and reports back a
-short result. This keeps the main context small, as Claude Code's Task tool and Explore agents do. Build it on
-**pi-durable**, so sub-agents survive a crash or restart and can run in the background.
+Let the agent hand a task to a sub-agent that runs with its own context window, tools, model and effort, and reports
+back. This keeps the main context small, lets a second model check the work, and lets each kind of job go to the
+model that suits it.
 
-## What pi offers
+Agents are set up once per responsibility (an architect, a developer, a reviewer), each with its own model and effort,
+and reused. I add more by asking ("create me a tester sub-agent that writes tests from the spec, using luna 6") or in
+the fleet view, which also shows what's running.
 
-Pi 1.2.0 has no sub-agent feature built in. There are three ways to run another agent:
+## Where the ideas come from
 
-| Route | How | Trade-offs |
-|---|---|---|
-| A child `pi` process | `spawn("pi", ["--mode", "json", "-p", "--no-session", …])`, then read the JSONL events | `examples/extensions/subagent/` does this. Fully isolated, but pi starts up on every run, and the child loads MyPi again. Lost if the parent dies. |
-| In process, through the SDK | `createAgentSession({ sessionManager: SessionManager.inMemory() })`, then `session.prompt(task)` | Fast and typed, but you assemble the resource loader, model and tools yourself. Lost if the parent dies. |
-| **pi-durable** | `@earendil-works/pi-durable`: a `Harness` over SQLite storage, a child conversation owned by the tool's task | Every turn, tool call and piece of state is committed before it's shown, so a restart resumes where it stopped. Has sub-agents as a built-in pattern, in the foreground and the background. **Experimental:** "The API changes without notice between releases." |
+- **[pi-subagents](../inspiration/pi-subagents.md):** children through pi's own SDK, agents as Markdown, read-only
+  roles, no nesting, evidence in the result, and a fleet view.
+- **[Radian](https://github.com/cenron/radian-harness)**, my own earlier harness: other harnesses as interactive
+  sessions in herdr panes, on my subscriptions. That's the [external agents](#external-agents-later) part, deferred.
+- **Claude Code:** the Task tool, Explore agents, and agent files with a tool allowlist.
 
-## pi-durable in brief
+## Decisions (2026-10-23)
 
-Checked against `@earendil-works/pi-durable` 1.3.0's README (published 2026-10-15). It isn't installed in MyPi yet.
+1. **Internal and external.** An internal agent is pi itself: a pi session made with pi's SDK inside pi's process.
+   An external agent is another harness (Claude Code, Codex, …) started in its interactive mode in a herdr pane and
+   managed through herdr. Pi is always internal. No headless `claude -p` or `codex exec`. **External agents are
+   deferred:** internal first.
+2. **Definitions, not one-off agents.** An agent is a reusable definition for a responsibility; a run is that agent
+   doing one task. MyPi ships `architect`, `developer`, and `reviewer`. I add agents by asking the model or in the
+   fleet view.
+3. **Creating, editing and deleting always ask me**, with the whole definition shown. Saved globally by default.
+   Allowed in Plan mode; running a `write` agent isn't. Builtins can't be deleted, only overridden by my own copy.
+4. **Models and effort:** a loose name ("luna 6") is resolved once, at creation, to an exact `provider/id`; if it
+   matches several models, the model asks me. The level actually used is shown when pi lowers it. A missing model
+   fails clearly. `inherit` (the main session's model) is a deliberate choice, and the builtins ship with it.
+5. **Tools:** `subagent` (run) is always there; `agent_manage` (create, edit, delete) has `deferred` exposure and is
+   loaded through `tool_search` when needed. The agent list is a prompt section.
+6. **Order:** milestone 1 (running internal agents) first; subagents comes before [analytics](analytics.md) on the
+   roadmap, so analytics is built to track runs per agent, model and effort.
 
-- **It's a separate harness, not what pi runs on.** It's built on pi-ai, the same model layer pi uses, but pi's coding
-  agent still runs its own agent loop. MyPi would run a durable `Harness` *inside* a pi tool, beside pi's session.
-- **Pieces:**
-  - **Harness:** one open storage (SQLite, JSONL, or in memory) plus the scheduler.
-  - **Conversation:** a transcript of immutable entries.
-  - **Task:** a state machine saved at every step.
-  - **Extension:** tools, prompt sections and hooks, installed in a `Registry`.
-  - **Agent:** a conversation's model, tools and `cwd`, set with `configure()`.
-- **The sub-agent pattern** (README § "Abort and Subagents"). A `subagent` tool with `replay: "safe"` does this:
-  1. Creates a child conversation inside `api.commit()`, owned by its own task:
-     `ownership: { kind: "task", taskId: api.taskId }`.
-  2. Configures the child, for example with a cheaper model and without the subagent extension, so it can't nest.
-  3. Submits the task with a `requestId`, so a rerun after a crash finds the same child and submission instead of
-     starting again.
-  4. Waits for the answer.
-- **Ownership:** aborting the call aborts the child, and the parent is idle only once the child is. A task created with
-  `{ background: true }` is a boundary: its children survive the parent's Escape and don't keep it busy.
-- **Examples to copy** (in the package's `test/examples/`):
-  - `22-subagent-foreground.ts`: the tool above, with the child's events shown under the call.
-  - `23-subagent-background.ts`: persistent sub-agents behind one tool that spawns, messages, waits for, stops and
-    lists them, with answers posted back to the parent as follow-ups.
-  - `28-reviewer.ts`: a reviewer with its own model, tools and directory.
-  - `27-plan-mode.ts`: read-only plan mode as an extension.
-- **Hooks:** a `ToolTask` hook with `beforeTool(call)` can return `{ block: "…" }`. That's how a child is kept
-  read-only.
-- **Tools:** `@earendil-works/pi-durable/tools` has its own `read`, `write`, `edit` and `bash` (`CodingTools`), which
-  work through an environment (`NodeExecutionEnv({ cwd })`).
-- **Watching:** `conversation.viewState()` or `watch()` give a UI the child's live state.
+## Agents
 
-## Behavior
+Markdown files with frontmatter and the prompt as the body:
 
-- A `subagent` tool in pi. The first version is foreground: the call waits for the child's answer and returns it.
-- Children keep running across a crash or `/reload` and resume from storage.
-- Later: background sub-agents, which you start, message, list and stop, with answers posted back to the main session.
-- A few agents ship with MyPi: `scout` (read-only, fast model), `reviewer` (read-only), and `worker` (full tools).
+| Field | Meaning |
+|---|---|
+| `name`, `description` | How the parent picks it. |
+| `access` | `read-only` or `write`. |
+| `tools` | Optional: an exact allowlist of pi tool names, inside what `access` allows. |
+| `model` | An exact `provider/id`, or `inherit` for the main session's model. |
+| `thinking` | pi's thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
+
+The builtins ship with `model: inherit`, since a public package can't know which providers someone is logged in to.
+I set models once ("make reviewer use luna 6"), which saves my copy over the shipped one:
+
+| Agent | Access | Thinking | Role |
+|---|---|---|---|
+| `architect` | read-only | high | Designs and plans; challenges the approach before building. |
+| `developer` | write | medium | Implements a brief. |
+| `reviewer` | read-only | medium | Checks a change against its task: tests, edge cases, simplicity. |
+
+**Where they live:** the builtins in the module's folder; mine in `~/.pi/agent/agents/` (the default for new ones); a
+project's in `.pi/agents/`, loaded only in a trusted project. A name in my folder or the project's wins over a
+builtin.
+
+**The prompt section** lists each agent in one line (name, description, model, thinking, access) and says how to
+create or change one ("load `agent_manage` through `tool_search`"). It goes through MyPi's `PromptManager`, which
+updates it when an agent is added or changed.
+
+## Running an agent
+
+- **`subagent({ agent, task, model?, thinking?, background? })`.** `model` and `thinking` override the definition for
+  this one run. An unknown agent is an error that lists the agents.
+- **The child** is `createAgentSession({ cwd, modelRuntime, model, thinkingLevel, tools, resourceLoader, sessionManager })`
+  with one `ModelRuntime.create()` per pi session. That reads pi's own `auth.json` and `models.json`, so children use
+  the models and logins pi has (checked in pi 1.2.0). `SessionManager.create(cwd, dir, { parentSession })` makes
+  each child an ordinary pi session file that points to its parent.
+- **Fresh context:** the child gets its agent prompt and the task, not my conversation. Starting from my conversation
+  (a fork) is a later slice.
+- **Foreground** (default): the call waits and shows the child's progress under it.
+- **Background:** the child runs as a job in MyPi's [`JobManager`](../tools/background-process.md): `job_list`,
+  `job_stop`, the footer count, and an exit notice when it's done, like shell jobs. It stops when pi does.
+- **The result:** the child's final answer, its usage, the path of its session file (the full transcript), and the
+  files it changed (from its own tool results). A `developer` that changed nothing says so.
+- **No nesting:** children don't get `subagent` or `agent_manage`, and their prompt says they aren't the orchestrator.
+- **No questions mid-run** at first: the child puts open questions in its answer. Asking the parent is a later slice.
+- **Limits:** a 30-minute default timeout, a few background runs at once, and a cap on runs per prompt.
+- **A missing model** (logged out, retired) fails the run with what to do: edit the agent, or log in.
+
+## Access and Plan mode
+
+MyPi isn't loaded in the child, so MyPi's `ToolGuard` never sees the child's tool calls. The child enforces its own
+access:
+
+- **`read-only`:** read tools only (`read`, `grep`, `find`, `ls`), plus `bash` checked by plan-build's `planRule`
+  through a small inline extension in the child (`DefaultResourceLoader`'s `extensionFactories`, checked in pi 1.2.0).
+- **`write`:** pi's normal tools.
+- **In the parent's Plan mode**, the module's own `onToolCall` rule allows a `subagent` run of a `read-only` agent and
+  blocks a `write` agent with a reason. pi's generic rule would ask every time, since `subagent` isn't read-only.
+- **Writers don't run in parallel** in the main checkout: one `write` run at a time, until the
+  [worktree](../tools/worktree.md) tool can give each its own.
+- Children don't commit.
+
+## Creating and changing agents
+
+- **`agent_manage({ action: "create" | "edit" | "delete", … })`**, exposure `deferred`: it costs no context until
+  `tool_search` loads it. Never read-only.
+- **Every call asks me** through the `ToolGuard` confirm, showing the whole definition: name, the prompt's first lines
+  (the full text one key away), model, thinking, access, tools, and where it's saved. Anything I didn't say, such as
+  a default model, is shown before it's saved.
+- **Model names** are resolved with pi's `resolveCliModel` (exact ID, fuzzy ID or name, `provider/id`, `:level`). Two
+  matches → ask me which; none → say so. The file stores the exact ID.
+- **Thinking above what the model supports** is shown as the level that will actually run.
+- **Saved** to `~/.pi/agent/agents/` unless I ask for the project's `.pi/agents/`.
+- **Builtins** can't be deleted. Editing one saves my copy; deleting my copy brings the builtin back.
+- **Allowed in Plan mode:** a definition isn't project code.
+
+## Fleet view
+
+One place to see and manage agents and their runs:
+
+- **Collapsed**, a line below the editor: `2 running · reviewer 38s · developer 4m 10s`.
+- **Runs** (expanded, a key on the empty editor or `/agents`): one row per run with agent, model, thinking, state,
+  time, and tokens. Actions: open (the output and transcript), stop. Later: steer.
+- **Agents:** the definitions, with create, edit, and delete. The model list is only models I can use
+  (`modelRegistry.getAvailable()`), and the thinking list only the levels the chosen model supports. Saving goes
+  through the same rules as `agent_manage`.
+- **Data:** every run is a `JobManager` job with run details on it, so `job_list`, `job_stop`, the footer, and the
+  fleet view read one list.
+
+## External agents (later)
+
+Deferred until internal agents work. The design so far:
+
+- **What:** another harness (Claude Code, Codex, and later others herdr knows) in its normal interactive mode, in a
+  herdr pane beside pi, managed with herdr: `pane split`, `agent start --kind`, `agent prompt`, `agent read`,
+  `agent wait`, `pane get`, `pane close`. That's how I can watch and type into it. Why: each harness runs its own
+  models on my subscription, and Claude Code uses Anthropic models more efficiently than an API key.
+- **Herdr required:** external agents need pi to run inside herdr. The check: `HERDR_ENV=1` and `HERDR_PANE_ID` at
+  session start, and `herdr pane current --current` right before each launch. Outside herdr they're listed as
+  unavailable, and the `subagent` tool tells the model why. Nothing falls back to an internal agent on its own.
+- **Definitions** gain a `runner` (`claude`, `codex`, …; internal agents are `pi`). The menu picks the harness first,
+  then its models and effort, since pi's registry can't list Claude Code's.
+- **Always background:** the call returns once the agent has its task. The answer comes back through a report file
+  the task names, plus herdr's status (`done`, `blocked`), as a follow-up message.
+- **No usage or cost numbers:** interactive panes don't report them. The fleet view shows state and time for
+  external runs; spend is in each harness's own usage screen.
+- **Lessons from Radian:**
+  - Blank the variables that move a harness onto API billing, a custom endpoint, or a proxy (`ANTHROPIC_API_KEY`,
+    `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, `CODEX_API_KEY`, `HTTPS_PROXY`, …), so it uses
+    my login. Radian also kept Anthropic models on Claude Code only.
+  - Type the task only once the pane shows the harness's own input, not a "trust this folder" prompt; herdr doesn't
+    always report that prompt. The screen patterns will break when a harness changes its screen, so make that
+    visible and never type at the wrong moment.
+  - Access per harness: Claude Code with `--tools` and `--allowedTools` and `--permission-mode dontAsk` (read-only:
+    `Read,Glob,Grep`); Codex with `--sandbox read-only` or `workspace-write` and approvals `never` (flags checked
+    against Claude Code 2.1.286 and Codex 0.162.0).
+  - Panes in a grid to the right of pi's pane (`1|3`, `2|4`, …), opened without taking focus.
+  - Save pane records (`Session.save`), so a pane that outlives a `/reload` or restart is found again.
+  - Fleet actions for panes: focus (`herdr agent focus`), type into it, stop.
 
 ## Design in pi
 
 | Piece | Where | Notes |
 |---|---|---|
-| Tool | Returned from the module's `tools()` | Turns the pi call into a durable submission, streams progress with `onUpdate`, and passes the `signal` through to abort. |
-| Harness | Opened in `init()`, closed on `session_shutdown` | SQLite storage, for example under `.pi/` or pi's agent directory, one file per pi session. "One process owns a storage at a time", so two pi windows on one project need separate files. Call `harness.resume()` on open to continue unfinished children. |
-| Models | `HarnessOptions.models` takes a pi-ai `Models` | Pi gives extensions `ctx.modelRegistry`, which isn't a `Models`. Either adapt it, or build one with pi-ai's `createModels()` and pi's credentials. **Check this first:** it decides whether children can use the models pi is logged in to. |
-| Tools for the child | `CodingTools` with `NodeExecutionEnv({ cwd: ctx.cwd })` | pi-durable's own tools, not pi's. Read-only agents get `read` only, or a `beforeTool` block on `write`, `edit` and `bash`. |
-| Agent files | Markdown with frontmatter (`name`, `description`, `tools`, `model`), like pi's example | MyPi's own folder, plus `~/.pi/agent/agents/`. Load project agents (`.pi/agents/`) only in trusted projects. |
-| Nesting | The child is configured without the subagent extension | As in the README pattern. |
-| Rendering | `renderCall` / `renderResult` in pi, fed from the child's `viewState()` | Show the last few child tool calls and usage; Ctrl+O expands. |
-
-## Plan mode
-
-Plan-build's `tool_call` guard sees only the `subagent` call, never the child's tool calls, which run inside
-pi-durable. In Plan, give children read-only tools or a `beforeTool` hook that blocks writes. Otherwise a sub-agent
-gets around Plan mode.
-
-## Dependencies
-
-- pi-durable versions follow pi's: 1.2.0 needs `@earendil-works/pi-ai ^1.2.0`, matching the installed pi.
-- It brings `@earendil-works/chord`, `@earendil-works/pi-codemode` and Photon (WebAssembly) with it.
-- MyPi declares pi's packages as peers so it never ships a second copy. pi-durable depends on pi-ai directly, so check
-  that npm dedupes it against pi's copy.
-- Node 22.19 or later.
+| Module | `BaseModule`, `src/module/subagents/` | `ON_LOAD`. |
+| Agent files | A pure parser (frontmatter + body), tested; a loader over the three folders | Builtins in the module's folder. |
+| Prompt section | `BaseModule.setPrompt` | The agent list; refreshed when an agent changes. |
+| `subagent` | `src/module/subagents/tools/`, from `tools()` | `direct` exposure. Streams progress with `onUpdate`, passes the `signal` to the child's `abort()`. |
+| `agent_manage` | Same folder | `deferred` exposure; the confirm comes from a rule on `ToolGuard` that always asks. |
+| Plan rule | `onToolCall` in `init()` | Read-only runs allowed, write runs blocked, while the parent is in Plan. |
+| Child session | `createAgentSession`, `ModelRuntime`, `SessionManager`, `resolveCliModel`, `DefaultResourceLoader` | All exported by pi 1.2.0. Dispose a child by emitting `session_shutdown`, then `dispose()`. |
+| Background | `session.jobs` (`JobManager`), with run details on the job | One list for `job_list`, `job_stop`, the footer, and the fleet view. |
+| Fleet view | `src/ui/` widget through `ctx.ui.setWidget`, plus `/agents` | Built from `src/ui/components/`. |
+| Rendering | `renderCall` / `renderResult` | The agent and the task's first line; the child's last few steps; Ctrl+O expands. |
 
 ## Slices
 
-1. Install pi-durable, open a Harness in memory, and answer one prompt from a pi command, to prove models and
-   credentials work inside pi.
-2. Agent file parsing, as a pure function with tests.
-3. The `subagent` tool, foreground, on SQLite, with the `requestId` replay pattern.
-4. Read-only agents through tools or hooks, plus the plan-mode rule.
-5. Rendering from the child's view.
-6. Background sub-agents (example 23).
+**Milestone 1: run internal agents**
+
+1. Spike: a command creates an in-memory child with `createAgentSession` and `ModelRuntime.create()`, sends one
+   prompt, and prints the answer. Proves models, logins and tools work in process.
+2. Agent definitions: the parser with tests, the three builtins, the three folders with my copy winning, and the
+   prompt section.
+3. The `subagent` tool in the foreground: the result (answer, usage, session file, changed files), read-only
+   enforcement in the child, and the Plan rule.
+4. Rendering: progress under the call; Ctrl+O expands.
+
+**Milestone 2: background and the fleet view (runs)**
+
+5. Background runs through `JobManager`, with the exit notice.
+6. The fleet view's runs: the collapsed line, the expanded list, open, stop.
+
+**Milestone 3: creating agents**
+
+7. `agent_manage` (deferred): create, edit, delete, the confirm, model resolution, the actual thinking level.
+8. The fleet view's agents: create, edit, delete from the menu.
+
+**Later**
+
+9. Fork context, a child asking the parent, steering a running child.
+10. External agents in herdr panes.
 
 ## Open questions
 
-- How do children get models and credentials: adapt `ctx.modelRegistry`, or a separate `createModels()`?
-- Where does the SQLite file live, and is it one per pi session or one per project?
-  The [analytics](analytics.md) module plans a SQLite database under `~/.pi/` too: same folder, likely separate
-  files, since pi-durable wants one owning process per storage and analytics has several pi windows writing at once.
-- pi-durable is experimental. Pin an exact version?
-- Which agents ship with MyPi, and on which models?
+- Where do child session files go: pi's session folder (they'd show in `/resume`), or a folder of their own?
+- How many background runs at once, and how many runs per prompt?
+- The fleet view's key, and whether `/agents` replaces `job_list` for runs.
+- Should the [done check](done-check.md) run when a `developer` run finishes?
+- External agents: keep Radian's rule that Anthropic models only run on Claude Code?
 
 ## References
 
-- pi-durable: [npm](https://www.npmjs.com/package/@earendil-works/pi-durable), README § "Abort and Subagents",
-  "Child Tasks", "Hooks", "Storage", examples 22, 23, 27 and 28, and the
-  [spec](https://github.com/earendil-works/pi/blob/main/packages/durable/docs/spec.md)
-- pi: `examples/extensions/subagent/`, `docs/sdk.md`, `docs/cli-integration.md`
+- [pi-subagents](../inspiration/pi-subagents.md): `src/runs/shared/child-session.ts`, `docs/agents.md`,
+  `docs/observability.md` § FleetView
+- [Radian](https://github.com/cenron/radian-harness): `src/core/runtime-args.ts`, `src/io/herdr.ts`,
+  `src/workers/dispatch.ts`, `docs/Architecture.md`
+- pi: `createAgentSession`, `ModelRuntime`, `SessionManager`, `resolveCliModel`, `DefaultResourceLoader` (exported
+  from the package), `ctx.ui.setWidget`, `docs/sdk.md`, `docs/cli.md` § `--model`
 - Claude Code: [sub-agents](https://code.claude.com/docs/en/sub-agents)

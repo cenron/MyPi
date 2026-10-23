@@ -19,6 +19,7 @@ machine-specific paths out of tracked files.
 | `docs/modules/<name>.md`    | Module design or idea, with a status. Index: `docs/modules/README.md`.                                                                                                                                 |
 | `docs/tools/<name>.md`      | Built-in tool design or idea (tools that belong to no module), with a status. Index: `docs/tools/README.md`.                                                                                           |
 | `docs/mcp/README.md`        | MCP servers MyPi registers with pi out of the box, with a status per server.                                                                                                                           |
+| `docs/roadmap.md`            | What to build next, in order, and what's deferred or done. Start here when asked what's next.                                                                                                          |
 | `docs/inspiration/<name>.md` | Outside projects worth learning from, and which of their ideas fit MyPi. Index: `docs/inspiration/README.md`.                                                                                          |
 | `docs/architecture.md`      | How pi loads MyPi and how modules plug in.                                                                                                                                                             |
 | `docs/principles.md`        | Design principles. Read before adding code.                                                                                                                                                            |
@@ -55,6 +56,11 @@ Check that `pi --version` matches the pinned devDependency. If the docs and sour
 
 - Host packages (`@earendil-works/*`, `typebox`) are `peerDependencies` with `"*"`, plus pinned devDependencies for
   types. Never `dependencies`.
+- Before adding code, check what pi exports and what Node has built in. A runtime dependency (`dependencies`) must be
+  maintained by a company or foundation organization (Microsoft, Mozilla, Node.js, tree-sitter, …) or already be in
+  pi's own dependency tree, be actively developed, and have a manageable issue log: check the last push, last
+  release, and open issues first. Add one only when it removes real code or work. `turndown`,
+  `turndown-plugin-gfm`, and `@mixmark-io/domino` predate this rule.
 - Send notifications through `Session` (`log`, `logWarning`, `logError`), which already guards `ctx.hasUI`. Guard
   dialogs and other UI calls with `ctx.hasUI` yourself.
 - Import across folders with `#core/<file>`, `#command/<file>`, `#tool/<file>`, `#module/<file>`, `#ui/<file>`, and
