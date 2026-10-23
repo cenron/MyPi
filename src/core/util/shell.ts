@@ -1,18 +1,33 @@
 /**
  * Splits a bash command into segments (split on `|`, `||`, `&&`, `;` and newlines) of words with their quotes
  * removed, or returns undefined when the command holds syntax that can run or write something the words don't show:
- * `$(`, backticks, `<(`, `>(`, `(`, a lone `&`, `$'…'`, or a redirect other than `N>&M`, `>/dev/null` and `< file`.
- * Redirect targets are dropped from the words. Comma braces are expanded as bash does (`a{b,c}` is `ab ac`), so the
- * words show what runs; ranges (`{a..c}`), nested or quoted braces, and braces in a redirect target return undefined.
+ * `$(`, backticks, `<(`, `>(`, `(`, a lone `&`, `$'…'` and `$"…"`, variables (`$x`, `${x}`, `$1`, even in double
+ * quotes, since one can hold `-delete`), or a redirect other than `N>&M`, `>/dev/null` and `< file`. Redirect targets
+ * are dropped from the words. Comma braces are expanded as bash does (`a{b,c}` is `ab ac`), so the words show what
+ * runs; ranges (`{a..c}`), nested or quoted braces, and braces in a redirect target return undefined.
  */
 export function tokenize(command: string): string[][] | undefined {
+  return scan(command)?.segments;
+}
+
+/** `tokenize`'s segments, and for each one whether it holds an unquoted glob (`*`, `?`, `[`) that bash expands. */
+type Scan = { segments: string[][]; globbed: boolean[] };
+
+/** What makes `$` expand inside double quotes: a name, a digit, `{`, `(`, or a special parameter like `$@`. */
+const EXPANDS_IN_QUOTES = /^[\w{(@*#?!$-]$/;
+
+/** What makes an unquoted `$` expand: the same, plus `$'…'` and `$"…"`, whose text bash rewrites. */
+const EXPANDS = /^[\w{(@*#?!$'"-]$/;
+
+function scan(command: string): Scan | undefined {
   const segments: string[][] = [];
+  const globbed: boolean[] = [];
   let segmentWords: string[] = [];
+  let segmentGlobbed = false;
   let currentWord = "";
   let wordStarted = false; // A quote starts a word too, so '' is preserved.
   let wordParts: (string | string[])[] = []; // text, then each closed brace group's choices
   let group: string[] | undefined; // the open brace group's choices; the last is being read
-  let paramDepth = 0; // inside `${…}`, which is parameter expansion, not braces
   let redirectTarget: "input" | "output" | undefined;
   let unsafe = false;
 
@@ -28,15 +43,18 @@ export function tokenize(command: string): string[][] | undefined {
     wordStarted = false;
     wordParts = [];
     group = undefined;
-    paramDepth = 0;
     redirectTarget = undefined;
   };
 
   const finishSegment = () => {
     finishWord();
     if (redirectTarget !== undefined) unsafe = true; // A redirect needs a target.
-    if (segmentWords.length > 0) segments.push(segmentWords);
+    if (segmentWords.length > 0) {
+      segments.push(segmentWords);
+      globbed.push(segmentGlobbed);
+    }
     segmentWords = [];
+    segmentGlobbed = false;
   };
 
   let i = 0;
@@ -59,8 +77,8 @@ export function tokenize(command: string): string[][] | undefined {
         if (i >= command.length) return undefined;
         const d = command.charAt(i);
         if (d === '"') break;
-        // Command substitution still runs inside double quotes.
-        if (d === "`" || (d === "$" && command.charAt(i + 1) === "(")) return undefined;
+        // Substitutions and variables still expand inside double quotes.
+        if (d === "`" || (d === "$" && EXPANDS_IN_QUOTES.test(command.charAt(i + 1)))) return undefined;
         if (d === "\\" && '$`"\\\n'.includes(command.charAt(i + 1))) {
           if (command.charAt(i + 1) !== "\n") currentWord += command.charAt(i + 1);
           i += 2;
@@ -110,22 +128,14 @@ export function tokenize(command: string): string[][] | undefined {
       finishWord();
       redirectTarget = "input";
       i++;
-    } else if (c === "`" || c === "(" || c === ")" || (c === "$" && (next === "(" || next === "'"))) {
+    } else if (c === "`" || c === "(" || c === ")" || (c === "$" && EXPANDS.test(next))) {
       return undefined;
     } else {
-      // A comma or `..` in `${…}` is parameter expansion (`${x,,}`), and `..` in braces is a range: both ask.
-      if ((paramDepth > 0 || group) && c === "." && next === ".") return undefined;
-      if (paramDepth > 0) {
-        if (c === ",") return undefined;
-        if (c === "{") paramDepth++;
-        else if (c === "}") paramDepth--;
-        currentWord += c;
-      } else if (c === "{") {
-        if (group) return undefined; // nested braces, `${` included
-        if (command.charAt(i - 1) === "$") {
-          paramDepth = 1;
-          currentWord += c;
-        } else group = [""];
+      if (group && c === "." && next === ".") return undefined; // a range
+      if ("*?[".includes(c)) segmentGlobbed = true;
+      if (c === "{") {
+        if (group) return undefined; // nested braces
+        group = [""];
       } else if (group && c === ",") {
         group.push("");
       } else if (group && c === "}") {
@@ -146,7 +156,7 @@ export function tokenize(command: string): string[][] | undefined {
     }
   }
   finishSegment();
-  return unsafe ? undefined : segments;
+  return unsafe ? undefined : { segments, globbed };
 }
 
 /** Most words one brace-expanded word may become before the command just asks. */
@@ -169,12 +179,16 @@ function expandBraces(parts: (string | string[])[]): string[] | undefined {
 /**
  * True only for a command that can't write files or run another program, so Plan can run it without asking. Strict on
  * purpose: a false only costs a confirm. Every segment's first word must be a known reader whose arguments pass its
- * check; anything else, wrappers like `env` and `xargs` included, is false.
+ * check; anything else, wrappers like `env` and `xargs` included, is false. A segment with an unquoted glob passes
+ * only for a plain reader: the glob can expand to a file named like a flag, as `find *` does with a file `-delete`.
  */
 export function isReadOnlyCommand(command: string): boolean {
-  const segments = tokenize(command);
-  if (segments === undefined || segments.length === 0) return false;
-  return segments.every(([name = "", ...args]) => READERS.get(name)?.(args) ?? false);
+  const scanned = scan(command);
+  if (scanned === undefined || scanned.segments.length === 0) return false;
+  return scanned.segments.every(([name = "", ...args], i) => {
+    if (scanned.globbed[i] && !PLAIN_READERS.includes(name)) return false;
+    return READERS.get(name)?.(args) ?? false;
+  });
 }
 
 type ArgCheck = (args: string[]) => boolean;

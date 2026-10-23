@@ -151,13 +151,18 @@ frozen. The guard now shows at most 12 lines of an ask, each cut at 160 characte
 checks only the first word plus a denylist, so `ls; node …` and the 3a test cases run unasked.
 
 - Split on `|`, `&&`, `||`, `;` and newlines outside quotes, and remove quotes, so `ca't'` is `cat`. Ask on `$(` or
-  backticks (inside double quotes too, where they still run), `$'…'` (`$'-delete'` is `-delete`), `<(`, `>(`, `(`, a
-  lone `&`, `&>`, `>|`, `<>`, `<<`, an unterminated quote, and any `>` / `>>` except `N>&M` and to `/dev/null`.
-  `< file` is fine.
+  backticks (inside double quotes too, where they still run), `$'…'` and `$"…"` (`$'-delete'` is `-delete`),
+  variables (`$x`, `${x}`, `$1`, `$@`, also inside double quotes, since `find . $X` runs `-delete` when X holds it),
+  `<(`, `>(`, `(`, a lone `&`, `&>`, `>|`, `<>`, `<<`, an unterminated quote, and any `>` / `>>` except `N>&M` and to
+  `/dev/null`. `< file` is fine, and so is a `$` bash leaves alone (`grep a$`).
 - Expand comma braces as bash does, so the checks below see what runs: `wc -l docs/{a,b}.md` is
   `wc -l docs/a.md docs/b.md` and runs unasked, while `find . -{delete,name}` is `find . -delete -name` and asks.
-  Braces without a comma stay text (`@{u}`). Ask on ranges (`{a..c}`), nested braces, quotes inside braces, a comma in
-  `${…}`, braces in a redirect target, and a word that expands to more than 256 words.
+  Braces without a comma stay text (`@{u}`). Ask on ranges (`{a..c}`), nested braces, quotes inside braces, braces in
+  a redirect target, and a word that expands to more than 256 words.
+- An unquoted glob (`*`, `?`, `[`) passes only for a plain reader (`ls *.ts`, `grep foo src/*.ts`). For the readers
+  with a check below it asks, because bash expands the glob to file names, and a file named like a flag gets past the
+  check: `find *` in a directory holding a file `-delete` runs `find -delete …`. A quoted pattern (`-name '*.ts'`) is
+  fine.
 - The first word of every segment must be listed below, so wrappers (`env`, `xargs`, `sh`, `sudo`, `timeout`, …),
   `FOO=1 cmd`, and `/bin/cat` ask without a separate list.
 - Plain readers: `cat head tail wc ls pwd stat du df which type whoami id date uname echo printf cut tr nl basename
