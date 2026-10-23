@@ -1,6 +1,6 @@
 # Sub-agents
 
-**Status:** planned (design agreed 2026-10-23; #4 on the [roadmap](../roadmap.md), milestone 1 first)
+**Status:** planned (design agreed 2026-10-23; #5 on the [roadmap](../roadmap.md), after worktree; milestone 1 first)
 
 **Load type:** `ON_LOAD`. On by default, so the agent can use the `subagent` tool whenever the module is loaded; the user
 can turn it off in `/modules`.
@@ -41,6 +41,15 @@ the fleet view, which also shows what's running.
    loaded through `tool_search` when needed. The agent list is a prompt section.
 6. **Order:** milestone 1 (running internal agents) first; subagents comes before [analytics](analytics.md) on the
    roadmap, so analytics is built to track runs per agent, model and effort.
+7. **The main window orchestrates, and still works.** It hands work to specialists and keeps going, and it can still
+   do things itself. It delegates when my request or my instructions say so (as pi-subagents does: "task complexity
+   does not grant delegation authority"). A pure orchestrator that never edits, like Radian's coordinator, could be a
+   plan-build mode later.
+8. **Background by default.** A run returns at once and its answer wakes the main agent when it's done; foreground
+   (`background: false`) is for when the next step can't happen without the answer. Runs that finish close together
+   arrive as one message, and the main agent can wait for runs on purpose.
+9. **Parallel writers each get a worktree**, so [worktree](../tools/worktree.md) moves above subagents on the
+   roadmap. Until a writer run has its own worktree, only one `write` run works in the main checkout at a time.
 
 ## Agents
 
@@ -73,7 +82,7 @@ updates it when an agent is added or changed.
 
 ## Running an agent
 
-- **`subagent({ agent, task, model?, thinking?, background? })`.** `model` and `thinking` override the definition for
+- **`subagent({ agent, task, model?, thinking?, background? })`**, `background` true by default. `model` and `thinking` override the definition for
   this one run. An unknown agent is an error that lists the agents.
 - **The child** is `createAgentSession({ cwd, modelRuntime, model, thinkingLevel, tools, resourceLoader, sessionManager })`
   with one `ModelRuntime.create()` per pi session. That reads pi's own `auth.json` and `models.json`, so children use
@@ -81,9 +90,18 @@ updates it when an agent is added or changed.
   each child an ordinary pi session file that points to its parent.
 - **Fresh context:** the child gets its agent prompt and the task, not my conversation. Starting from my conversation
   (a fork) is a later slice.
-- **Foreground** (default): the call waits and shows the child's progress under it.
-- **Background:** the child runs as a job in MyPi's [`JobManager`](../tools/background-process.md): `job_list`,
-  `job_stop`, the footer count, and an exit notice when it's done, like shell jobs. It stops when pi does.
+- **Background** (default): the call returns at once ("started reviewer as job 3") and the main agent keeps going. The
+  child runs as a job in MyPi's [`JobManager`](../tools/background-process.md): `job_list`, `job_stop`, the footer
+  count, and the fleet view. When it's done, an exit notice brings its answer into the conversation and wakes the
+  main agent (`sendMessage` with `followUp` and `triggerTurn`, like shell jobs). It stops when pi does; its session
+  file stays.
+- **Grouped completions:** runs that succeed within a short window of each other arrive as one message, so the main
+  agent doesn't act on the first of three reviews before the other two land. A failed run is reported at once
+  (pi-subagents' `completionBatch`).
+- **Waiting on purpose:** the main agent can wait for given runs to finish (pi-subagents' `bg_wait`). Possibly a
+  `job_wait` tool in core, which would work for shell jobs too.
+- **Foreground** (`background: false`): the call waits, shows the child's progress under it, and returns the answer
+  as its result.
 - **The result:** the child's final answer, its usage, the path of its session file (the full transcript), and the
   files it changed (from its own tool results). A `developer` that changed nothing says so.
 - **No nesting:** children don't get `subagent` or `agent_manage`, and their prompt says they aren't the orchestrator.
@@ -101,9 +119,10 @@ access:
 - **`write`:** pi's normal tools.
 - **In the parent's Plan mode**, the module's own `onToolCall` rule allows a `subagent` run of a `read-only` agent and
   blocks a `write` agent with a reason. pi's generic rule would ask every time, since `subagent` isn't read-only.
-- **Writers don't run in parallel** in the main checkout: one `write` run at a time, until the
-  [worktree](../tools/worktree.md) tool can give each its own.
-- Children don't commit.
+- **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
+  Without one, only one `write` run works in the main checkout at a time, and the main agent leaves its files alone.
+- **Children don't commit.** How a writer's work comes back is open: Radian's branch per writer, merged with my
+  approval, or pi-subagents' patch and handoff file applied by the main agent.
 
 ## Creating and changing agents
 
@@ -186,29 +205,34 @@ Deferred until internal agents work. The design so far:
    prompt, and prints the answer. Proves models, logins and tools work in process.
 2. Agent definitions: the parser with tests, the three builtins, the three folders with my copy winning, and the
    prompt section.
-3. The `subagent` tool in the foreground: the result (answer, usage, session file, changed files), read-only
-   enforcement in the child, and the Plan rule.
-4. Rendering: progress under the call; Ctrl+O expands.
+3. The `subagent` tool: background by default through `JobManager`, the exit notice that wakes the main agent, the
+   result (answer, usage, session file, changed files), and `background: false` for foreground.
+4. Access in the child (read-only tools, Plan's shell check) and the Plan rule; one writer at a time.
+5. Grouped completions, and waiting on purpose.
+6. Rendering: progress under a foreground call; Ctrl+O expands.
 
-**Milestone 2: background and the fleet view (runs)**
+**Milestone 2: the fleet view and parallel writers**
 
-5. Background runs through `JobManager`, with the exit notice.
-6. The fleet view's runs: the collapsed line, the expanded list, open, stop.
+7. The fleet view's runs: the collapsed line, the expanded list, open, stop.
+8. Parallel writers, each in its own worktree, and how their work comes back (branch and merge, or a patch).
 
 **Milestone 3: creating agents**
 
-7. `agent_manage` (deferred): create, edit, delete, the confirm, model resolution, the actual thinking level.
-8. The fleet view's agents: create, edit, delete from the menu.
+9. `agent_manage` (deferred): create, edit, delete, the confirm, model resolution, the actual thinking level.
+10. The fleet view's agents: create, edit, delete from the menu.
 
 **Later**
 
-9. Fork context, a child asking the parent, steering a running child.
-10. External agents in herdr panes.
+11. Fork context, a child asking the parent, steering a running child.
+12. External agents in herdr panes.
 
 ## Open questions
 
 - Where do child session files go: pi's session folder (they'd show in `/resume`), or a folder of their own?
 - How many background runs at once, and how many runs per prompt?
+- How a writer's work comes back from its worktree: a branch merged with my approval (Radian), or a patch the main
+  agent applies (pi-subagents)?
+- How close together is "close together" for grouped completions?
 - The fleet view's key, and whether `/agents` replaces `job_list` for runs.
 - Should the [done check](done-check.md) run when a `developer` run finishes?
 - External agents: keep Radian's rule that Anthropic models only run on Claude Code?
