@@ -9,7 +9,19 @@ import type {
 
 export type Verdict = { kind: "allow" } | { kind: "block"; reason: string } | { kind: "ask"; question: string };
 export type ToolCall = { toolName: string; input: Record<string, unknown>; annotations?: ToolAnnotations };
-export type ToolEnv = { cwd: string; home: string };
+
+/** Where a read-only mode (Plan) still lets a module write: folders (absolute paths) and tools that only write there. */
+export type Writable = { readonly dirs: readonly string[]; readonly tools: readonly string[] };
+
+export type ToolEnv = {
+  cwd: string;
+  home: string;
+  /** Every module's writable folders, merged on each call so no rule holds a stale copy. */
+  writableDirs: readonly string[];
+  /** Every module's writable tools; a Set, because tool names come from the model. */
+  writableTools: ReadonlySet<string>;
+};
+
 export type ToolRule = (call: ToolCall, env: ToolEnv) => Verdict;
 
 type ToolApprovalRequest = { name: string; question: string };
@@ -36,8 +48,10 @@ export function previewAsk(ask: string): string {
     if (line.length <= PREVIEW_LINE_CHARS) return line;
     return `${line.slice(0, PREVIEW_LINE_CHARS)}… (${line.length - PREVIEW_LINE_CHARS} more characters)`;
   });
+
   const hidden = lines.length - shown.length;
   if (hidden > 0) shown.push(`… ${hidden} more line${hidden === 1 ? "" : "s"} not shown. Yes allows all of it.`);
+
   return shown.join("\n");
 }
 
@@ -51,6 +65,7 @@ function blocked(reason: string): ToolCallEventResult {
  */
 export class ToolGuard {
   private readonly rules = new Map<string, ToolRule>();
+  private readonly writables = new Map<string, Writable>();
   /** Ask lines (`<module>: <question>`) allowed for this session. In memory, so `/reload` forgets them. */
   private readonly allowed = new Set<string>();
 
@@ -58,18 +73,39 @@ export class ToolGuard {
 
   /** Sets the rule under `name`, or removes it with `undefined`. */
   set(name: string, rule: ToolRule | undefined): void {
-    if (rule === undefined) this.rules.delete(name);
-    else this.rules.set(name, rule);
+    if (rule === undefined) {
+      this.rules.delete(name);
+      return;
+    }
+
+    this.rules.set(name, rule);
+  }
+
+  /** Sets what module `name` may write in a read-only mode, or removes it with `undefined`. */
+  setWritable(name: string, writable: Writable | undefined): void {
+    if (writable === undefined) {
+      this.writables.delete(name);
+      return;
+    }
+
+    this.writables.set(name, writable);
   }
 
   async check(ev: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> {
-    const toolInfo = this.pi.getAllTools().find((tool) => tool.name === ev.toolName);
-    const toolCall: ToolCall = { toolName: ev.toolName, input: ev.input, annotations: toolInfo?.annotations };
-    const toolEnv: ToolEnv = { cwd: ctx.cwd, home: os.homedir() };
+    const toolCall = this.toToolCall(ev);
+    const writables = [...this.writables.values()];
+
+    const toolEnv: ToolEnv = {
+      cwd: ctx.cwd,
+      home: os.homedir(),
+      writableDirs: writables.flatMap((writable) => writable.dirs),
+      writableTools: new Set(writables.flatMap((writable) => writable.tools)),
+    };
 
     const asks: ToolApprovalRequest[] = [];
     for (const [name, rule] of this.rules) {
       const verdict = rule(toolCall, toolEnv);
+
       if (verdict.kind === "block") return blocked(verdict.reason);
       if (verdict.kind === "ask") asks.push({ name, question: verdict.question });
     }
@@ -102,5 +138,11 @@ export class ToolGuard {
       default: // No, Esc, or an abort
         return blocked("The user declined this call.");
     }
+  }
+
+  /** The call as rules see it, with the annotations pi lists for the tool, if any. */
+  private toToolCall(ev: ToolCallEvent): ToolCall {
+    const toolInfo = this.pi.getAllTools().find((tool) => tool.name === ev.toolName);
+    return { toolName: ev.toolName, input: ev.input, annotations: toolInfo?.annotations };
   }
 }

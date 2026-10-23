@@ -1,7 +1,7 @@
 import type { SessionManager, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
 import type { Session } from "#core/session";
-import type { ToolRule } from "#core/tool-guard";
+import type { ToolRule, Writable } from "#core/tool-guard";
 import type { Command, Module, ModuleInfo } from "#core/types";
 import type { KeyHandler } from "#ui/editor";
 import type { FooterItem } from "#ui/footer";
@@ -52,6 +52,11 @@ export abstract class BaseModule<State = never> implements Module {
 
   protected onToolCall(rule: ToolRule) {
     this.session.toolGuard.set(this.info.name, rule);
+  }
+
+  /** What a read-only mode (Plan) still lets this module write. Rules read it on each call, so init order is free. */
+  protected setWritable(writable: Writable) {
+    this.session.toolGuard.setWritable(this.info.name, writable);
   }
 
   protected setPrompt(prompt: string | undefined) {

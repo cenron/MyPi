@@ -1,10 +1,11 @@
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import type { AgentSettledEvent, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
 import { planCmd } from "./commands/plan";
 import { offerPlan } from "./dialog";
+import { PLANS_DIR } from "./plan-file";
 import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
 import { planRule } from "./rule";
 import { ASK_USER, askUserTool } from "./tools/ask-user";
@@ -59,6 +60,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.onKey("shift+tab", () => this.toggleMode());
     // Reads this.mode on every call, so a switch applies to the very next tool call, even mid-run.
     this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
+    // submit_plan writes only its own file in .pi/plans/.
+    this.setWritable({ dirs: [join(this.session.ctx.cwd, PLANS_DIR)], tools: [SUBMIT_PLAN] });
   }
 
   commands(): Command[] {

@@ -1,6 +1,6 @@
 # Memory
 
-**Status:** building (design agreed 2026-10-23; slices 1 and 2 built 2026-10-23; #1 on the [roadmap](../roadmap.md))
+**Status:** building (design agreed 2026-10-23; slices 1–3 built 2026-10-23; #1 on the [roadmap](../roadmap.md))
 
 ## Goal
 
@@ -112,7 +112,7 @@ Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
 | The list | `init()` reads both folders and calls `setPrompt(section)` | Sync reads (`readdirSync` with `recursive`, `readFileSync`): `ModuleManager.init()` doesn't await `init()`, so an async read could miss the first prompt. A file with no `description:` is listed by its path alone, not dropped. A missing folder is an empty scope; any other read error warns through `session.logWarning` (check permissions, then `/reload`) and lists that scope as unreadable, so the modules after memory still start. Empty scopes still get the conventions and their folder, so the agent knows where to write the first memory. Tests set `PI_CODING_AGENT_DIR` to a missing path in `vitest.config.ts`, so they never read real global memories. |
 | Refresh | `tool_result` on `write` / `edit` under a memory folder, subscribed through `session.pi.on` in `init()` | The next run (my next prompt) sees the new line: prompt sections apply at `before_agent_start`, once per run (`mypi.ts`), not on each request inside a run. Also creates the project folder's `.gitignore` with `keepOutOfGit` (`#core/util/git`, shared with plan-build); if that fails, it warns that project memories may be committed and still refreshes. Paths resolve with `resolveToolPath` against the call's cwd, like Plan's rule; the two folders are fields set when the module is built, since pi builds new modules on every `session_start`. `rm` in `bash` and hand edits show after `/reload` (agreed 2026-10-23: re-reading on every run would need a core change for one user). |
 | Frontmatter | pi's `parseFrontmatter` | A non-string or missing `description` is no description. Invalid YAML (an unquoted `: ` is enough) is caught and listed as `(frontmatter isn't valid YAML; fix it)` instead of a description, so the agent sees and fixes it; the conventions say to quote a description with a colon. Slice 1 first shipped its own one-line parser, made without checking pi's exports; replaced the same day. |
-| Plan mode | A list in core (`ToolGuard`) of paths and tool names that a read-only mode may still write, passed to rules with `{ cwd, home }` | Plan's rule (`rule.ts`) allows `.pi/plans/` and `submit_plan` today, hard-coded, and `PLAN_PROMPT` names `.pi/plans/`. Instead, plan-build adds those two and memory adds its folders; Plan's rule reads the list and never knows who added what. Tool names are in it so a memory system that saves through its own tool can add that tool. Any module on or off works: with memory off, Plan allows only plans; with plan-build off, nobody reads memory's entries. Two things to get right: the rule reads the list on each tool call, not a copy taken in `init()`, so module init order doesn't matter; and `PLAN_PROMPT` must not contradict memory's section ("write only in `.pi/plans/`" vs "save memories"), either by naming what's on the list or by a generic wording. Designed in slice 3. |
+| Plan mode | `BaseModule.setWritable({ dirs, tools })`: a list in core (`ToolGuard`) of folders and tools a read-only mode may still write, merged into the rules' `env` (`writableDirs`, `writableTools`) on each call | Plan's rule used to hard-code `.pi/plans/` and `submit_plan`. Now plan-build adds those two and memory adds its folders; Plan's rule reads the list and never knows who added what. Tool names are in it so a memory system that saves through its own tool can add that tool. Any module on or off works: with memory off, Plan allows only plans; with plan-build off, nobody reads memory's entries. `PLAN_PROMPT` says "what other sections say plan mode allows", and memory's conventions say saving memories is allowed in plan mode, so neither prompt names the other module. |
 | Onboarding | A module command that sends the onboarding prompt with `pi.sendUserMessage()` | Not a template in `resources/prompts/`: those load whether or not the module does, so the prompt goes with the module (decision 7). |
 
 ## Slices
@@ -121,8 +121,9 @@ Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
    (`src/module/memory/`: `folders.ts` reads, with pi's `parseFrontmatter`; `prompt.ts` is pure; `types.ts`).
 2. **Done.** Refresh the list after the agent writes or edits a memory, and create the project `.gitignore`
    (`onToolResult` in `index.ts`; `keepOutOfGit` moved to `src/core/util/git.ts`).
-3. The writable list in core: plan-build adds `.pi/plans/` and `submit_plan`, memory adds both folders, and Plan's
-   rule and prompt use it.
+3. **Done.** The writable list in core: plan-build adds `.pi/plans/` and `submit_plan`, memory adds both folders, and
+   Plan's rule uses it. `PLAN_PROMPT` allows "what other sections say plan mode allows", and memory's conventions say
+   saving memories is allowed in plan mode, so neither prompt names the other module.
 4. `/onboard`.
 5. A link check: `[[path]]` links to memories that don't exist.
 

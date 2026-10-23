@@ -32,6 +32,7 @@ export class MemoryModule extends BaseModule {
 
   init(): void {
     this.refresh();
+    this.setWritable({ dirs: [this.projectDir, this.globalDir], tools: [] });
     this.session.pi.on("tool_result", (ev, ctx) => this.onToolResult(ev, ctx));
   }
 

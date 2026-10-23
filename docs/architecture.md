@@ -96,7 +96,12 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`ToolGuard`** (`tool-guard.ts`) lets modules object to tool calls. It's
   `session.toolGuard`, and modules add one rule each with `BaseModule.onToolCall(rule)`, keyed by `info.name`.
   `MyPi.onToolCall` is MyPi's only `tool_call` handler and hands each call to the guard.
-  - A rule is pure: `(call: { toolName, input, annotations? }, env: { cwd, home }) => Verdict`, where `Verdict` is
+  - Modules also say what a read-only mode (Plan) may still let them write, with `BaseModule.setWritable({ dirs,
+    tools })`, keyed by `info.name` like the rules. The guard merges every module's entry into the rule's `env` as
+    `writableDirs` and `writableTools` on each call, so no rule holds a copy and module init order doesn't matter.
+    Plan-build adds `.pi/plans/` and `submit_plan`, memory its two folders; neither knows about the other.
+  - A rule is pure: `(call: { toolName, input, annotations? }, env: { cwd, home, writableDirs, writableTools }) =>
+    Verdict`, where `Verdict` is
     `allow`, `block` with a `reason`, or `ask` with a `question`. A module reads its own state (plan-build's mode) in
     the closure. The guard fills `annotations` (`readOnlyHint`, `destructiveHint`, …) from `pi.getAllTools()`, so rules
     never touch pi; they're set by the tool's author (MCP tools carry them, pi's built-ins don't) and unverified.

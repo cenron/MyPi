@@ -2,20 +2,28 @@ import type { ToolAnnotations } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { planRule } from "#module/plan-build/rule";
 
-const env = { cwd: "/project", home: "/home/me" };
+const env = {
+  cwd: "/project",
+  home: "/home/me",
+  writableDirs: ["/project/.pi/plans", "/home/me/.pi/agent/memories"],
+  writableTools: new Set(["submit_plan"]),
+};
 const verdict = (toolName: string, input: Record<string, unknown> = {}, annotations?: ToolAnnotations) =>
   planRule({ toolName, input, annotations }, env);
 
 describe("planRule", () => {
-  it.each(["read", "grep", "find", "ls", "tool_search", "codemode", "submit_plan", "ask_user"])("allows %s", (tool) => {
+  it.each(["read", "grep", "find", "ls", "tool_search", "codemode", "ask_user", "submit_plan"])("allows %s", (tool) => {
     expect(verdict(tool)).toEqual({ kind: "allow" });
   });
 
-  // Path resolution is paths.test.ts's; here only that the rule uses it with .pi/plans.
-  it.each([".pi/plans/feature.md", "/project/.pi/plans/feature.md"])("allows edit and write to %j", (path) => {
-    expect(verdict("edit", { path })).toEqual({ kind: "allow" });
-    expect(verdict("write", { path })).toEqual({ kind: "allow" });
-  });
+  // Path resolution is paths.test.ts's; here only that the rule uses it with every writable folder.
+  it.each([".pi/plans/feature.md", "/project/.pi/plans/feature.md", "~/.pi/agent/memories/build.md"])(
+    "allows edit and write to %j",
+    (path) => {
+      expect(verdict("edit", { path })).toEqual({ kind: "allow" });
+      expect(verdict("write", { path })).toEqual({ kind: "allow" });
+    },
+  );
 
   it.each(["src/a.ts", "~/.pi/plans/x.md"])("blocks edit and write to %j", (path) => {
     for (const tool of ["edit", "write"]) {
@@ -23,6 +31,7 @@ describe("planRule", () => {
       expect(result.kind).toBe("block");
       expect(result).toMatchObject({ reason: expect.stringContaining("Plan mode is on") });
       expect(result).toMatchObject({ reason: expect.stringContaining(path) });
+      expect(result).toMatchObject({ reason: expect.stringContaining("/home/me/.pi/agent/memories") });
     }
   });
 

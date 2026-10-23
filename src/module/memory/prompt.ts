@@ -6,7 +6,8 @@ const CONVENTIONS = `You have persistent memory: Markdown that lasts across sess
 - Store one fact per <folder>/<topic>/<name>.md, where <folder> is the scope's folder listed below; <topic> is optional, and existing topics should be reused. Start each file with three lines: ---, description: <short description>, ---. Quote the description if it contains a colon.
 - For corrections or preferences, include why and how to apply them.
 - Update existing memories instead of duplicating them. Link related memories with [[name]], using the name as listed.
-- Never save secrets. If a memory can't be written, treat it as read-only and leave it unchanged.`;
+- Never save secrets. If a memory can't be written, treat it as read-only and leave it unchanged.
+- Saving memories is allowed in plan mode.`;
 
 /** Memory's prompt section: the conventions, then each scope's folder and memories. */
 export function memoryPrompt(project: MemoryScope, global: MemoryScope): string {

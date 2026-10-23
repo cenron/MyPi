@@ -1,8 +1,10 @@
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "#core/session";
+import type { Verdict } from "#core/tool-guard";
 import { ModuleLoadMode } from "#core/types";
 import { MemoryModule } from "#module/memory/index";
 import { fakeSession } from "../../fakes";
@@ -18,6 +20,8 @@ function promptSection(session: Session) {
 function toolResult(toolName: string, path: string, isError = false) {
   return { type: "tool_result", toolCallId: "1", toolName, input: { path }, content: [], isError, details: undefined };
 }
+
+const toolCall = { type: "tool_call", toolCallId: "1", toolName: "read", input: {} } as ToolCallEvent;
 
 const MEMORY = "---\ndescription: How I like to work\n---\n";
 
@@ -48,6 +52,18 @@ describe("MemoryModule", () => {
 
   it("is always loaded", () => {
     expect(new MemoryModule(fakeSession().session).info.loadType).toBe(ModuleLoadMode.ALWAYS);
+  });
+
+  it("registers both folders as writable in a read-only mode", async () => {
+    const { session } = startMemory();
+    const seen = vi.fn((): Verdict => ({ kind: "allow" }));
+    session.toolGuard.set("spy", seen);
+    await session.toolGuard.check(toolCall, { cwd, hasUI: false } as ExtensionContext);
+
+    expect(seen).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ writableDirs: [projectDir(), globalDir()] }),
+    );
   });
 
   it("lists the cwd's project memories and the agent dir's global ones in its prompt section", async () => {

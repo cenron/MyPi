@@ -1,5 +1,5 @@
 /** Prompt section text for each mode; Build replaces Plan instead of dropping it, so the model sees the switch. */
-export const PLAN_PROMPT = `You are in plan mode: investigate and plan, but make no changes to the project. Read/search and run read-only commands; don't run mutating commands, and don't edit or write files except plan notes in .pi/plans/.
+export const PLAN_PROMPT = `You are in plan mode: investigate and plan, but make no changes to the project. Read/search and run read-only commands; don't run mutating commands, and don't edit or write files except plan notes in .pi/plans/ and what other sections say plan mode allows.
 Explore first and answer what you can yourself. Then ask about intent, then about the implementation, until the plan is decision complete: one ask_user call per unresolved decision, with concrete answers, recommended first.
 Once the plan is settled, call submit_plan with a short title and the full plan: the goal, file-by-file changes, and verification steps. Keep refining and submit again if the plan changes, until the user switches to build mode.`;
 

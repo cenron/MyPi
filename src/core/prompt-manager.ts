@@ -4,8 +4,12 @@ export class PromptManager {
 
   /** Sets the section under `name`, or removes it with `undefined`. */
   set(name: string, prompt: string | undefined): void {
-    if (prompt === undefined) this.sections.delete(name);
-    else this.sections.set(name, prompt);
+    if (prompt === undefined) {
+      this.sections.delete(name);
+      return;
+    }
+
+    this.sections.set(name, prompt);
   }
 
   /** Writes each section into `target` as `mypi-<name>`, leaving pi's and other extensions' sections alone. */

@@ -157,6 +157,7 @@ describe("PlanBuildModule", () => {
       const { session } = startPlanBuild();
       await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toMatchObject({ block: true });
       await expect(session.toolGuard.check(call("write", { path: ".pi/plans/a.md" }), ctx)).resolves.toBeUndefined();
+      await expect(session.toolGuard.check(call("submit_plan", { title: "a" }), ctx)).resolves.toBeUndefined();
       await expect(session.toolGuard.check(call("bash", { command: "ls" }), ctx)).resolves.toBeUndefined();
       await expect(session.toolGuard.check(call("bash", { command: "npm test" }), ctx)).resolves.toMatchObject({
         block: true,

@@ -75,7 +75,9 @@ Loosely after *Clean Code*: the parts that make code easier to read, not ceremon
 - **A function does one thing.** If its name needs "and", it's two functions. Prefer two functions to a boolean
   parameter that switches behavior.
 - **Narrative code.** Guard clauses at the top, then orchestrators that read like an outline, with helpers doing the
-  work.
+  work. When one branch ends the function, return early instead of `if … else` (`ToolGuard.set`): easier to follow.
+- **Blank lines are paragraphs.** Keep the lines of one idea together and put a blank line where the idea changes
+  (guards, then gathering inputs, then acting), so a function doesn't read like a run-on sentence.
 - **Errors say what to do.** A message names what failed and the next step ("not a public address; for a local
   server, use curl in bash"). Throw at the boundary that can explain it; don't swallow errors to look tidy.
 - **Comments explain why.** Shared helpers, types, and interfaces get a one-line JSDoc that says why they exist or what
