@@ -1,5 +1,4 @@
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { CommandExec } from "#command/types";
+import type { ExtensionCommandContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Session } from "./session";
 
 /**
@@ -19,6 +18,12 @@ export type CommandInfo = {
   name: string;
   description: string;
 };
+
+/**
+ * Runs a command with the pi command context and the whitespace-split arguments. Returns a message to show as an
+ * `info` notification, or `undefined` to show nothing.
+ */
+export type CommandExec = (ctx: ExtensionCommandContext, args: string[]) => Promise<string | undefined> | string;
 
 /** A slash command: registered by `registerCommands` and run through `runCommand`. */
 export type Command = {

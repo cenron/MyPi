@@ -14,26 +14,35 @@ import { isMode, Mode, type PlanActions, type SubmittedPlan } from "./types";
 /** Tools active only in Plan: entering Plan adds them, leaving removes them. */
 const PLAN_TOOLS = [SUBMIT_PLAN, ASK_USER];
 
+/** The footer label for each mode. */
+const FOOTER_ITEMS: Record<Mode, FooterItem> = {
+  [Mode.PLAN]: { text: "PLAN", color: FooterColor.WARNING },
+  [Mode.BUILD]: { text: "BUILD", color: FooterColor.DIM },
+};
+
+/** The prompt section for each mode. */
+const PROMPTS: Record<Mode, string> = {
+  [Mode.PLAN]: PLAN_PROMPT,
+  [Mode.BUILD]: BUILD_PROMPT,
+};
+
 export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   private mode: Mode = Mode.PLAN;
   /** The plan `submit_plan` saved in this run, until the dialog takes it or the next run starts. In memory only. */
   private submittedPlan: SubmittedPlan | undefined;
 
-  private footerItems: Record<Mode, FooterItem> = {
-    [Mode.PLAN]: { text: "PLAN", color: FooterColor.WARNING },
-    [Mode.BUILD]: { text: "BUILD", color: FooterColor.DIM },
-  };
-
-  private prompts: Record<Mode, string> = {
-    [Mode.PLAN]: PLAN_PROMPT,
-    [Mode.BUILD]: BUILD_PROMPT,
-  };
+  // Built once: `info` lists its command, and `info` is read on every footer, prompt, and state call.
+  private readonly planCommand = planCmd({
+    toggleMode: () => this.toggleMode(),
+    setMode: (mode) => this.setMode(mode),
+    saveBuildTo: (sessionManager) => this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
+  });
 
   get info(): ModuleInfo {
     return {
       name: "plan-build",
       description: "Plan changes in a restricted mode, then switch to Build to implement them.",
-      commands: this.commands().map((command) => command.info),
+      commands: [this.planCommand.info],
       loadType: ModuleLoadMode.ALWAYS,
     };
   }
@@ -41,8 +50,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   init(): void {
     const savedMode = this.loadState()?.mode;
     this.mode = isMode(savedMode) ? savedMode : Mode.PLAN;
-    this.setFooter(this.footerItems[this.mode]);
-    this.setPrompt(this.prompts[this.mode]);
+    this.setFooter(FOOTER_ITEMS[this.mode]);
+    this.setPrompt(PROMPTS[this.mode]);
     this.initEventHandlers();
 
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
@@ -53,13 +62,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   }
 
   commands(): Command[] {
-    return [
-      planCmd({
-        toggleMode: () => this.toggleMode(),
-        setMode: (mode) => this.setMode(mode),
-        saveBuildTo: (sessionManager) => this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
-      }),
-    ];
+    return [this.planCommand];
   }
 
   /** `submit_plan` and `ask_user`, registered inactive; `applyPlanTools` turns them on in Plan only. */
@@ -105,8 +108,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.mode = mode;
 
     this.saveState({ mode: this.mode });
-    this.setFooter(this.footerItems[this.mode]);
-    this.setPrompt(this.prompts[this.mode]);
+    this.setFooter(FOOTER_ITEMS[this.mode]);
+    this.setPrompt(PROMPTS[this.mode]);
     this.applyPlanTools();
   }
 

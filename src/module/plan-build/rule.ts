@@ -2,9 +2,7 @@ import { join } from "node:path";
 import type { ToolRule, Verdict } from "#core/tool-guard";
 import { isInside, resolveToolPath } from "#core/util/paths";
 import { isReadOnlyCommand } from "#core/util/shell";
-
-/** Where Plan may write, relative to the session's cwd. */
-export const PLANS_DIR = join(".pi", "plans");
+import { PLANS_DIR } from "./plan-file";
 
 /**
  * Tools Plan never objects to. Pi's built-in readers carry no annotations, so they're listed by name; `codemode`'s

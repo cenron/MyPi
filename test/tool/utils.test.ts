@@ -1,7 +1,7 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { callMcpTool, siteOf, textOf } from "#tool/utils";
-import { answered, failed, fakeContext } from "./web-search/fakes";
+import { answered, failed, fakeContext } from "./fakes";
 
 describe("callMcpTool", () => {
   it("returns the whole MCP result", async () => {

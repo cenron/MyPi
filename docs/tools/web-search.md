@@ -151,7 +151,7 @@ which is cleaner.
    - Tests: `test/tool/utils.test.ts`, and under `test/tool/web-search/`, mirroring
      `src/`: `tools/exa.test.ts` (a `parseExa` table and a recorded reply cut short), `search.test.ts` (a table of the
      fallback rules, and the order, with fake backends), and `index.test.ts` for wiring. Shared fakes in
-     `test/tool/web-search/fakes.ts`: a `ctx` that answers by tool name, and says "not found" for any other, as pi does.
+     `test/tool/fakes.ts`: a `ctx` that answers by tool name, and says "not found" for any other, as pi does.
    - Live (2026-10-22, Plan mode, after `/reload`): with both servers on, the search came from Parallel. With Parallel
      off in `/mcp`, it came from Exa: 10 results, dates cut to the day. With both off, it failed with one line per
      backend (`Web search failed (Parallel): Tool mcp__parallel__web_search not found`, then Exa's). A real 429 can't be

@@ -1,7 +1,8 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isNodeError } from "#core/util/errors";
-import { PLANS_DIR } from "./rule";
+/** Where plans are saved, and the one place Plan may write, relative to the session's cwd. */
+export const PLANS_DIR = join(".pi", "plans");
 
 const MAX_SLUG = 50;
 

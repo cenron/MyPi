@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXA_SEARCH_TOOL, exaBackend, parseExa } from "#tool/web-search/tools/exa";
-import { answered, fakeContext } from "../fakes";
+import { answered, fakeContext } from "../../fakes";
 
 /** Exa's reply to a real search (2026-10-22), cut to shorter page text. The third holds front matter's `---` lines. */
 const recorded = [

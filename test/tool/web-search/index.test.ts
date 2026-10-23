@@ -5,7 +5,7 @@ import { webSearchTool } from "#tool/web-search/index";
 import { EXA_SEARCH_TOOL } from "#tool/web-search/tools/exa";
 import { PARALLEL_SEARCH_TOOL } from "#tool/web-search/tools/parallel";
 import { fakeSession } from "../../fakes";
-import { answered, fakeContext } from "./fakes";
+import { answered, fakeContext } from "../fakes";
 
 const results = [{ url: "https://a.test", title: "A", excerpt: "Some text." }];
 

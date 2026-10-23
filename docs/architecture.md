@@ -157,7 +157,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   `enum`.
 - **`types.ts`** holds the types shared across folders: `Command`, `CommandInfo`, `ModuleInfo`, `ModuleLoadMode` (a
   const object plus a type, the same pattern as `MessageType`), the module contract, `Module` and `ModuleClass`, and
-  the job types, `JobStatus`, `JobSpec`, `JobInfo`, and `Job`. `CommandExec` is still in `src/command/types.ts`.
+  the job types, `JobStatus`, `JobSpec`, `JobInfo`, and `Job`, and `CommandExec`, a command's `execute`.
 - **`util/errors.ts`** has `errorMessage` (any thrown value to a string) and `isNodeError` (narrows to
   `NodeJS.ErrnoException`).
 - **`util/guards.ts`** has `isRecord` (a plain object, before reading fields off JSON) and `isNonEmptyString`.
