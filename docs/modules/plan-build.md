@@ -62,7 +62,7 @@ UI in `src/ui/`, built per session by `Session` (like `Notifier`) and reached th
 module calls `setFooter(item)`, where `FooterItem` is `{ text, color: FooterColor }`, or `setFooter(undefined)` to
 clear. Each module gets one slot, keyed by `info.name`.
 
-- `FooterColor` is a const object of the theme colors that suit the footer (`FooterColor.Warning`, `.Dim`, …), the same
+- `FooterColor` is a const object of the theme colors that suit the footer (`FooterColor.WARNING`, `.Dim`, …), the same
   pattern as `MessageType`. Pi exports `ThemeColor` only as a type (49 names, most for markdown, syntax, or borders),
   so this gives modules dot-completion and a short list. `satisfies Record<string, ThemeColor>` checks every value
   against pi, so a pi rename fails the typecheck in `footer.ts`, not in a module.

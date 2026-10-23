@@ -41,7 +41,7 @@ export function previewAsk(ask: string): string {
   return shown.join("\n");
 }
 
-function returnBlock(reason: string): ToolCallEventResult {
+function blocked(reason: string): ToolCallEventResult {
   return { block: true, reason };
 }
 
@@ -70,7 +70,7 @@ export class ToolGuard {
     const asks: ToolApprovalRequest[] = [];
     for (const [name, rule] of this.rules) {
       const verdict = rule(toolCall, toolEnv);
-      if (verdict.kind === "block") return returnBlock(verdict.reason);
+      if (verdict.kind === "block") return blocked(verdict.reason);
       if (verdict.kind === "ask") asks.push({ name, question: verdict.question });
     }
 
@@ -86,7 +86,7 @@ export class ToolGuard {
     if (lines.length === 0) return undefined;
 
     const details = lines.map(previewAsk).join("\n\n");
-    if (!ctx.hasUI) return returnBlock(`Confirmation needed, no UI to ask:\n ${details}`);
+    if (!ctx.hasUI) return blocked(`Confirmation needed, no UI to ask:\n ${details}`);
 
     // Esc and an abort resolve undefined, which declines like No.
     const choice = await ctx.ui.select(`Permission required\n${details}`, Object.values(Choice), {
@@ -100,7 +100,7 @@ export class ToolGuard {
       case Choice.YES:
         return undefined;
       default: // No, Esc, or an abort
-        return returnBlock("The user declined this call.");
+        return blocked("The user declined this call.");
     }
   }
 }

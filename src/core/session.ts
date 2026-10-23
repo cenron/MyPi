@@ -38,7 +38,7 @@ export class Session {
     this.jobs.onChange((running) =>
       this.footer.set(
         "jobs",
-        running ? { text: running === 1 ? "1 job" : `${running} jobs`, color: FooterColor.Accent } : undefined,
+        running ? { text: running === 1 ? "1 job" : `${running} jobs`, color: FooterColor.ACCENT } : undefined,
       ),
     );
   }

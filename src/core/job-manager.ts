@@ -1,11 +1,8 @@
 import { createWriteStream, type WriteStream } from "node:fs";
 import { DEFAULT_MAX_BYTES } from "@earendil-works/pi-coding-agent";
-import type { JobInfo, JobSpec } from "#core/types";
+import type { Job, JobInfo, JobSpec } from "./types";
 import { errorMessage } from "./util/errors";
 import { tempFilePath } from "./util/paths";
-
-/** A started job: its info as it changes, a promise that settles once it has ended, and its last output lines. */
-export type Job = { readonly info: JobInfo; readonly done: Promise<JobInfo>; tail(lines: number): string };
 
 /** Most characters of output a job keeps in memory; the log file has the rest. pi's own output cap. */
 const TAIL_CHARS = DEFAULT_MAX_BYTES;
@@ -18,7 +15,7 @@ type Entry = Job & { controller: AbortController };
  * first kind; subagents can be another. One per `Session`; `stopAll()` runs on `session_shutdown`.
  */
 export class JobManager {
-  private currentJobId = 1;
+  private nextId = 1;
   private readonly jobs = new Map<string, Entry>();
   private readonly listeners = new Set<(running: number) => void>();
 
@@ -116,7 +113,7 @@ export class JobManager {
   /** A new job's info: the next id, running from now, with a new log file. */
   private createJobInfo(spec: JobSpec): JobInfo {
     const jobInfo: JobInfo = {
-      id: String(this.currentJobId),
+      id: String(this.nextId),
       kind: spec.kind,
       label: spec.label,
       status: "running",
@@ -124,7 +121,7 @@ export class JobManager {
       logPath: tempFilePath("pi-job", ".log"),
     };
 
-    this.currentJobId++;
+    this.nextId++;
     return jobInfo;
   }
 

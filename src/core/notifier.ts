@@ -2,9 +2,9 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 /** Notification levels; the values match pi's `ctx.ui.notify` types. */
 const MessageType = {
-  Info: "info",
-  Warning: "warning",
-  Error: "error",
+  INFO: "info",
+  WARNING: "warning",
+  ERROR: "error",
 } as const;
 
 type MessageType = (typeof MessageType)[keyof typeof MessageType];
@@ -14,15 +14,15 @@ export class Notifier {
   constructor(readonly ctx: ExtensionContext) {}
 
   info(msg: string) {
-    this.notify(msg, MessageType.Info);
+    this.notify(msg, MessageType.INFO);
   }
 
   warn(msg: string) {
-    this.notify(msg, MessageType.Warning);
+    this.notify(msg, MessageType.WARNING);
   }
 
   error(msg: string) {
-    this.notify(msg, MessageType.Error);
+    this.notify(msg, MessageType.ERROR);
   }
 
   private notify(msg: string, type: MessageType) {

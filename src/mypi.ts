@@ -13,7 +13,7 @@ import { registerMcpServers } from "#mcp/index";
 import { loadModules } from "#module/index";
 import { backgroundRenderer } from "#tool/bash/render";
 import type { Tool } from "#tool/types";
-import { registerCommand } from "./command";
+import { registerCommands } from "./command";
 import { initTools, registerTools, shutdownTools } from "./tool";
 
 export class MyPi {
@@ -33,7 +33,7 @@ export class MyPi {
     this.tools = registerTools(this.pi, this.session);
     initTools(this.tools);
     this.session.moduleManager.init();
-    registerCommand(this.pi, this.session);
+    registerCommands(this.pi, this.session);
     registerMcpServers(this.pi, this.session);
   }
 

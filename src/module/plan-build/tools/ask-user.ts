@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { type AgentToolResult, defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 export const ASK_USER = "ask_user";
@@ -17,21 +17,19 @@ const parameters = Type.Object({
   ),
 });
 
+/** The answer, when there was one; undefined when the user dismissed the question or there was no UI. */
 type Details = { answer: string | undefined };
 
-function result(text: string, answer?: string) {
-  return {
-    content: [{ type: "text" as const, text }],
-    details: { answer },
-  };
+function result(text: string, answer?: string): AgentToolResult<Details> {
+  return { content: [{ type: "text", text }], details: { answer } };
 }
 
 /**
  * The `ask_user` tool: one question, answered from a list or in the user's own words, through pi's `select` and
  * `input` dialogs. Registered inactive, since only Plan turns it on.
  */
-export function askUserTool(): ToolDefinition<typeof parameters, Details> {
-  return {
+export function askUserTool() {
+  return defineTool({
     name: ASK_USER,
     label: "Ask user",
     description:
@@ -42,7 +40,7 @@ export function askUserTool(): ToolDefinition<typeof parameters, Details> {
     defaultActive: false,
     // Two questions at once would open two dialogs.
     executionMode: "sequential",
-    async execute(_toolCallId, { question, options }, signal, _onUpdate, ctx) {
+    async execute(_toolCallId, { question, options }, signal, _onUpdate, ctx): Promise<AgentToolResult<Details>> {
       if (!ctx.hasUI) return result("No UI to ask the user. Decide yourself and state the assumption in the plan.");
 
       // select only takes strings, so a description goes on its option's line, and the answer is mapped back by index.
@@ -60,5 +58,5 @@ export function askUserTool(): ToolDefinition<typeof parameters, Details> {
       if (!typed) return result("The user dismissed the question without answering.");
       return result(`The user answered: ${typed}`, typed);
     },
-  };
+  });
 }

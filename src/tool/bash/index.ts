@@ -5,9 +5,8 @@ import {
   defineTool,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { Job } from "#core/job-manager";
 import type { Session } from "#core/session";
-import type { JobSpec } from "#core/types";
+import type { Job, JobSpec } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import type { Tool } from "#tool/types";
 import { JOB_NOTICE, jobNotice, NOTICE_LINES, renderNotice } from "./notice";

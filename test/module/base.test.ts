@@ -90,8 +90,8 @@ describe("BaseModule", () => {
 
   it("gives each module one footer slot, keyed by its name", () => {
     const { session, setStatus } = fakeSession();
-    new Counter(session).footer({ text: "1", color: FooterColor.Accent });
-    new Counter(session, "other").footer({ text: "2", color: FooterColor.Dim });
+    new Counter(session).footer({ text: "1", color: FooterColor.ACCENT });
+    new Counter(session, "other").footer({ text: "2", color: FooterColor.DIM });
     new Counter(session).footer(undefined);
     expect(setStatus.mock.calls).toEqual([
       ["mypi-counter", "<accent>1"],

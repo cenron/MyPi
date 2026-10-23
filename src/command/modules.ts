@@ -32,9 +32,9 @@ async function openModal(ctx: ExtensionCommandContext, session: Session): Promis
 
   const loadedNames = session.moduleManager.select(selected);
 
-  session.logWarning(`Need to /reload to enable/disable modules \n\t${loadedNames.join("\n\t")}`);
+  session.logWarning(`Run /reload to apply the module selection:\n\t${loadedNames.join("\n\t")}`);
 
-  return "";
+  return undefined;
 }
 
 /** Every module, one per line, as `loaded: <name>` or `not loaded: <name>` (what's running, not the selection). */

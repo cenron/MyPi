@@ -2,13 +2,13 @@ import type { ExtensionContext, ThemeColor } from "@earendil-works/pi-coding-age
 
 /** Theme color that suits footer items. Each value is a pi `ThemeColor`, so a pi rename fails the typecheck here. */
 export const FooterColor = {
-  Accent: "accent",
-  Success: "success",
-  Warning: "warning",
-  Error: "error",
-  Muted: "muted",
-  Dim: "dim",
-  Text: "text",
+  ACCENT: "accent",
+  SUCCESS: "success",
+  WARNING: "warning",
+  ERROR: "error",
+  MUTED: "muted",
+  DIM: "dim",
+  TEXT: "text",
 } as const satisfies Record<string, ThemeColor>;
 
 export type FooterColor = (typeof FooterColor)[keyof typeof FooterColor];

@@ -20,7 +20,7 @@ export type CommandInfo = {
   description: string;
 };
 
-/** A slash command: registered by `registerCommand` and run through `runCommand`. */
+/** A slash command: registered by `registerCommands` and run through `runCommand`. */
 export type Command = {
   info: CommandInfo;
   execute: CommandExec;
@@ -49,7 +49,7 @@ export interface Module {
   /** Registers event handlers, turns its tools on or off, and restores state. Runs after every tool is registered. */
   init(): void;
 
-  /** The module's slash commands, registered through `registerCommand`. */
+  /** The module's slash commands, registered through `registerCommands`. */
   commands(): Command[];
 
   /** The module's tools, registered through `registerTools` before `init()`. Wrap each in `defineTool`. */
@@ -86,3 +86,6 @@ export interface JobSpec {
    */
   run(signal: AbortSignal, write: (chunk: Buffer | string) => void): Promise<number>;
 }
+
+/** A started job: its info as it changes, a promise that settles once it has ended, and its last output lines. */
+export type Job = { readonly info: JobInfo; readonly done: Promise<JobInfo>; tail(lines: number): string };

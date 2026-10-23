@@ -1,10 +1,5 @@
 import { relative } from "node:path";
-import {
-  type AgentSettledEvent,
-  defineTool,
-  type ExtensionContext,
-  type ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+import type { AgentSettledEvent, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
@@ -25,8 +20,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   private submittedPlan: SubmittedPlan | undefined;
 
   private footerItems: Record<Mode, FooterItem> = {
-    [Mode.PLAN]: { text: "PLAN", color: FooterColor.Warning },
-    [Mode.BUILD]: { text: "BUILD", color: FooterColor.Dim },
+    [Mode.PLAN]: { text: "PLAN", color: FooterColor.WARNING },
+    [Mode.BUILD]: { text: "BUILD", color: FooterColor.DIM },
   };
 
   private prompts: Record<Mode, string> = {
@@ -69,8 +64,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
 
   /** `submit_plan` and `ask_user`, registered inactive; `applyPlanTools` turns them on in Plan only. */
   tools(): ToolDefinition[] {
-    // defineTool lets each tool's own parameter types fit in one list.
-    return [defineTool(submitPlanTool((plan) => (this.submittedPlan = plan))), defineTool(askUserTool())];
+    return [submitPlanTool((plan) => (this.submittedPlan = plan)), askUserTool()];
   }
 
   private initEventHandlers() {

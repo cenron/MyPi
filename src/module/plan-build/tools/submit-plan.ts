@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { savePlan } from "../plan-file";
 import type { SubmittedPlan } from "../types";
@@ -16,10 +16,8 @@ const parameters = Type.Object({
  * The `submit_plan` tool: saves the plan to `.pi/plans/` and hands it to `onSubmit`. Registered inactive, since only
  * Plan turns it on.
  */
-export function submitPlanTool(
-  onSubmit: (plan: SubmittedPlan) => void,
-): ToolDefinition<typeof parameters, { path: string }> {
-  return {
+export function submitPlanTool(onSubmit: (plan: SubmittedPlan) => void) {
+  return defineTool({
     name: SUBMIT_PLAN,
     label: "Submit plan",
     description:
@@ -32,5 +30,5 @@ export function submitPlanTool(
       onSubmit({ title, plan, path });
       return { content: [{ type: "text", text: `Plan saved to ${path}.` }], details: { path } };
     },
-  };
+  });
 }

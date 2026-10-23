@@ -41,7 +41,7 @@ MyPi/
 | A built-in tool idea | `docs/tools/<name>.md` with status `idea` | Add a row to `docs/tools/README.md`. A tool a module owns goes in that module's doc instead. |
 | A built-in tool | `src/tool/<name>.ts`, returning a `Tool`: `{ definition: defineTool({ … }), init?, shutdown? }`; `src/tool/<name>/index.ts` when it needs more files | Add it to `createTools` in `src/tool/index.ts`; tests in `test/tool/`; a doc in `docs/tools/` |
 | An MCP server | `src/mcp/<name>.ts`, exporting a function that returns a `McpServer` (`{ name, config }`) | Add it to `createMcpServers` in `src/mcp/index.ts`; a row in `docs/mcp/README.md` |
-| A slash command | `src/command/<name>.ts`, returning a `Command`; `src/command/<name>/index.ts` when it needs more files | Add it to `createCommand` in `src/command/index.ts`; tests in `test/command/` |
+| A slash command | `src/command/<name>.ts`, returning a `Command`; `src/command/<name>/index.ts` when it needs more files | Add it to `createCommands` in `src/command/index.ts`; tests in `test/command/` |
 | A reusable TUI component | `src/ui/components/<name>.ts`, implementing pi-tui's `Component` | No feature logic; tests in `test/ui/components/` |
 | A feature's UI | `src/ui/<name>.ts`, opening it through `ctx.ui.custom` | Built from `src/ui/components/`; tests in `test/ui/` |
 | Module code | `src/module/<name>/index.ts`, a class extending `BaseModule` (its state type is its own) | Add it to the list in `src/module/index.ts`; tests in `test/module/<name>/` |

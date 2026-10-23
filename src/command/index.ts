@@ -6,9 +6,9 @@ import { errorMessage } from "#core/util/errors";
 import { modulesCmd } from "./modules";
 
 /** Registers MyPi's own commands, then the running modules', each wrapped in `runCommand`. */
-export function registerCommand(pi: ExtensionAPI, session: Session) {
+export function registerCommands(pi: ExtensionAPI, session: Session) {
   // Load the built-in commands, and only those from loaded modules.
-  const commandList = [...createCommand(session), ...session.moduleManager.getCommands()];
+  const commandList = [...createCommands(session), ...session.moduleManager.getCommands()];
 
   for (const cmd of commandList) {
     pi.registerCommand(cmd.info.name, {
@@ -19,7 +19,7 @@ export function registerCommand(pi: ExtensionAPI, session: Session) {
 }
 
 /** MyPi's own commands. Add new ones here. */
-function createCommand(session: Session): Command[] {
+function createCommands(session: Session): Command[] {
   return [modulesCmd(session)];
 }
 

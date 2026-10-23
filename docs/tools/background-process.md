@@ -103,8 +103,8 @@ Decided 2026-10-22.
 Done 2026-10-22. A `JobManager` in core runs jobs, keeps each job's output in a log file and an in-memory tail,
 and records how it ended. Nothing the model can call yet; slice 2 adds `bash` with `background: true`.
 
-Files: `src/core/job-manager.ts` (new: `JobManager`, `Job`, and `shellJob`, which slice 2 moved to
-`src/tool/bash/`), `JobStatus`, `JobSpec`, and `JobInfo` in `src/core/types.ts`, `session.jobs` in
+Files: `src/core/job-manager.ts` (new: `JobManager`, and `shellJob`, which slice 2 moved to `src/tool/bash/`),
+`JobStatus`, `JobSpec`, `JobInfo`, and `Job` in `src/core/types.ts`, `session.jobs` in
 `src/core/session.ts`, `stopAll()` in `MyPi.onSessionEnd`, and `test/core/job-manager.test.ts`.
 
 ```ts
@@ -141,10 +141,10 @@ export type JobInfo = {
   logPath: string;
 };
 
-// src/core/job-manager.ts
-
 /** A started job: its info as it changes, a promise that settles once it has ended, and its last output lines. */
 export type Job = { readonly info: JobInfo; readonly done: Promise<JobInfo>; tail(lines: number): string };
+
+// src/core/job-manager.ts
 
 export class JobManager {
   start(spec: JobSpec): Job; // ids count up from "1" in this session

@@ -28,7 +28,7 @@ index.ts               default factory: new MyPi(pi), then pi.on("session_start"
    ├─ registerTools(pi, session)                 src/tool/index.ts: the built-in tools + the running modules'
    ├─ initTools(tools)                           init() on the built-in tools that have one
    ├─ moduleManager.init()                       init() on the running modules, now that their tools exist
-   ├─ registerCommand(pi, session)               src/command/index.ts: MyPi's commands + the running modules
+   ├─ registerCommands(pi, session)               src/command/index.ts: MyPi's commands + the running modules
    └─ registerMcpServers(pi, session)            src/mcp/index.ts: MyPi's MCP servers, connected by pi
    MyPi.onBeforeAgentStart(ev)                   before every run: promptManager.apply(ev.systemPromptOptions.sections)
    MyPi.onToolCall(ev, ctx)                      before every tool call: returns toolGuard.check(ev, ctx) to pi
@@ -157,7 +157,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   `enum`.
 - **`types.ts`** holds the types shared across folders: `Command`, `CommandInfo`, `ModuleInfo`, `ModuleLoadMode` (a
   const object plus a type, the same pattern as `MessageType`), the module contract, `Module` and `ModuleClass`, and
-  the job types, `JobStatus`, `JobSpec`, and `JobInfo`. `CommandExec` is still in `src/command/types.ts`.
+  the job types, `JobStatus`, `JobSpec`, `JobInfo`, and `Job`. `CommandExec` is still in `src/command/types.ts`.
 - **`util/errors.ts`** has `errorMessage` (any thrown value to a string) and `isNodeError` (narrows to
   `NodeJS.ErrnoException`).
 - **`util/guards.ts`** has `isRecord` (a plain object, before reading fields off JSON) and `isNonEmptyString`.
@@ -169,7 +169,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - A command is a `Command` (`src/core/types.ts`): `{ info: { name, description }, execute(ctx, args: string[]) }`.
   `ctx` is pi's `ExtensionCommandContext` for this run, which has `ui.custom`, `mode`, and later `reload()`.
   `execute` returns a string (or a promise of one) to show, or `undefined` to show nothing.
-- `registerCommand(pi, session)` registers everything returned by `createCommand(session)`, then
+- `registerCommands(pi, session)` registers everything returned by `createCommands(session)`, then
   `session.moduleManager.getCommands()`: the commands of running modules only, so an unloaded module's commands don't
   exist.
 - `runCommand` wraps every handler. It splits the raw argument string on whitespace, shows the returned string as an
@@ -180,7 +180,7 @@ and files only it uses beside it (plan-build's `/plan` is `commands/plan/`, with
 them from `commands()`.
 
 To add a command, create `src/command/<name>.ts` exporting a function that takes the `Session` and returns a `Command`,
-then add it to the list in `createCommand`. A command that needs more than one file gets a folder,
+then add it to the list in `createCommands`. A command that needs more than one file gets a folder,
 `src/command/<name>/`, with the command in `index.ts`. `/modules` opens the module modal and `/modules list` prints
 each module as `loaded: <name>` or `not loaded: <name>`; see [Module loading](#module-loading).
 
@@ -191,8 +191,8 @@ each module as `loaded: <name>` or `not loaded: <name>`; see [Module loading](#m
 
 - A built-in tool is a `Tool` (`src/tool/types.ts`): `{ definition, init?, shutdown? }`. A tool file exports a function
   that takes the `Session` and returns one, with `definition` built by `defineTool({ name, label, description,
-  parameters, execute, … })` (`src/tool/web-fetch/index.ts`). A module's tools are bare `ToolDefinition`s; the
-  module's own `init()` covers their setup.
+  parameters, execute, … })` (`src/tool/web-fetch/index.ts`). A module's tools are `defineTool` definitions too,
+  without the hooks; the module's own `init()` covers their setup.
 - **Hooks**, for tools that keep state or resources across calls:
   - `init()` runs on `session_start`, after every tool is registered and before the modules' `init()`. Rebuild state
     from the branch here (todo). A `session_start` handler added now would miss this session: pi copies the handler
@@ -265,7 +265,7 @@ export interface Module {
   readonly session: Session;
   get info(): ModuleInfo;  // name, description, command infos, loadType
   init(): void;            // register event handlers, turn tools on or off, restore state
-  commands(): Command[];   // registered through registerCommand, wrapped by runCommand
+  commands(): Command[];   // registered through registerCommands, wrapped by runCommand
   tools(): ToolDefinition[]; // registered through registerTools, before init()
 }
 ```
@@ -291,7 +291,7 @@ export interface Module {
   locked (see [Module loading](#module-loading)).
 - `src/module/index.ts` lists the module classes. `loadModules(session, reason)` builds each one and hands them to
   `session.moduleManager.start(modules, reason)`, which picks the ones to load. `registerTools` reads their tools from
-  the manager, `moduleManager.init()` runs their `init()`, and `registerCommand` then reads their commands.
+  the manager, `moduleManager.init()` runs their `init()`, and `registerCommands` then reads their commands.
 - A module reaches pi through `session.pi` and `session.ctx`, keeps its runtime state as fields, and saves what must
   survive `/reload` with `saveState`. Modules don't reach for globals or import each other's internals.
 - A module that needs a pi event MyPi doesn't route subscribes in `init()` with `session.pi.on(event, handler)`
@@ -356,8 +356,8 @@ saves the set you want, and the next `/reload` builds MyPi again with that set.
   and down move through the list, wrapping at the ends. Space or Enter toggles the selected module. Enter on Save saves
   the set and closes the modal. Escape closes it and discards the changes. An `ALWAYS` module's row is locked: a dim
   `<name> (locked)` with a `●` that Space or Enter doesn't change, so the list still shows everything that's running.
-- Toggling changes nothing outside the modal. Save stores the new set as the selection and warns "Need to /reload to
-  enable/disable modules", followed by the selected names. It also writes the selection to the session, so the next
+- Toggling changes nothing outside the modal. Save stores the new set as the selection and warns "Run /reload to apply
+  the module selection:", followed by the selected names. It also writes the selection to the session, so the next
   `/reload` runs it. What's running doesn't change until then.
 - Reopening the modal after a Save starts from the selection, not from what's running.
 - `/modules list` prints each module as `loaded: <name>` or `not loaded: <name>`, from what's running.
@@ -370,7 +370,7 @@ saves the set you want, and the next `/reload` builds MyPi again with that set.
 |---------------|------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Saved set     | `pi.appendEntry("mypi-modules", { loaded: string[] })` on Save                                       | `ModuleManager.select` writes it with `session.save("modules", …)`, and `start` reads it on `reload` with `session.load("modules")`: the last `mypi-modules` custom entry in `ctx.sessionManager.getBranch()`, so a Save on a branch left with `/tree` isn't seen. Pi's `examples/extensions/tools.ts` restores its state the same way. Names that no longer match a module drop out, and a save that isn't `{ loaded: string[] }` falls back to the defaults. Write an array (`[...selected]`): pi saves entries with `JSON.stringify`, which writes a `Set` as `{}`. `pickLoaded` adds `ALWAYS` modules whatever the saved set says, so an old saved set can't drop one. Before the first prompt pi keeps entries in memory only, and `/reload` keeps the same `SessionManager`, so a reload still sees them. |
 | Picking a set | `session_start` `event.reason`                                                                       | `MyPi.onSessionStart` passes `ev.reason` to `loadModules`, which calls `ModuleManager.start(modules, reason)`. `start` reads the saved set and passes it to `pickLoaded(reason, saved, infos)`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Unregistering | `/reload`                                                                                            | Pi has no way to remove a command or tool. `registerCommand` writes to a private map. Reload throws the extension away, so commands not registered again are gone.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Unregistering | `/reload`                                                                                            | Pi has no way to remove a command or tool. `registerCommands` writes to a private map. Reload throws the extension away, so commands not registered again are gone.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Applying      | The user runs `/reload`                                                                              | `AgentSession.reload` keeps the session and its history, rebuilds the extension, and sends `session_start` with `reason: "reload"`. It refuses while the agent is responding or compacting.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Modal         | `ctx.ui.custom<Set<string> \| undefined>(...)` as an overlay, with a `Dialog` holding a `ToggleList` | See [UI components](#ui-components). Save calls `done(names)` with a `Set` of the selected names in list order, Escape calls `done(undefined)`. The command passes it to `ModuleManager.select`. Only in `ctx.mode === "tui"`; other modes get an error notification.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Save row      | A `SettingsList` row with a single value                                                             | Pi's theme picker (`settings-selector.js`) saves the same way, so `SettingsList`'s built-in hint stays true.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -382,7 +382,7 @@ saves the set you want, and the next `/reload` builds MyPi again with that set.
 - **One place that knows what's loaded.** Done: `ModuleManager` keeps `running` and `selected` as name sets and sets
   `isLoaded` and `isSelected` on the copies `moduleInfos` returns. Read the flags from there, never from
   `module.info`.
-- **`registerCommand` registers commands from running modules only.** Done, through `getCommands()`.
+- **`registerCommands` registers commands from running modules only.** Done, through `getCommands()`.
 - Calling `ctx.reload()` from the modal could replace the manual step later. `Command.execute` already receives the
   `ExtensionCommandContext`, and the saved-set format stays the same.
 
