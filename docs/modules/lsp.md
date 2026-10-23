@@ -44,4 +44,6 @@ build step, plus go to definition, find references, and hover types. A module, s
 
 - Claude Code: [tools reference](https://code.claude.com/docs/en/tools-reference) § LSP tool behavior
 - OpenCode docs: [tools](https://opencode.ai/docs/tools/) (`lsp`)
+- [Serena](../inspiration/serena.md): symbol tools, symbol edits, why per-edit diagnostics are off
+- [ripwire](../inspiration/ripwire.md): edit receipts, a check when the agent is done
 - [Language Server Protocol spec](https://microsoft.github.io/language-server-protocol/)

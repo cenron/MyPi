@@ -15,6 +15,7 @@ MyPi/
 │   ├── architecture.md
 │   ├── principles.md
 │   ├── project-structure.md
+│   ├── inspiration/       # One doc per outside project worth learning from, and the ideas it gives MyPi
 │   ├── mcp/               # README.md: the MCP servers MyPi registers, with a status each
 │   ├── modules/           # One doc per module, built or planned
 │   └── tools/             # One doc per built-in tool (tools that belong to no module)
@@ -38,6 +39,7 @@ MyPi/
 | Adding | Put it in | Also |
 |---|---|---|
 | A module idea | `docs/modules/<name>.md` with status `idea` | Add a row to `docs/modules/README.md` |
+| An outside project to learn from | `docs/inspiration/<project>.md`: commit read, license, ideas for MyPi, what doesn't fit | Add a row to `docs/inspiration/README.md`; link it from the module or tool docs it feeds |
 | A built-in tool idea | `docs/tools/<name>.md` with status `idea` | Add a row to `docs/tools/README.md`. A tool a module owns goes in that module's doc instead. |
 | A built-in tool | `src/tool/<name>.ts`, returning a `Tool`: `{ definition: defineTool({ … }), init?, shutdown? }`; `src/tool/<name>/index.ts` when it needs more files | Add it to `createTools` in `src/tool/index.ts`; tests in `test/tool/`; a doc in `docs/tools/` |
 | An MCP server | `src/mcp/<name>.ts`, exporting a function that returns a `McpServer` (`{ name, config }`) | Add it to `createMcpServers` in `src/mcp/index.ts`; a row in `docs/mcp/README.md` |

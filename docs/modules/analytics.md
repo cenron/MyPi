@@ -87,3 +87,8 @@ the passive numbers above come from everyday work, so they can't tell two models
 - Which commands count as "has no tool": everything except a short list MyPi already covers (`grep`, `find`, `ls`,
   `cat` have pi tools), or all of them, filtered in the report?
 - Does the report live in pi (`/analytics`) only, or also as a file or an Artifact to read outside pi?
+
+## References
+
+- [ripwire](../inspiration/ripwire.md): a local tool-call log and an A/B that found its nudge hook did nothing
+- [Serena](../inspiration/serena.md): an evaluation prompt where the agent does each task both ways and reports
