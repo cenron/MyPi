@@ -111,7 +111,8 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     Plan-build adds `.pi/plans/` and `submit_plan`, memory its two folders; neither knows about the other.
   - A rule is pure: `(call: { toolName, input, annotations? }, env: { cwd, home, writableDirs, writableTools }) =>
     Verdict`, where `Verdict` is
-    `allow`, `block` with a `reason`, or `ask` with a `question`. A module reads its own state (plan-build's mode) in
+    `allow`, `block` with a `reason`, or `ask` with `questions`, each its own dialog line and its own "Allow for this
+    session" (the folder guard asks one per path). A module reads its own state (plan-build's mode) in
     the closure. The guard fills `annotations` (`readOnlyHint`, `destructiveHint`, …) from `pi.getAllTools()`, so rules
     never touch pi; they're set by the tool's author (MCP tools carry them, pi's built-ins don't) and unverified.
   - A verdict is an objection, never a grant: `allow` means "no objection from me" and can't override another rule.
@@ -145,10 +146,12 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     `parentToolCallId` set (`_executeNestedToolCall` in `dist/core/agent-session.js`). They can reach the active
     `direct` tools plus every `codemode` or `deferred` tool, active or not, so the guard is the only gate for those.
   - Shared helpers for rules, in `util/`, all pure:
-    - `shell.ts`: `tokenize(command)` splits a bash command into segments of unquoted words, or returns `undefined`
+    - `shell.ts`: `tokenize(command)` splits a bash command into segments of unquoted words, each with the files its
+      `<` redirects read, or returns `undefined`
       on syntax that can run or write something the words don't show (`$(`, backticks, `$'…'`, brace expansion,
       most redirects). `isReadOnlyCommand(command)` is an allowlist on top of it; plan-build's
-      [Plan rule](modules/plan-build.md#plan-rule) lists what it allows.
+      [Plan rule](modules/plan-build.md#plan-rule) lists what it allows. `paths.ts`'s `commandPaths`, the folder
+      guard's bash check, reads the places a command names from it.
     - `paths.ts`: `resolveToolPath(path, cwd, home)` mirrors pi's unexported `resolveToCwd`, the resolver `edit` and
       `write` use (`dist/utils/paths.js`), step for step: Unicode spaces to plain spaces, strip one leading `@`,
       expand `~` and `~/` (not `~user`), convert `file://` URLs, then resolve against `cwd`. A test compares it with

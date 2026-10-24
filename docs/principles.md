@@ -79,6 +79,10 @@ Loosely after *Clean Code*: the parts that make code easier to read, not ceremon
   parameter that switches behavior.
 - **Narrative code.** Guard clauses at the top, then orchestrators that read like an outline, with helpers doing the
   work. When one branch ends the function, return early instead of `if … else` (`ToolGuard.set`): easier to follow.
+- **Files read top-down, like a class.** After the imports: the file's types and constants, then what it exports
+  (functions, classes, and functions typed as constants, such as `planRule`), then the helpers only it uses. A class
+  keeps the same order: fields, the constructor, then public, protected, and private members. A reader finds what a
+  file offers before how it does it.
 - **Blank lines are paragraphs.** Keep the lines of one idea together and put a blank line where the idea changes
   (guards, then gathering inputs, then acting), so a function doesn't read like a run-on sentence.
 - **Errors say what to do.** A message names what failed and the next step ("not a public address; for a local
@@ -133,5 +137,6 @@ From reading other harnesses (see [inspiration](inspiration/README.md)):
 2. The size matches what the slice does; a large slice reports its lines added and removed.
 3. Nothing in the diff is unused, commented out, or kept for compatibility.
 4. Could anything be deleted? Look once more, in the new code and the code it touched.
-5. Names, errors, and comments read as above; no `any`, no new enum, no new default export.
+5. Names, errors, and comments read as above; files and classes keep their order (types and constants, exported,
+   private); no `any`, no new enum, no new default export.
 6. The module's or tool's doc, `AGENTS.md`, and the [roadmap](roadmap.md) match the code.

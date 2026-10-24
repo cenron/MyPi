@@ -1,6 +1,6 @@
 # LSP
 
-**Status:** building (slices 1 and 2 done 2026-10-24)
+**Status:** done 2026-10-24 (slices 1–5). Diagnostics after a turn are the [done check](done-check.md)'s slice 5; symbol edits (slice 6) wait for a need.
 
 ## Goal
 
@@ -40,8 +40,9 @@ step. A module, so it can be turned on or off.
 - A server starts on first use: the first `lsp` call for a file of its language starts it, and that call waits for
   it (about 0.4 s for MyPi). Nothing runs in a session that never calls the tool. One server runs per language and
   project root: the nearest folder above the file holding one of the server's root markers (the outermost one for
-  gopls), or the session's folder when none does. Planned with [folder-guard](../rules/folder-guard.md#the-lsp-module): for a
-  file inside the session's folder, a root above that folder is clamped to it.
+  gopls), or the session's folder when none does. For a file inside the session's folder, a marked folder above that folder
+  doesn't count, so the root never reaches outside it ([folder-guard](../rules/folder-guard.md#the-lsp-module),
+  `ServerManager.rootFor`).
 - Servers stop when they're turned off in `/lsp` or the session ends: `shutdown` and `exit` as the protocol asks,
   then a kill after a second.
 - A server that fails to start warns once, with the end of its stderr, and isn't retried until Save in `/lsp`. One
@@ -76,15 +77,18 @@ Part of the module from slice 1, even with TypeScript as the only row. A modal o
 
 ## The `lsp` tool
 
-One tool with an `action`, marked `readOnlyHint: true` (`src/module/lsp/tools/lsp.ts`). Slice 2 brought `outline` and
-`find_symbol`; slices 3 and 4 add the other read actions.
+One tool with an `action`, marked `readOnlyHint: true` (`src/module/lsp/tools/lsp.ts`, which only parses and
+dispatches; each action's code is in `find.ts`, `navigate.ts`, or `diagnostics.ts`, with the helpers they share in
+`document.ts`). Slice 2 brought `outline` and `find_symbol`, slice 3 `references`, `implementations`, and
+`definition`, slice 4 `diagnostics`.
 
 | Parameter | For | Meaning |
 |---|---|---|
-| `action` | all | `outline` or `find_symbol`. |
-| `path` | `outline` (required), `find_symbol` (optional) | Resolved like `read`'s path. `outline` takes a file (a folder is an error). `find_symbol` takes a file, to search only it, or a folder inside a project, to search that project and keep only matches inside the folder; without it, the search covers the project of the session's folder. |
-| `name_path` | `find_symbol` | Which symbol, by Serena's rule (below). |
-| `include_body` | `find_symbol` | `true` adds each match's source. Off by default, so finding where something is stays cheap. |
+| `action` | all | `outline`, `find_symbol`, `references`, `implementations`, `definition`, or `diagnostics`. |
+| `path` | all; optional only for `find_symbol` | Resolved like `read`'s path. `find_symbol` takes a file, to search only it, or a folder inside a project, to search that project and keep only matches inside the folder; without it, the search covers the project of the session's folder. Every other action takes a file (a folder is an error): for `references` and `implementations`, the file that declares the symbol, as Serena asks. |
+| `name_path` | `find_symbol`, `references`, `implementations` (required); `definition` (optional) | Which symbol, by Serena's rule (below). For `definition`, the symbol to look for the name in. |
+| `name` | `definition` | The name as used in the file, one identifier: its first whole-word use in the file, or in the `name_path` symbol, is what's looked up. |
+| `include_body` | `find_symbol`, `definition` | `true` adds each symbol's source. Off by default, so finding where something is stays cheap. |
 
 **Name paths (Serena's rule).** A name path is a symbol's names from the top of its file down, joined with `/`:
 `ServerManager/touch`.
@@ -108,6 +112,45 @@ couldn't answer.
   [tool rules](../tools/README.md#rules-for-every-built-in-tool).
 - No match reads as "no symbol matches `<name_path>`" plus where it looked, never "it doesn't exist": the server may
   not have indexed every file.
+
+**References, implementations, definition** (slice 3, `tools/navigate.ts`). Each is about one symbol, so the name path
+must pick exactly one in the file (`pickSymbol`); none or several is an error that lists the matches and asks for a
+longer name path. The request goes to the position of the symbol's name (`NamedSymbol.at`, from the server's
+`selectionRange`).
+
+- `references` lists one line per use, by file and line, with the line's code:
+  `src/main.ts:4  store.add("milk");`. It asks with `includeDeclaration: true` and drops only the symbol's own
+  declaration: tsc counts an import as a declaration, and without it the import lines go missing (checked
+  2026-10-24). tsc also lists an implementing method's declaration among an interface method's references.
+- `implementations` lists what implements an interface or abstract member, the same way. A server without
+  `implementationProvider` (Pyright) is an error that suggests `references`.
+- `definition` takes the name as used (`name`), not a position: line numbers shift after every edit, and Serena's
+  regex is more than an agent needs. Its first whole-word use in the file, or inside the `name_path` symbol, is sent
+  to the server; a use in a comment or string finds nothing, and the answer says to pass the symbol that uses it.
+  Each definition in a file of the server's language inside the session's folder comes back as its symbol and lines
+  (the deepest listed symbol holding it), with its source under `include_body`; others come back as places.
+- **Code only from inside the session's folder.** A place outside it (a standard library, a sibling project) is named
+  by its path and line without its code, and the answer says to read it, so the [folder guard](../rules/folder-guard.md)
+  asks. The guard's line, held by the tool's own output.
+- Before answering, the server is told what changed on disk and sent the open files again (`currentServer`), as
+  before a project search. A `wait_for_index` server's empty answer is asked again while it may still be indexing
+  (`afterIndexing`, shared with `find_symbol`); a true "none" in a server's first 5 s waits them out.
+- Answers are capped like the others; a cut list says to search the rest with grep.
+- No references says so, and that a use through a subclass or an override counts for that symbol instead: Pyright
+  ties `store.add` to the subclass's method when `store` is the subclass, so the base method has none (live test,
+  2026-10-24). It doesn't blame indexing: `afterIndexing` has already waited that out.
+
+**Diagnostics** (slice 4, `tools/diagnostics.ts`). `diagnostics` takes a file and answers for its text on disk now:
+worst first, one line each, `error 5:7  Type 'string' is not assignable to type 'number'. (ts 2322)`, with a count per
+severity in the header, or "No problems in <file>". Two ways, by what the server offers:
+
+- **Pull** (tsc, which offers `diagnosticProvider`): `textDocument/diagnostic` after the file is sent.
+- **Push** (gopls, Pyright): servers send `publishDiagnostics` on their own after a file is opened or changed. The
+  client keeps the last push per file with the text version it was for (`versionSupport` is declared) and waits up to
+  10 s for one that matches the text it last sent, so a push for old text never answers for new. A push without a
+  version counts for the text sent last.
+- On request only, never after each edit (see [What to take from Serena](#what-to-take-from-serena)). The done
+  check's diagnostics after a turn wait for the [done check](done-check.md) module, which calls the same path.
 
 **Underneath.**
 
@@ -150,11 +193,45 @@ couldn't answer.
 - **Checked 2026-10-24** with `tsc --lsp` (7.0.2), gopls (v0.23.0), and Pyright (1.1.414): all three offer
   `workspaceSymbolProvider` and `documentSymbolProvider`, take open, close, and change notices, and send a tree once
   `hierarchicalDocumentSymbolSupport` is declared. A server without `workspaceSymbolProvider` isn't handled; none of
-  the three needs it.
+  the three needs it. All three offer references, definition, and rename; tsc and gopls offer implementations;
+  only tsc offers pulled diagnostics. Every action was run against all three on small todo projects, directly and
+  then live in pi (2026-10-24), along with a session started below a project's root, where tsc ran in the session's
+  folder.
 - **Known gaps.**
   - Changes in folders past the first 2,000 aren't seen by the check before a search.
   - `tsc --lsp` lists a file's imports as `variable` symbols at the top of the outline, and labels type aliases
     `class`. That's the server's answer, passed on as is.
+  - `definition` looks up a name's first use; a later use that means something else (a shadowed name) needs
+    `name_path` to point at the symbol it's in.
+  - **Pyright's rename doesn't rename overrides** (live test, 2026-10-24): renaming an abstract method changed only
+    the base class, leaving its subclass unimplemented; `diagnostics` showed the error at once. tsc and gopls
+    renamed the implementations too. Not worked around: the edit is the server's.
+  - gopls refuses a rename while the package has errors, with its own message ("… has errors"), passed on as is.
+  - A server that sends flat symbol lists gives no name position, so references and rename are asked at the start
+    of the symbol's range, which may be a keyword. None of the three servers does.
+
+## The `lsp_edit` tool
+
+Everything that writes (`src/module/lsp/tools/lsp-edit.ts`), not marked read-only, so Plan mode asks first. Slice 5
+brought its first action, `rename`.
+
+| Parameter | Meaning |
+|---|---|
+| `action` | `rename`. |
+| `path` | The file that declares the symbol. |
+| `name_path` | Which symbol, as for `lsp`; it must pick exactly one. |
+| `new_name` | The new name. |
+
+- `textDocument/rename` at the symbol's name gives a workspace edit; `fileEdits` (`util/edits.ts`) turns it into text
+  edits per file, from `documentChanges` when the server sends them, else `changes`. Creating, renaming, or deleting
+  files, and snippet edits, are refused; the client doesn't declare `resourceOperations`, so servers shouldn't send
+  them.
+- **Every file it would change must be inside the session's folder**, or it changes none and says which are outside.
+  The tool writes files the guard never sees named, so it holds the guard's line itself.
+- All new texts are worked out before any file is written (`applyTextEdits`), so a file that can't be read leaves
+  every file as it was. Writes go through pi's `withFileMutationQueue`, like `edit` and `write`, and each changed file
+  is reported to the servers (`fileChanged`).
+- The answer counts the edits per file: `Renamed makeStore to createStore: 3 edits in 2 files:` then one line per file.
 
 ## When a server can't answer
 
@@ -211,7 +288,7 @@ export const SERVERS = [
 | Module | `BaseModule`, `src/module/lsp/` | Load type `ON_LOAD`: on by default, and it costs nothing until a server starts. |
 | Client | JSON-RPC over the server's stdio | Microsoft's `vscode-languageserver-protocol` at `^3.18.5`, not a hand-written client (passed the dependency rule in AGENTS.md 2026-10-23). Import from `vscode-languageserver-protocol/node`: it re-exports `vscode-jsonrpc/node` and pins its own copy, so `vscode-jsonrpc` isn't declared separately; a second range could drift and install a mismatched copy. Started by the `lsp` tool, closed in `session_shutdown`. |
 | Diagnostics after a turn | Asked for by the [done check](done-check.md) | Pi lets an extension rewrite another tool's result (`tool_result` returns `content`, checked in pi 1.2.0's `types.d.ts`), so per-edit diagnostics stay possible if they're ever wanted. |
-| Tools | `lsp` and `lsp_edit`, each with an `action` parameter, returned from the module's `tools()` | One schema per side instead of one per operation keeps the context cost per request down. `lsp` is marked `readOnlyHint: true`, so Plan mode allows it. `lsp_edit` arrives with rename in slice 5 and isn't marked read-only, so Plan mode asks first, like any other tool that writes. Two tools because Plan's rule (`src/module/plan-build/rule.ts`) judges a whole tool, not an action; the alternative, a seam that lets a tool say which inputs are read-only, would change core and plan-build for one user. |
+| Tools | `lsp` and `lsp_edit`, each with an `action` parameter, returned from the module's `tools()` | One schema per side instead of one per operation keeps the context cost per request down. `lsp` is marked `readOnlyHint: true`, so Plan mode allows it. `lsp_edit` isn't marked read-only, so Plan mode asks first, like any other tool that writes. Two tools because Plan's rule (`src/module/plan-build/rule.ts`) judges a whole tool, not an action; the alternative, a seam that lets a tool say which inputs are read-only, would change core and plan-build for one user. |
 | Menu | `/lsp` command from the module's `commands()` (`commands/lsp.ts`), UI in `menu.ts` | See [The `/lsp` menu](#the-lsp-menu). |
 | Servers | `ServerManager` (`manager.ts`) over `LspClient` (`client.ts`); `markedFolders` and `findCommand` in `util/lookup.ts`; `findSourceFile`, `sourceFileTimes`, and `fileChanges` in `util/walk.ts` | Started by the `lsp` tool on first use (`clientFor`, `projectClients`); stopped on `session_shutdown`. `projectClients` reports what changed on disk since the last look; a `tool_result` handler reports the agent's edits and writes at once (`fileChanged`). Both handlers are registered in `init()`: pi builds a new extension runtime for every session, so they don't stack. |
 | Name paths | `symbols.ts` | Pure: a server's outline to name paths (`namedSymbols`), Serena's rule (`matchesNamePath`), kind names. |
@@ -225,10 +302,12 @@ export const SERVERS = [
 2. **Done 2026-10-24.** The [`lsp` tool](#the-lsp-tool) with `outline` and `find_symbol`, document sync, reports
    of the agent's file changes, and the answer cap. Servers start through `ServerManager.clientFor`, which reports
    the cases in [When a server can't answer](#when-a-server-cant-answer).
-3. References, implementations, definition.
-4. Diagnostics on request, and for the done check.
-5. Rename, as the first action of `lsp_edit`.
-6. Symbol edits in `lsp_edit`, if the agent turns out to need them.
+3. **Done 2026-10-24.** References, implementations, definition.
+4. **Done 2026-10-24.** Diagnostics on request (`diagnostics`). The done check calls the same path for the files a
+   turn changed; that's its own slice 5 (see [done check](done-check.md)).
+5. **Done 2026-10-24.** Rename, as the first action of `lsp_edit`.
+6. Later: symbol edits in `lsp_edit` (replace a body, insert before or after, safe delete), if
+   [analytics](analytics.md) or a live test shows the agent needs them. In the live tests, `edit` did the job.
 
 ## Tried and rejected
 
@@ -268,12 +347,16 @@ export const SERVERS = [
 - Answers are capped at about 20,000 characters, with a note on how to narrow the call.
 - Changes on disk, from the agent or anything else, are found by checking modification times before each project
   search, not by a watcher.
+- References, implementations, and rename take the file that declares the symbol, as Serena's tools do; definition
+  takes a name as used in a file, not a line and column (2026-10-24).
+- Code from outside the session's folder isn't shown, and a rename that would change a file outside it changes
+  nothing (2026-10-24, with the [folder guard](../rules/folder-guard.md)).
 
 ## Open questions
 
 - Which languages and servers after TypeScript, Go, and Python?
 - Look in the project's `node_modules/.bin` too? Most TypeScript projects have `tsc` there, so it would work without
-  a global install (this machine has none). About 5 lines in `lookup.ts`, but then a cloned repo picks the binary
+  a global install. About 5 lines in `lookup.ts`, but then a cloned repo picks the binary
   that runs, which the trusted-projects rule above is about.
 - How it sits next to ripwire, once I install it: LSP is exact and per language; ripwire is fast, offline, and ranks
   by task.

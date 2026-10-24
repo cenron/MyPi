@@ -7,8 +7,15 @@ import type {
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 
-/** A rule's answer: no objection, a block with the reason the model sees, or a question for the user. */
-export type Verdict = { kind: "allow" } | { kind: "block"; reason: string } | { kind: "ask"; question: string };
+/**
+ * A rule's answer: no objection, a block with the reason the model sees, or questions for the user. Each question is
+ * its own line in the dialog and its own "Allow for this session", so a rule that asks about several things (the folder
+ * guard's paths) lets the user allow each one apart.
+ */
+export type Verdict =
+  | { kind: "allow" }
+  | { kind: "block"; reason: string }
+  | { kind: "ask"; questions: readonly string[] };
 
 /** A tool call as rules see it; `annotations` are the tool author's hints, unverified. */
 export type ToolCall = { toolName: string; input: Record<string, unknown>; annotations?: ToolAnnotations };
@@ -40,6 +47,7 @@ const Choice = {
 
 /** Most lines of one ask the dialog shows. More would push its choices off a short terminal and look like a hang. */
 const PREVIEW_LINES = 12;
+
 /** Most characters of one line the dialog shows; a longer line wraps into many rows. */
 const PREVIEW_LINE_CHARS = 160;
 
@@ -58,10 +66,6 @@ export function previewAsk(ask: string): string {
   if (hidden > 0) shown.push(`… ${hidden} more line${hidden === 1 ? "" : "s"} not shown. Yes allows all of it.`);
 
   return shown.join("\n");
-}
-
-function blocked(reason: string): ToolCallEventResult {
-  return { block: true, reason };
 }
 
 /**
@@ -112,7 +116,7 @@ export class ToolGuard {
       const verdict = rule(toolCall, toolEnv);
 
       if (verdict.kind === "block") return blocked(verdict.reason);
-      if (verdict.kind === "ask") asks.push({ name, question: verdict.question });
+      if (verdict.kind === "ask") asks.push(...verdict.questions.map((question) => ({ name, question })));
     }
 
     return this.confirmToolRequests(ctx, asks);
@@ -150,4 +154,8 @@ export class ToolGuard {
     const toolInfo = this.pi.getAllTools().find((tool) => tool.name === ev.toolName);
     return { toolName: ev.toolName, input: ev.input, annotations: toolInfo?.annotations };
   }
+}
+
+function blocked(reason: string): ToolCallEventResult {
+  return { block: true, reason };
 }

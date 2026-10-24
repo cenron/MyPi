@@ -1,6 +1,6 @@
 # Folder guard
 
-**Status:** building (slice 1 done 2026-10-24)
+**Status:** done (slices 1–3 done 2026-10-24)
 
 A built-in rule, not a module: it's always on, in every session (decided 2026-10-24). The code is
 `src/rule/folder.ts`.
@@ -19,10 +19,11 @@ user's other projects and personal files are none of the agent's business unless
   or "Allow for this session". No UI means a block, with the reason.
 - **Outside** means the path, resolved the way pi resolves tool paths (`resolveToolPath`), isn't inside `ctx.cwd`
   (`isInside`). It compares text, so a symlink inside the folder that points elsewhere counts as inside.
-- **The question names the place, not the command:** `Reaches outside <cwd>: <path>`, one line per outside path. The
-  guard's "Allow for this session" remembers exact lines, so allowing a path once lets every later call that reaches
-  that same path run unasked until `/reload`, whatever the command. A parent isn't allowed by allowing a child, or the
-  other way round.
+- **The question names the place, not the command:** `Reaches outside <cwd>: <path>`, one question per outside path
+  (an ask carries a list of `questions`). The guard's "Allow for this session" remembers each question on its own, so
+  allowing a path once lets every later call that reaches that same path run unasked until `/reload`, whatever the
+  command or tool: a path allowed for `read` is allowed for `bash` too. A parent isn't allowed by allowing a child, or
+  the other way round.
 - **Always allowed**, so pi's own work doesn't prompt:
   - the folders modules already declare as theirs (`BaseModule.setWritable`), such as memory's global folder;
   - the skills and context files pi put in the last prompt: each skill's folder (`baseDir`) and each `AGENTS.md` pi
@@ -43,13 +44,16 @@ user's other projects and personal files are none of the agent's business unless
 | Tool | Paths checked |
 |---|---|
 | Any tool with a string `path` input (`read`, `edit`, `write`, `grep`, `find`, `ls`, `lsp`, and later ones), except MCP tools (`mcp__…`) | `path`; none means the session's folder |
-| `bash` | Every word that reads as a path: starts with `/` or `~`, is `..` or starts with `../`, or holds `/../`. A `--flag=value` word is checked by its value. Words holding `://` are URLs, not paths. |
+| `bash` | Every word that reads as a path: starts with `/`, `~/`, or `file://`, is `~`, or has a `..` step (`..`, `../x`, `./..`, `a/../..`). A `name=value` word (`--file=x`, dd's `if=x`, `VAR=x`) is checked by its value. Other words holding `://` are URLs, not paths. Every `<` target, whatever its shape. Every `cd` target. |
 | MCP tools, `web_search`, `web_fetch` | Nothing: they don't take local paths. |
 
 - **Words come from `tokenize`** (`src/core/util/shell.ts`, Plan's shell check), so quotes are removed and comma
-  braces expanded. When `tokenize` gives up (`$(…)`, variables, and so on), the raw command is scanned for the same
-  path shapes instead, plus `$HOME` and `${HOME}`.
-- **`cd` counts:** `cd /elsewhere && ls` names `/elsewhere`.
+  braces expanded. `tokenize` also returns each segment's `<` targets, which it leaves out of the words. When it
+  gives up (`$(…)`, variables, redirects to files, heredocs), the raw command is split on spaces, operators, quotes,
+  and `=`, and the pieces are checked for the same path shapes, with `$HOME` and `${HOME}` read as `~`.
+- **`cd` counts:** `cd /elsewhere && ls` names `/elsewhere`, a bare `cd` names the home folder, and later words
+  resolve from the folder `cd` moved to: `cd sub && cat ../../x` names `<cwd>/../x`. Each bash call starts a new
+  shell in the session's folder (pi's `bash.js` spawns one per call), so a `cd` lasts only within one command.
 
 ## What it isn't
 
@@ -57,20 +61,30 @@ A guard against wandering, not a sandbox. It sees the paths a call names, not th
 runs: a script that reads `~/.ssh` without naming it on the command line gets through, as does a variable set
 earlier in the session. Real isolation is an OS sandbox's job; see [Not taking](#not-taking).
 
+Known gaps in `bash`, accepted for a guard against wandering:
+
+- **Plain relative words after a `cd` outside.** `cd .. && cat other/notes.md` asks about the parent folder, but
+  `other/notes.md` isn't shaped like a path, so once the parent is allowed for the session, the `cat` runs unasked.
+  Checking every word after a `cd` would ask about flags and patterns too.
+- **`cd -`** goes to the shell's previous folder, which no word names; it isn't followed.
+- **A path stuck to a short flag** (`-I/usr/include`, `-o/tmp/x`): see [Not taking](#not-taking).
+
 ## Design in pi
 
 | Piece | pi hook | Notes |
 |---|---|---|
 | Rule | `FolderRule` in `src/rule/folder.ts`, a `BaseRule`; `registerRules` (`src/rule/index.ts`) sets it on the guard when `MyPi` starts a session | `info.name` is `folder-guard`, the prefix of its questions. The tool guard merges its ask with Plan's into one dialog, and a block from any rule still wins. |
 | Allowed places | `ToolEnv` and the shared `PromptPaths` | `env.writableDirs` carries every module's `setWritable` folders. The prompt's skill folders and context files are `this.prompt.paths`, the session's one `PromptPaths`, which `updatePromptPaths` (`src/rule/index.ts`) fills from the first run's prompt. The rule adds the temp folder and the `/dev` streams itself. |
-| Path words in bash | `tokenize`, then a regex fallback | In `src/rule/` unless a second part needs it. |
+| Path words in bash | `commandPaths` in `src/core/util/paths.ts`: `tokenize`, then the raw-text fallback | Pure, with a table test, next to `resolveToolPath` and `isInside`, which it builds on. |
 
 ## The lsp module
 
 The guard checks `lsp`'s `path` like any tool's. The module itself also reaches upward on its own: it looks for root
 markers (`package.json`, `go.mod`, …) in the folders above a file, and a marker found above the session's folder would
 make that folder the server's root and the disk check's scan. So, for a file inside the session's folder, lsp never
-roots a server above it: a marker above clamps the root to the session's folder. The servers' own lookups (TypeScript
+roots a server above it: marked folders above the session's folder are skipped, and when none is left the root is the
+session's folder (`ServerManager.rootFor`). With `outermostRoot` (gopls) that's the outermost marked folder inside
+the session's. A file outside the session's folder, which the user allowed, keeps its own markers. The servers' own lookups (TypeScript
 finding a `tsconfig.json` above, say) are theirs and unchanged. See [lsp](../modules/lsp.md#behavior).
 
 ## Slices
@@ -79,8 +93,13 @@ finding a `tsconfig.json` above, say) are theirs and unchanged. See [lsp](../mod
    as a module first, then moved to core the same day: a guard that can be turned off isn't one. Tried live in pi: a `read` outside the folder asks;
    No returns "The user declined this call" and pi asked for access instead of trying another way; "Allow for this
    session" let a later read of the same file run unasked.
-2. `bash`: path words from `tokenize`, the raw-text fallback, `cd`.
-3. lsp: clamp roots to the session's folder.
+2. **Done 2026-10-24.** `bash`: path words and `<` targets from `tokenize`, the raw-text fallback, `cd`. An ask now
+   carries a list of questions, so each outside path is its own "Allow for this session". Tried live in pi:
+   `cat /etc/hosts /etc/shells` asked with two lines; after "Allow for this session", `head -1 /etc/shells` and
+   `wc -l < /etc/hosts` ran unasked; `wc -l < /etc/zshrc`, `cd .. && ls`, and `cat $(echo /etc/passwd) "$HOME/.zshrc"`
+   each asked, naming the place; after No, pi didn't try another way.
+3. **Done 2026-10-24.** lsp: roots clamped to the session's folder. Tried live: pi started in a project's `src`
+   folder, below its `package.json`, ran tsc in `src`.
 
 ## Not taking
 
@@ -88,6 +107,9 @@ finding a `tsconfig.json` above, say) are theirs and unchanged. See [lsp](../mod
   heavy; pi runs on the user's machine on purpose.
 - **Blocking instead of asking** (decided 2026-10-24): sometimes the user does want the agent to look elsewhere.
 - **Following symlinks** to decide inside or outside. Text comparison matches how the rest of the guard works.
+- **Paths stuck to short flags** (`-I/usr/include`, `-o/tmp/x`, decided 2026-10-24). Splitting them means knowing
+  which flags take a value, per command; `-la` and `-I/x` look alike otherwise. Rare in agent commands, which tend to
+  use `--flag=value` or a separate word.
 
 ## Decided 2026-10-24
 

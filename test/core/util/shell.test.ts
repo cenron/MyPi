@@ -22,6 +22,20 @@ describe("tokenize", () => {
     ["echo {a, b} @{u}", [["echo", "{a,", "b}", "@{u}"]]],
     ["", []],
   ])("splits %j", (command, expected) => {
+    expect(tokenize(command)?.map((segment) => segment.words)).toEqual(expected);
+  });
+
+  it.each([
+    ["cat < in.txt", [{ words: ["cat"], inputs: ["in.txt"] }]],
+    [
+      "< ~/a; wc -l <b",
+      [
+        { words: [], inputs: ["~/a"] },
+        { words: ["wc", "-l"], inputs: ["b"] },
+      ],
+    ],
+    ["ls > /dev/null", [{ words: ["ls"], inputs: [] }]],
+  ])("keeps the files %j reads with <", (command, expected) => {
     expect(tokenize(command)).toEqual(expected);
   });
 

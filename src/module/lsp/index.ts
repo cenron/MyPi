@@ -13,6 +13,7 @@ import { lspCmd } from "./commands/lsp";
 import { ServerManager } from "./manager";
 import { SERVERS } from "./servers";
 import { lspTool } from "./tools/lsp";
+import { lspEditTool } from "./tools/lsp-edit";
 
 /** What the module saves: the ids of the servers turned off in `/lsp`. */
 type LspState = { off: string[] };
@@ -44,7 +45,7 @@ export class LspModule extends BaseModule<LspState> {
   }
 
   tools(): ToolDefinition[] {
-    return [lspTool(this.servers)];
+    return [lspTool(this.servers), lspEditTool(this.servers)];
   }
 
   /**

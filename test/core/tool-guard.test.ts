@@ -32,7 +32,7 @@ const rule =
   () =>
     verdict;
 const allow = rule({ kind: "allow" });
-const ask = (question: string) => rule({ kind: "ask", question });
+const ask = (question: string) => rule({ kind: "ask", questions: [question] });
 const block = (reason: string) => rule({ kind: "block", reason });
 
 describe("ToolGuard", () => {
@@ -157,7 +157,7 @@ describe("ToolGuard", () => {
     it("still asks about a different question", async () => {
       let question = "Run npm test?";
       const guard = newGuard();
-      guard.set("one", () => ({ kind: "ask", question }));
+      guard.set("one", () => ({ kind: "ask", questions: [question] }));
       await guard.check(event(), fakeContext({ answer: "Allow for this session" }).ctx);
       question = "Run npm install?";
       const { ctx, select } = fakeContext({ answer: "No" });
@@ -194,6 +194,19 @@ describe("ToolGuard", () => {
       const { ctx, select } = fakeContext({ answer: "No" });
       await expect(guard.check(event(), ctx)).resolves.toBeUndefined();
       expect(select).not.toHaveBeenCalled();
+    });
+
+    // A rule's questions are lines of their own, so allowing two paths covers a later call that names one of them.
+    it("remembers each of a rule's questions on its own", async () => {
+      const guard = newGuard();
+      let questions = ["Reach /a?", "Reach /b?"];
+      guard.set("one", () => ({ kind: "ask", questions }));
+      await guard.check(event(), fakeContext({ answer: "Allow for this session" }).ctx);
+
+      questions = ["Reach /b?", "Reach /c?"];
+      const { ctx, select } = fakeContext({ answer: "Yes" });
+      await guard.check(event(), ctx);
+      expect(select.mock.calls[0]?.[0]).toBe("Permission required\none: Reach /c?");
     });
 
     it("never overrides a block", async () => {
@@ -233,7 +246,7 @@ describe("ToolGuard", () => {
     it("doesn't let an approval for one long command cover another that starts the same", async () => {
       const guard = newGuard();
       let command = `${longCommand}\necho one`;
-      guard.set("one", () => ({ kind: "ask", question: command }));
+      guard.set("one", () => ({ kind: "ask", questions: [command] }));
       await guard.check(event(), fakeContext({ answer: "Allow for this session" }).ctx);
       command = `${longCommand}\nrm -rf build`;
       const { ctx, select } = fakeContext({ answer: "No" });

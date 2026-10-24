@@ -7,11 +7,6 @@ export const Mode = {
 /** One of plan-build's modes: `"plan"` or `"build"`. */
 export type Mode = (typeof Mode)[keyof typeof Mode];
 
-/** True when `value` is a mode; checks a mode read from the session file or typed after `/plan`. */
-export function isMode(value: unknown): value is Mode {
-  return (Object.values(Mode) as unknown[]).includes(value);
-}
-
 /** A plan the model submitted with `submit_plan`, and where it was saved. */
 export type SubmittedPlan = { title: string; plan: string; path: string };
 
@@ -27,3 +22,8 @@ export type PlanChoice = {
   label: string;
   run: (plan: SubmittedPlan, actions: PlanActions) => void;
 };
+
+/** True when `value` is a mode; checks a mode read from the session file or typed after `/plan`. */
+export function isMode(value: unknown): value is Mode {
+  return (Object.values(Mode) as unknown[]).includes(value);
+}

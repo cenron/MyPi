@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { EventEmitter, once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -6,19 +7,33 @@ import {
   CancellationTokenSource,
   ConfigurationRequest,
   createProtocolConnection,
+  DefinitionRequest,
+  type Diagnostic,
   DidChangeTextDocumentNotification,
   DidChangeWatchedFilesNotification,
   DidCloseTextDocumentNotification,
   DidOpenTextDocumentNotification,
+  DocumentDiagnosticReportKind,
+  DocumentDiagnosticRequest,
   type DocumentSymbol,
   DocumentSymbolRequest,
   ExitNotification,
+  ImplementationRequest,
   InitializedNotification,
   type InitializeParams,
   InitializeRequest,
+  type InitializeResult,
+  type Location,
+  type LocationLink,
+  type Position,
   type ProtocolConnection,
+  PublishDiagnosticsNotification,
+  ReferencesRequest,
+  RenameRequest,
+  type ServerCapabilities,
   ShutdownRequest,
   type SymbolInformation,
+  type WorkspaceEdit,
   type WorkspaceSymbol,
   WorkspaceSymbolRequest,
 } from "vscode-languageserver-protocol/node";
@@ -31,9 +46,14 @@ const INIT_TIMEOUT_MS = 30_000;
 const SHUTDOWN_TIMEOUT_MS = 1_000;
 /** How much of the server's stderr to keep for the error when it fails to start. */
 const STDERR_TAIL_CHARS = 2_000;
+/** How long to wait for a server that pushes diagnostics to send them for a file's current text. */
+const PUBLISH_TIMEOUT_MS = 10_000;
 
 /** A file as the server last saw it. */
 type OpenDocument = { version: number; text: string; languageId: string };
+
+/** A file's diagnostics as a server last pushed them, for the version of its text they were for. */
+type Published = { version: number | undefined; diagnostics: Diagnostic[] };
 
 /** A running language server: its process and the JSON-RPC connection to it over stdio. */
 export class LspClient {
@@ -43,12 +63,24 @@ export class LspClient {
   readonly startedAt = Date.now();
   /** The files sent to the server, by URI. */
   private readonly documents = new Map<string, OpenDocument>();
+  /** The last diagnostics a server pushed per file, by URI; each push is also emitted under its URI. */
+  private readonly published = new Map<string, Published>();
+  private readonly publishes = new EventEmitter();
 
   private constructor(
     private readonly child: ChildProcessWithoutNullStreams,
     readonly connection: ProtocolConnection,
+    /** What the server said it can do, in its answer to `initialize`. */
+    readonly capabilities: ServerCapabilities,
   ) {
-    this.exited = new Promise((resolve) => child.once("exit", () => resolve()));
+    const running = child.exitCode === null && child.signalCode === null;
+    this.exited = running ? new Promise((resolve) => child.once("exit", () => resolve())) : Promise.resolve();
+
+    connection.onNotification(PublishDiagnosticsNotification.type, ({ uri, version, diagnostics }) => {
+      // Without a version, a push is taken to be for the text sent last.
+      this.published.set(uri, { version: version ?? this.documents.get(uri)?.version, diagnostics });
+      this.publishes.emit(uri);
+    });
   }
 
   /**
@@ -65,21 +97,24 @@ export class LspClient {
       stderr = (stderr + chunk.toString()).slice(-STDERR_TAIL_CHARS);
     });
 
-    const client = new LspClient(child, createProtocolConnection(child.stdout, child.stdin));
+    const connection = createProtocolConnection(child.stdout, child.stdin);
     // Pyright waits for its settings before it indexes the project; empty settings mean its defaults.
-    client.connection.onRequest(ConfigurationRequest.type, (params) => params.items.map(() => ({})));
-    client.connection.listen();
+    connection.onRequest(ConfigurationRequest.type, (params) => params.items.map(() => ({})));
+    connection.listen();
 
+    let capabilities: ServerCapabilities;
     try {
-      await initialize(child, client.connection, initializeParams(root));
-      await client.connection.sendNotification(InitializedNotification.type, {});
+      ({ capabilities } = await initialize(child, connection, initializeParams(root)));
     } catch (error) {
       child.kill();
-      client.connection.dispose();
+      connection.dispose();
       const detail = stderr.trim();
       throw new Error(`${errorMessage(error)}${detail ? `\n${detail}` : ""}`);
     }
 
+    // Built before `initialized`, so a diagnostics push right after it is caught.
+    const client = new LspClient(child, connection, capabilities);
+    await connection.sendNotification(InitializedNotification.type, {});
     return client;
   }
 
@@ -129,11 +164,6 @@ export class LspClient {
     }
   }
 
-  private async close(uri: string) {
-    this.documents.delete(uri);
-    await this.connection.sendNotification(DidCloseTextDocumentNotification.type, { textDocument: { uri } });
-  }
-
   /**
    * Tells the server files changed on disk; without it, a server keeps its old copy of a file that isn't open. A
    * "created" report also makes a server re-read a file it already knew.
@@ -157,6 +187,44 @@ export class LspClient {
     return symbols ?? [];
   }
 
+  /** Where the name at `position` is used, its declarations included. */
+  async references(uri: string, position: Position, signal?: AbortSignal): Promise<Location[]> {
+    const params = { textDocument: { uri }, position, context: { includeDeclaration: true } };
+    return toLocations(await this.connection.sendRequest(ReferencesRequest.type, params, cancelledBy(signal)));
+  }
+
+  /** What implements the name at `position`: an interface's classes, an abstract method's overrides. */
+  async implementations(uri: string, position: Position, signal?: AbortSignal): Promise<Location[]> {
+    const params = { textDocument: { uri }, position };
+    return toLocations(await this.connection.sendRequest(ImplementationRequest.type, params, cancelledBy(signal)));
+  }
+
+  /** Where the name at `position` is defined. */
+  async definitions(uri: string, position: Position, signal?: AbortSignal): Promise<Location[]> {
+    const params = { textDocument: { uri }, position };
+    return toLocations(await this.connection.sendRequest(DefinitionRequest.type, params, cancelledBy(signal)));
+  }
+
+  /**
+   * The problems the server finds in a file sent with `sync`, for the text it was last sent: asked for when the
+   * server offers it (`diagnosticProvider`), else the server's next push for that text, waited for up to
+   * `PUBLISH_TIMEOUT_MS`.
+   */
+  async diagnostics(uri: string, signal?: AbortSignal): Promise<Diagnostic[]> {
+    if (!this.capabilities.diagnosticProvider) return this.pushedDiagnostics(uri, signal);
+
+    const params = { textDocument: { uri } };
+    const report = await this.connection.sendRequest(DocumentDiagnosticRequest.type, params, cancelledBy(signal));
+    // "unchanged" answers only a request that names an earlier result, which this one never does.
+    return report.kind === DocumentDiagnosticReportKind.Full ? report.items : [];
+  }
+
+  /** The edits that rename the symbol whose name is at `position`, across the project; null when there's nothing to rename. */
+  async rename(uri: string, position: Position, newName: string, signal?: AbortSignal): Promise<WorkspaceEdit | null> {
+    const params = { textDocument: { uri }, position, newName };
+    return this.connection.sendRequest(RenameRequest.type, params, cancelledBy(signal));
+  }
+
   get isRunning(): boolean {
     return this.child.exitCode === null && this.child.signalCode === null;
   }
@@ -176,6 +244,32 @@ export class LspClient {
     }
     this.connection.dispose();
   }
+
+  private async pushedDiagnostics(uri: string, signal?: AbortSignal): Promise<Diagnostic[]> {
+    const version = this.documents.get(uri)?.version;
+    const timeout = AbortSignal.timeout(PUBLISH_TIMEOUT_MS);
+    const waiting = signal ? AbortSignal.any([signal, timeout]) : timeout;
+
+    for (;;) {
+      const last = this.published.get(uri);
+      if (last && last.version === version) return last.diagnostics;
+
+      try {
+        await once(this.publishes, uri, { signal: waiting });
+      } catch (error) {
+        if (!timeout.aborted) throw error;
+        throw new Error(
+          `the server sent no diagnostics for ${fileURLToPath(uri)} within ${PUBLISH_TIMEOUT_MS / 1000}s; it may still ` +
+            "be loading the project. Try again.",
+        );
+      }
+    }
+  }
+
+  private async close(uri: string) {
+    this.documents.delete(uri);
+    await this.connection.sendNotification(DidCloseTextDocumentNotification.type, { textDocument: { uri } });
+  }
 }
 
 /** The `initialize` request for a server rooted at `root`. Capabilities grow as the tool's actions need them. */
@@ -190,10 +284,28 @@ function initializeParams(root: string): InitializeParams {
     capabilities: {
       // workspaceFolders: servers read the folders above only from a client that says it supports them.
       workspace: { configuration: true, workspaceFolders: true, symbol: {}, didChangeWatchedFiles: {} },
-      // Without it, servers send a file's symbols as a flat list, losing which class a method is in.
-      textDocument: { documentSymbol: { hierarchicalDocumentSymbolSupport: true } },
+      textDocument: {
+        // Without it, servers send a file's symbols as a flat list, losing which class a method is in.
+        documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+        references: {},
+        implementation: {},
+        definition: {},
+        // Pull for servers that offer it (tsc), pushes with the text's version for the rest (gopls, Pyright).
+        diagnostic: {},
+        publishDiagnostics: { versionSupport: true },
+        rename: {},
+      },
     },
   };
+}
+
+/** A server's answer about places as plain locations: a link's target is the name it points at. */
+function toLocations(answer: Location | Location[] | LocationLink[] | null): Location[] {
+  if (!answer) return [];
+
+  // A cast at the boundary: each item is one or the other, and `targetUri` tells them apart.
+  const items = (Array.isArray(answer) ? answer : [answer]) as (Location | LocationLink)[];
+  return items.map((item) => ("targetUri" in item ? { uri: item.targetUri, range: item.targetSelectionRange } : item));
 }
 
 /** A token that cancels the request when `signal` aborts, such as when the user stops the tool call. */
@@ -204,12 +316,12 @@ function cancelledBy(signal: AbortSignal | undefined) {
   return source.token;
 }
 
-/** Sends `initialize` and resolves on its answer; rejects when the process fails to spawn, exits, or times out. */
+/** Sends `initialize` and resolves with its answer; rejects when the process fails to spawn, exits, or times out. */
 function initialize(
   child: ChildProcessWithoutNullStreams,
   connection: ProtocolConnection,
   params: InitializeParams,
-): Promise<void> {
+): Promise<InitializeResult> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error) => settle(new Error(`couldn't start: ${error.message}`));
     const onExit = (code: number | null) => settle(new Error(`exited while starting (code ${code})`));
@@ -218,18 +330,18 @@ function initialize(
       INIT_TIMEOUT_MS,
     );
 
-    function settle(error?: Error) {
+    function settle(outcome: InitializeResult | Error) {
       clearTimeout(timer);
       child.off("error", onError);
       child.off("exit", onExit);
-      if (error) reject(error);
-      else resolve();
+      if (outcome instanceof Error) reject(outcome);
+      else resolve(outcome);
     }
 
     child.once("error", onError);
     child.once("exit", onExit);
     connection.sendRequest(InitializeRequest.type, params).then(
-      () => settle(),
+      (result) => settle(result),
       (error: unknown) => settle(new Error(errorMessage(error))),
     );
   });

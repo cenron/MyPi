@@ -35,12 +35,12 @@ export const planRule: ToolRule = ({ toolName, input, annotations }, { cwd, home
     case "bash": {
       const command = input.command;
       if (typeof command === "string" && isReadOnlyCommand(command)) return ALLOW;
-      return { kind: "ask", question: `Plan mode is on. Run this command?\n${String(command)}` };
+      return { kind: "ask", questions: [`Plan mode is on. Run this command?\n${String(command)}`] };
     }
     case "powershell":
-      return { kind: "ask", question: `Plan mode is on. Run this PowerShell command?\n${String(input.command)}` };
+      return { kind: "ask", questions: [`Plan mode is on. Run this PowerShell command?\n${String(input.command)}`] };
     default:
       if (annotations?.readOnlyHint === true) return ALLOW;
-      return { kind: "ask", question: `Plan mode is on. Allow ${toolName}? It isn't marked read-only.` };
+      return { kind: "ask", questions: [`Plan mode is on. Allow ${toolName}? It isn't marked read-only.`] };
   }
 };

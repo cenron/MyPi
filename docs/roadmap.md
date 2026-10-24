@@ -11,8 +11,8 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 | # | What | Kind | Why at this point | Needs first |
 |---|---|---|---|---|
 | 1 | [memory](modules/memory.md) | module | **Done 2026-10-23.** Small, no dependencies, and every later session gets better from it. Also answers pair-programmer's "how does it remember how I work". | Nothing |
-| 2 | [lsp](modules/lsp.md) | module | **Building: slices 1 and 2 done 2026-10-24** (servers start and stop, `/lsp` menu; the `lsp` tool's outline and find_symbol). Exact navigation by symbol, and the diagnostics the done check wants. | Microsoft's `vscode-languageserver-protocol` (passed the dependency check 2026-10-23) |
-| 3 | [folder-guard](rules/folder-guard.md) | core rule | **Building: slice 1 done 2026-10-24** (tools with a `path`). Added 2026-10-24 after a live test where pi ran `find` over the home folder unasked. Small, and every session is safer with it. | Nothing; reuses `ToolGuard` and Plan's `tokenize` |
+| 2 | [lsp](modules/lsp.md) | module | **Done 2026-10-24** (servers and `/lsp` menu; `lsp`: outline, find_symbol, references, implementations, definition, diagnostics; `lsp_edit`: rename). Symbol edits wait for a need; diagnostics after a turn come with the done check. | Microsoft's `vscode-languageserver-protocol` (passed the dependency check 2026-10-23) |
+| 3 | [folder-guard](rules/folder-guard.md) | core rule | **Done 2026-10-24** (tools with a `path`, `bash`, and lsp roots). Added 2026-10-24 after a live test where pi ran `find` over the home folder unasked. Small, and every session is safer with it. | Nothing; reuses `ToolGuard` and Plan's `tokenize` |
 | 4 | [done-check](modules/done-check.md) | module | Catches broken work before I see it. Can start with commands only (typecheck, tests) and add LSP diagnostics once 2 is done. | Nothing; LSP makes it better |
 | 5 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
 | 6 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 5 (worktree) for parallel writers |
@@ -37,6 +37,10 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 - [plan-build](modules/plan-build.md), with Plan's shell check.
 - [memory](modules/memory.md): project and global memories in the prompt, `/onboard`, `/memory-check`. Whether the
   agent saves on its own depends on the model; [analytics](modules/analytics.md) measures it before any nudge.
+- [lsp](modules/lsp.md): TypeScript, Go, and Python servers started on first use, the `/lsp` menu, the `lsp` tool
+  (outline, find_symbol, references, implementations, definition, diagnostics), and `lsp_edit` (rename).
+- [folder-guard](rules/folder-guard.md), the first core rule: asks before a tool's `path` or a bash command reaches
+  outside the session's folder; lsp roots never go above it.
 - Built-in tools: [web_search](tools/web-search.md), [web_fetch](tools/web-fetch.md),
   [background process](tools/background-process.md) (`bash` with `background: true`, `job_list`, `job_stop`).
 - [MCP server list](mcp/README.md): Parallel and Exa.

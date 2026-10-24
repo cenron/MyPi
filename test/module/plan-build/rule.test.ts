@@ -47,7 +47,7 @@ describe("planRule", () => {
   it("asks before any other bash command, showing it", () => {
     expect(verdict("bash", { command: "npm test" })).toEqual({
       kind: "ask",
-      question: "Plan mode is on. Run this command?\nnpm test",
+      questions: ["Plan mode is on. Run this command?\nnpm test"],
     });
     expect(verdict("bash", {}).kind).toBe("ask");
   });
@@ -55,7 +55,7 @@ describe("planRule", () => {
   it("always asks before powershell", () => {
     expect(verdict("powershell", { command: "Get-ChildItem" })).toEqual({
       kind: "ask",
-      question: "Plan mode is on. Run this PowerShell command?\nGet-ChildItem",
+      questions: ["Plan mode is on. Run this PowerShell command?\nGet-ChildItem"],
     });
   });
 
@@ -64,7 +64,7 @@ describe("planRule", () => {
     for (const annotations of [undefined, {}, { readOnlyHint: false }, { destructiveHint: false }]) {
       expect(verdict("mcp_search", {}, annotations)).toEqual({
         kind: "ask",
-        question: "Plan mode is on. Allow mcp_search? It isn't marked read-only.",
+        questions: ["Plan mode is on. Allow mcp_search? It isn't marked read-only."],
       });
     }
   });

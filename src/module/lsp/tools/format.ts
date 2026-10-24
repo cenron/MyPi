@@ -12,8 +12,8 @@ export function displayPath(file: string, cwd: string): string {
 }
 
 /** `1 symbol`, `3 symbols`: every count says what it counts. */
-export function symbolCount(count: number): string {
-  return `${count} ${count === 1 ? "symbol" : "symbols"}`;
+export function counted(count: number, noun: string): string {
+  return `${count} ${count === 1 ? noun : `${noun}s`}`;
 }
 
 /** A symbol's lines, 1-based: `41-53`, or `8` for one line. */
@@ -28,9 +28,9 @@ export function symbolLine(symbol: NamedSymbol, where: string): string {
 
 /**
  * `header` and as many `blocks` as fit in `MAX_ANSWER_CHARS`, one per line. When some don't fit, says how many of
- * how many symbols were left out, then `narrow`: how to ask for less.
+ * how many blocks (each one `noun`) were left out, then `narrow`: how to ask for less.
  */
-export function capAnswer(header: string, blocks: readonly string[], narrow: string): string {
+export function capAnswer(header: string, blocks: readonly string[], noun: string, narrow: string): string {
   let text = header;
   let shown = 0;
   for (const block of blocks) {
@@ -41,7 +41,7 @@ export function capAnswer(header: string, blocks: readonly string[], narrow: str
 
   if (shown === blocks.length) return text;
   const left = blocks.length - shown;
-  return `${text}\n\nCut at ${MAX_ANSWER_CHARS} characters: ${left} of ${blocks.length} symbols not shown. ${narrow}`;
+  return `${text}\n\nCut at ${MAX_ANSWER_CHARS} characters: ${left} of ${counted(blocks.length, noun)} not shown. ${narrow}`;
 }
 
 /**

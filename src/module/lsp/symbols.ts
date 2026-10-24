@@ -1,7 +1,15 @@
-import { type DocumentSymbol, type SymbolInformation, SymbolKind } from "vscode-languageserver-protocol/node";
+import {
+  type DocumentSymbol,
+  type Position,
+  type SymbolInformation,
+  SymbolKind,
+} from "vscode-languageserver-protocol/node";
 
-/** A symbol of one file: its name path from the top of the file, its kind, and its lines (0-based, inclusive). */
-export type NamedSymbol = { path: string[]; kind: SymbolKind; start: number; end: number; depth: number };
+/**
+ * A symbol of one file: its name path from the top of the file, its kind, its lines (0-based, inclusive), and `at`,
+ * where its name is: the position references, implementations, and rename are asked about.
+ */
+export type NamedSymbol = { path: string[]; kind: SymbolKind; start: number; end: number; depth: number; at: Position };
 
 /** Symbols whose children are their locals: the outline and searches leave those out. */
 const CALLABLE_KINDS = new Set<SymbolKind>([SymbolKind.Function, SymbolKind.Method, SymbolKind.Constructor]);
@@ -53,11 +61,20 @@ export function plainName(name: string): string {
 
 function fromTree(symbol: DocumentSymbol, parent: string[], depth: number): NamedSymbol[] {
   const path = [...parent, ...ownPath(symbol.name)];
-  const self = { path, kind: symbol.kind, start: symbol.range.start.line, end: symbol.range.end.line, depth };
+  const { range, selectionRange } = symbol;
+  const self = {
+    path,
+    kind: symbol.kind,
+    start: range.start.line,
+    end: range.end.line,
+    depth,
+    at: selectionRange.start,
+  };
   const children = CALLABLE_KINDS.has(symbol.kind) ? [] : (symbol.children ?? []);
   return [self, ...children.flatMap((child) => fromTree(child, path, depth + 1))];
 }
 
+/** A flat list gives only the whole symbol's range, so `at` is its start, which may be a keyword before the name. */
 function fromFlat(symbol: SymbolInformation): NamedSymbol {
   const container = symbol.containerName ? [symbol.containerName] : [];
   const { start, end } = symbol.location.range;
@@ -67,6 +84,7 @@ function fromFlat(symbol: SymbolInformation): NamedSymbol {
     start: start.line,
     end: end.line,
     depth: 0,
+    at: start,
   };
 }
 

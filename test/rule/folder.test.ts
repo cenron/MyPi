@@ -15,7 +15,10 @@ const env: ToolEnv = {
 const rule = new FolderRule({ paths: ["/home/me/.agents/skills/herdr", "/home/me/work/AGENTS.md"] });
 
 const verdict = (toolName: string, input: Record<string, unknown>) => rule.check({ toolName, input }, env);
-const asks = (path: string) => ({ kind: "ask", question: `Reaches outside /home/me/work/app: ${path}` });
+const asks = (...paths: string[]) => ({
+  kind: "ask",
+  questions: paths.map((path) => `Reaches outside /home/me/work/app: ${path}`),
+});
 
 describe("FolderRule", () => {
   it.each([
@@ -30,6 +33,7 @@ describe("FolderRule", () => {
     ["the temp folder", "read", { path: join(tmpdir(), "pi-bash-1.log") }],
     ["a /dev stream", "write", { path: "/dev/null" }],
     ["an MCP tool's path, which isn't a file", "mcp__docs__get", { path: "/v1/users" }],
+    ["a bash command whose paths are all allowed", "bash", { command: "cat src/a.ts > /dev/null; ls ../AGENTS.md" }],
   ])("allows %s", (_case, tool, input) => {
     expect(verdict(tool, input)).toEqual({ kind: "allow" });
   });
@@ -49,5 +53,11 @@ describe("FolderRule", () => {
     ["any tool with a path, lsp included", "lsp", { action: "outline", path: "/etc/hosts" }, "/etc/hosts"],
   ])("asks for %s, naming the resolved path", (_case, tool, input, path) => {
     expect(verdict(tool, input)).toEqual(asks(path));
+  });
+
+  // commandPaths' own table covers which words are paths; here, only that bash goes through it.
+  it("asks once per outside path a bash command names, each its own question", () => {
+    const command = "cat /etc/hosts src/a.ts && diff ~/a /etc/hosts";
+    expect(verdict("bash", { command })).toEqual(asks("/etc/hosts", "/home/me/a"));
   });
 });

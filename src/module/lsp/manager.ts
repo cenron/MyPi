@@ -114,6 +114,20 @@ export class ServerManager {
     await Promise.allSettled(reports);
   }
 
+  /**
+   * Tells a running server which of its project's source files were created, changed, or deleted since it last looked,
+   * before an answer that spans files (a search, references, a rename).
+   */
+  async reportDiskChanges({ spec, root, client }: ReadyLookup): Promise<void> {
+    const instance = this.instances.get(instanceKey(spec, root));
+    if (!instance?.times) return;
+
+    const times = await sourceFileTimes(root, Object.keys(spec.languageIds));
+    const changes = fileChanges(instance.times, times);
+    instance.times = times;
+    if (changes.length > 0) await client.reportFileChanges(changes);
+  }
+
   /** Every server's status, in list order. */
   statuses(): ServerStatus[] {
     return this.specs.map((spec) => {
@@ -144,8 +158,7 @@ export class ServerManager {
     if (this.closed) return { kind: "stopped", spec };
     if (this.off.has(spec.id)) return { kind: "off", spec };
 
-    const folders = markedFolders(dir, spec.rootMarkers);
-    const root = (spec.outermostRoot ? folders.at(-1) : folders[0]) ?? this.cwd;
+    const root = this.rootFor(spec, dir);
     const key = instanceKey(spec, root);
 
     let instance = this.instances.get(key);
@@ -161,6 +174,18 @@ export class ServerManager {
     if (instance.error !== undefined) return { kind: "failed", spec, root, error: instance.error };
     // Turned off, or the session ended, while it was starting.
     return this.off.has(spec.id) ? { kind: "off", spec } : { kind: "stopped", spec };
+  }
+
+  /**
+   * The project root for `dir`: its nearest marked folder, or the outermost with `outermostRoot`, else the session's
+   * folder. For a folder inside the session's, a marked folder above it doesn't count: the root is where the server
+   * reads and the disk check scans, so it never reaches outside the session's folder on its own.
+   */
+  private rootFor(spec: ServerSpec, dir: string): string {
+    let folders = markedFolders(dir, spec.rootMarkers);
+    if (isInside(this.cwd, dir)) folders = folders.filter((folder) => isInside(this.cwd, folder));
+
+    return (spec.outermostRoot ? folders.at(-1) : folders[0]) ?? this.cwd;
   }
 
   private async start(key: string, instance: Instance) {
@@ -186,17 +211,6 @@ export class ServerManager {
     instance.client = client;
     // Watched, not awaited: `start` is done once the server runs.
     void client.exited.then(() => this.onExit(key, instance));
-  }
-
-  /** Tells a running server which of its project's source files were created, changed, or deleted since it last looked. */
-  private async reportDiskChanges({ spec, root, client }: ReadyLookup) {
-    const instance = this.instances.get(instanceKey(spec, root));
-    if (!instance?.times) return;
-
-    const times = await sourceFileTimes(root, Object.keys(spec.languageIds));
-    const changes = fileChanges(instance.times, times);
-    instance.times = times;
-    if (changes.length > 0) await client.reportFileChanges(changes);
   }
 
   /** A server that exits on its own is dropped, so the next call starts a new one. */

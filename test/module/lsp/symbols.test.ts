@@ -7,8 +7,10 @@ const range = (start: number, end = start) => ({
   end: { line: end, character: 0 },
 });
 
+/** A tree symbol whose name starts 6 characters into its first line, after a keyword such as `class `. */
 function tree(name: string, kind: SymbolKind, lines: [number, number], children: DocumentSymbol[] = []) {
-  return { name, kind, range: range(...lines), selectionRange: range(lines[0]), children };
+  const at = { line: lines[0], character: 6 };
+  return { name, kind, range: range(...lines), selectionRange: { start: at, end: at }, children };
 }
 
 describe("matchesNamePath", () => {
@@ -35,9 +37,16 @@ describe("namedSymbols", () => {
       tree("main", SymbolKind.Function, [11, 11]),
     ]);
     expect(symbols).toEqual([
-      { path: ["ServerManager"], kind: SymbolKind.Class, start: 4, end: 9, depth: 0 },
-      { path: ["ServerManager", "touch"], kind: SymbolKind.Method, start: 5, end: 7, depth: 1 },
-      { path: ["main"], kind: SymbolKind.Function, start: 11, end: 11, depth: 0 },
+      { path: ["ServerManager"], kind: SymbolKind.Class, start: 4, end: 9, depth: 0, at: { line: 4, character: 6 } },
+      {
+        path: ["ServerManager", "touch"],
+        kind: SymbolKind.Method,
+        start: 5,
+        end: 7,
+        depth: 1,
+        at: { line: 5, character: 6 },
+      },
+      { path: ["main"], kind: SymbolKind.Function, start: 11, end: 11, depth: 0, at: { line: 11, character: 6 } },
     ]);
   });
 
@@ -68,7 +77,7 @@ describe("namedSymbols", () => {
     ]);
   });
 
-  it("puts a flat list's container in front, as the parent", () => {
+  it("puts a flat list's container in front, as the parent, with the range's start as the name's place", () => {
     const flat: SymbolInformation = {
       name: "touch",
       kind: SymbolKind.Method,
@@ -76,7 +85,14 @@ describe("namedSymbols", () => {
       location: { uri: "file:///a.py", range: range(1, 2) },
     };
     expect(namedSymbols([flat])).toEqual([
-      { path: ["Greeter", "touch"], kind: SymbolKind.Method, start: 1, end: 2, depth: 0 },
+      {
+        path: ["Greeter", "touch"],
+        kind: SymbolKind.Method,
+        start: 1,
+        end: 2,
+        depth: 0,
+        at: { line: 1, character: 0 },
+      },
     ]);
   });
 

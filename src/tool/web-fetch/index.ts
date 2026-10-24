@@ -5,6 +5,7 @@ import {
   defineTool,
   formatSize,
 } from "@earendil-works/pi-coding-agent";
+
 import { Type } from "typebox";
 import { Agent, fetch } from "undici";
 import type { Session } from "#core/session";
@@ -19,6 +20,7 @@ import {
   readCapped,
   timeoutSignal,
 } from "#core/util/http";
+
 import type { Tool } from "#tool/types";
 import { reuseText } from "#tool/utils";
 import { assertPublicHost, BLOCKED, publicLookup } from "./address";
@@ -28,11 +30,16 @@ import { truncate } from "./truncate";
 import { ACCEPT, type FetchedDetails, type Format, HTML_TYPES } from "./types";
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
+
 const MAX_TIMEOUT_SECONDS = 120;
+
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // same as OpenCode
+
 const USER_AGENT = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; MyPi/0.0.1";
+
 /** Hops followed before giving up; browsers allow 20, and real sites need a few. */
 const MAX_REDIRECTS = 10;
+
 /** Statuses that send the client to `Location`. A GET stays a GET for all of them. */
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
@@ -51,6 +58,9 @@ const parameters = Type.Object({
     }),
   ),
 });
+
+/** How `fetchPage` fetches: the format asked for, the signal covering the whole fetch, and the pinned connector. */
+type FetchOptions = { format: Format; signal: AbortSignal; dispatcher: Agent };
 
 /**
  * `web_fetch`: reads a public http(s) URL and returns its text, with HTML pages converted to markdown; see
@@ -96,9 +106,6 @@ export function webFetchTool(_session: Session): Tool {
   // only gets a rejection from undici, which is ignored.
   return { definition, shutdown: () => void dispatcher.close().catch(() => {}) };
 }
-
-/** How `fetchPage` fetches: the format asked for, the signal covering the whole fetch, and the pinned connector. */
-type FetchOptions = { format: Format; signal: AbortSignal; dispatcher: Agent };
 
 /** Throws unless `url` is http or https: for the URL asked for, and for every redirect. */
 function assertHttp(url: URL): void {

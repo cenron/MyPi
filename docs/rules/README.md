@@ -14,4 +14,4 @@ they only change on `/reload`, which starts a new session with new rules. How th
 
 | Rule | Status | Summary |
 |---|---|---|
-| [folder-guard](folder-guard.md) | building | Ask before any tool call reaches outside the session's folder, in Plan and Build; "Allow for this session" per path |
+| [folder-guard](folder-guard.md) | done | Ask before any tool call reaches outside the session's folder, in Plan and Build; "Allow for this session" per path |

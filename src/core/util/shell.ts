@@ -1,17 +1,8 @@
-/**
- * Splits a bash command into segments (split on `|`, `||`, `&&`, `;` and newlines) of words with their quotes
- * removed, or returns undefined when the command holds syntax that can run or write something the words don't show:
- * `$(`, backticks, `<(`, `>(`, `(`, a lone `&`, `$'…'` and `$"…"`, variables (`$x`, `${x}`, `$1`, even in double
- * quotes, since one can hold `-delete`), or a redirect other than `N>&M`, `>/dev/null` and `< file`. Redirect targets
- * are dropped from the words. Comma braces are expanded as bash does (`a{b,c}` is `ab ac`), so the words show what
- * runs; ranges (`{a..c}`), nested or quoted braces, and braces in a redirect target return undefined.
- */
-export function tokenize(command: string): string[][] | undefined {
-  return scan(command)?.segments;
-}
+/** One command of a bash line: its words, and the files its `<` redirects read. */
+export type Segment = { words: string[]; inputs: string[] };
 
 /** `tokenize`'s segments, and for each one whether it holds an unquoted glob (`*`, `?`, `[`) that bash expands. */
-type Scan = { segments: string[][]; globbed: boolean[] };
+type Scan = { segments: Segment[]; globbed: boolean[] };
 
 /** What makes `$` expand inside double quotes: a name, a digit, `{`, `(`, or a special parameter like `$@`. */
 const EXPANDS_IN_QUOTES = /^[\w{(@*#?!$-]$/;
@@ -19,10 +10,176 @@ const EXPANDS_IN_QUOTES = /^[\w{(@*#?!$-]$/;
 /** What makes an unquoted `$` expand: the same, plus `$'…'` and `$"…"`, whose text bash rewrites. */
 const EXPANDS = /^[\w{(@*#?!$'"-]$/;
 
+/** Most words one brace-expanded word may become before the command just asks. */
+const MAX_BRACE_WORDS = 256;
+
+type ArgCheck = (args: string[]) => boolean;
+
+const GIT_READERS = [
+  "status",
+  "log",
+  "show",
+  "diff",
+  "blame",
+  "ls-files",
+  "ls-tree",
+  "rev-parse",
+  "describe",
+  "shortlog",
+];
+
+const GIT_SUBCOMMANDS = new Map<string, ArgCheck>([
+  ...GIT_READERS.map((name): [string, ArgCheck] => [name, () => true]),
+  // `-O`/`--open-files-in-pager` runs a program on the matches.
+  ["grep", (args) => !hasShort(args, "O") && !hasLong(args, ["--open-files-in-pager"])],
+  [
+    "branch",
+    listOnly("arvl", [
+      "--list",
+      "--all",
+      "--remotes",
+      "--verbose",
+      "--show-current",
+      "--color",
+      "--no-color",
+      "--column",
+      "--no-column",
+      "--format",
+      "--sort",
+      "--contains",
+      "--no-contains",
+      "--merged",
+      "--no-merged",
+      "--points-at",
+    ]),
+  ],
+  // `-n` takes its line count attached (`-n3`), hence the digits.
+  [
+    "tag",
+    listOnly("ln0123456789", [
+      "--list",
+      "--sort",
+      "--contains",
+      "--no-contains",
+      "--merged",
+      "--no-merged",
+      "--points-at",
+      "--format",
+      "--color",
+      "--column",
+      "--no-column",
+    ]),
+  ],
+  [
+    "remote",
+    (args) => args.every((w) => w === "-v" || w === "--verbose") || args[0] === "show" || args[0] === "get-url",
+  ],
+  // A bare `git stash` pushes.
+  ["stash", (args) => args[0] === "list" || args[0] === "show"],
+  [
+    "config",
+    (args) =>
+      (args[0] === "get" ||
+        args[0] === "list" ||
+        args.some((w) => ["--get", "--get-all", "--get-regexp", "--list", "-l"].includes(w))) &&
+      !args.some((w) =>
+        [
+          "--add",
+          "--unset",
+          "--unset-all",
+          "--replace-all",
+          "--rename-section",
+          "--remove-section",
+          "--edit",
+          "-e",
+        ].includes(w),
+      ),
+  ],
+]);
+
+const PLAIN_READERS = [
+  "cat",
+  "head",
+  "tail",
+  "wc",
+  "ls",
+  "pwd",
+  "stat",
+  "du",
+  "df",
+  "which",
+  "type",
+  "whoami",
+  "id",
+  "date",
+  "uname",
+  "echo",
+  "printf",
+  "cut",
+  "tr",
+  "nl",
+  "basename",
+  "dirname",
+  "realpath",
+  "readlink",
+  "cmp",
+  "comm",
+  "diff",
+  "jq",
+  "grep",
+];
+
+// A Map, not an object: `READERS["toString"]` on an object literal would find Object.prototype's.
+const READERS = new Map<string, ArgCheck>([
+  ...PLAIN_READERS.map((name): [string, ArgCheck] => [name, () => true]),
+  // `-o` writes the listing to a file.
+  ["tree", (args) => !hasShort(args, "o") && !hasLong(args, ["--output"])],
+  // `-C` compiles a magic file into the cwd.
+  ["file", (args) => !hasShort(args, "C") && !hasLong(args, ["--compile"])],
+  ["find", (args) => !args.some((w) => /^-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)$/.test(w))],
+  ["fd", (args) => !hasShort(args, "xX") && !hasLong(args, ["--exec", "--exec-batch"])],
+  ["rg", (args) => !hasLong(args, ["--pre", "--hostname-bin"])],
+  ["sort", (args) => !hasShort(args, "o") && !hasLong(args, ["--output", "--compress-program"])],
+  // `uniq in out` writes `out`.
+  ["uniq", (args) => operands(args).length <= 1],
+  ["sed", sed],
+  ["git", git],
+  ["npm", ([sub = ""]) => ["ls", "list", "view", "info", "outdated"].includes(sub)],
+]);
+
+/**
+ * Splits a bash command into segments (split on `|`, `||`, `&&`, `;` and newlines) of words with their quotes
+ * removed, or returns undefined when the command holds syntax that can run or write something the words don't show:
+ * `$(`, backticks, `<(`, `>(`, `(`, a lone `&`, `$'…'` and `$"…"`, variables (`$x`, `${x}`, `$1`, even in double
+ * quotes, since one can hold `-delete`), or a redirect other than `N>&M`, `>/dev/null` and `< file`. Redirect targets
+ * are left out of the words; a `< file` target is in the segment's `inputs`. Comma braces are expanded as bash does
+ * (`a{b,c}` is `ab ac`), so the words show what runs; ranges (`{a..c}`), nested or quoted braces, and braces in a
+ * redirect target return undefined.
+ */
+export function tokenize(command: string): Segment[] | undefined {
+  return scan(command)?.segments;
+}
+
+/**
+ * True only for a command that can't write files or run another program, so Plan can run it without asking. Strict on
+ * purpose: a false only costs a confirm. Every segment's first word must be a known reader whose arguments pass its
+ * check; anything else, wrappers like `env` and `xargs` included, is false. A segment with an unquoted glob passes
+ * only for a plain reader: the glob can expand to a file named like a flag, as `find *` does with a file `-delete`.
+ */
+export function isReadOnlyCommand(command: string): boolean {
+  const scanned = scan(command);
+  if (scanned === undefined || scanned.segments.length === 0) return false;
+  return scanned.segments.every(({ words: [name = "", ...args] }, i) => {
+    if (scanned.globbed[i] && !PLAIN_READERS.includes(name)) return false;
+    return READERS.get(name)?.(args) ?? false;
+  });
+}
+
 function scan(command: string): Scan | undefined {
-  const segments: string[][] = [];
+  const segments: Segment[] = [];
   const globbed: boolean[] = [];
   let segmentWords: string[] = [];
+  let segmentInputs: string[] = [];
   let segmentGlobbed = false;
   let currentWord = "";
   let wordStarted = false; // A quote starts a word too, so '' is preserved.
@@ -39,6 +196,7 @@ function scan(command: string): Scan | undefined {
     if (words === undefined) unsafe = true;
     else if (redirectTarget === undefined) segmentWords.push(...words);
     else if (words.length !== 1 || (redirectTarget === "output" && words[0] !== "/dev/null")) unsafe = true;
+    else if (redirectTarget === "input") segmentInputs.push(...words);
     currentWord = "";
     wordStarted = false;
     wordParts = [];
@@ -49,11 +207,12 @@ function scan(command: string): Scan | undefined {
   const finishSegment = () => {
     finishWord();
     if (redirectTarget !== undefined) unsafe = true; // A redirect needs a target.
-    if (segmentWords.length > 0) {
-      segments.push(segmentWords);
+    if (segmentWords.length > 0 || segmentInputs.length > 0) {
+      segments.push({ words: segmentWords, inputs: segmentInputs });
       globbed.push(segmentGlobbed);
     }
     segmentWords = [];
+    segmentInputs = [];
     segmentGlobbed = false;
   };
 
@@ -159,9 +318,6 @@ function scan(command: string): Scan | undefined {
   return unsafe ? undefined : { segments, globbed };
 }
 
-/** Most words one brace-expanded word may become before the command just asks. */
-const MAX_BRACE_WORDS = 256;
-
 /**
  * The words a word of text and brace groups expands to, in bash's order: `a{b,c}{1,2}` is `ab1 ab2 ac1 ac2`. Bash
  * drops empty results from braces, so `x{,y}` is `x xy` and `{,}` is nothing; a word with no group, like `''`, stays
@@ -175,23 +331,6 @@ function expandBraces(parts: (string | string[])[]): string[] | undefined {
   }
   return parts.some((p) => typeof p !== "string") ? words.filter((w) => w !== "") : words;
 }
-
-/**
- * True only for a command that can't write files or run another program, so Plan can run it without asking. Strict on
- * purpose: a false only costs a confirm. Every segment's first word must be a known reader whose arguments pass its
- * check; anything else, wrappers like `env` and `xargs` included, is false. A segment with an unquoted glob passes
- * only for a plain reader: the glob can expand to a file named like a flag, as `find *` does with a file `-delete`.
- */
-export function isReadOnlyCommand(command: string): boolean {
-  const scanned = scan(command);
-  if (scanned === undefined || scanned.segments.length === 0) return false;
-  return scanned.segments.every(([name = "", ...args], i) => {
-    if (scanned.globbed[i] && !PLAIN_READERS.includes(name)) return false;
-    return READERS.get(name)?.(args) ?? false;
-  });
-}
-
-type ArgCheck = (args: string[]) => boolean;
 
 /** A `-abc` word: one dash, then short flags. */
 function isShortFlags(w: string) {
@@ -235,88 +374,6 @@ function listOnly(shorts: string, longs: string[]): ArgCheck {
   };
 }
 
-const GIT_READERS = [
-  "status",
-  "log",
-  "show",
-  "diff",
-  "blame",
-  "ls-files",
-  "ls-tree",
-  "rev-parse",
-  "describe",
-  "shortlog",
-];
-
-const GIT_SUBCOMMANDS = new Map<string, ArgCheck>([
-  ...GIT_READERS.map((name): [string, ArgCheck] => [name, () => true]),
-  // `-O`/`--open-files-in-pager` runs a program on the matches.
-  ["grep", (args) => !hasShort(args, "O") && !hasLong(args, ["--open-files-in-pager"])],
-  [
-    "branch",
-    listOnly("arvl", [
-      "--list",
-      "--all",
-      "--remotes",
-      "--verbose",
-      "--show-current",
-      "--color",
-      "--no-color",
-      "--column",
-      "--no-column",
-      "--format",
-      "--sort",
-      "--contains",
-      "--no-contains",
-      "--merged",
-      "--no-merged",
-      "--points-at",
-    ]),
-  ],
-  // `-n` takes its line count attached (`-n3`), hence the digits.
-  [
-    "tag",
-    listOnly("ln0123456789", [
-      "--list",
-      "--sort",
-      "--contains",
-      "--no-contains",
-      "--merged",
-      "--no-merged",
-      "--points-at",
-      "--format",
-      "--color",
-      "--column",
-      "--no-column",
-    ]),
-  ],
-  [
-    "remote",
-    (args) => args.every((w) => w === "-v" || w === "--verbose") || args[0] === "show" || args[0] === "get-url",
-  ],
-  // A bare `git stash` pushes.
-  ["stash", (args) => args[0] === "list" || args[0] === "show"],
-  [
-    "config",
-    (args) =>
-      (args[0] === "get" ||
-        args[0] === "list" ||
-        args.some((w) => ["--get", "--get-all", "--get-regexp", "--list", "-l"].includes(w))) &&
-      !args.some((w) =>
-        [
-          "--add",
-          "--unset",
-          "--unset-all",
-          "--replace-all",
-          "--rename-section",
-          "--remove-section",
-          "--edit",
-          "-e",
-        ].includes(w),
-      ),
-  ],
-]);
-
 /**
  * `git` reads only: a read subcommand and no `--output`. A global option (`-c`, `-C`, `-p`, …) sits where the
  * subcommand goes, so it never matches one. `--no-pager` is skipped: agents add it often, and it only turns the pager
@@ -331,53 +388,3 @@ function git(words: string[]): boolean {
 function sed([n, script = "", ...files]: string[]): boolean {
   return n === "-n" && /^(\d+|\$)(,(\d+|\$))?p$/.test(script) && files.every((f) => !f.startsWith("-"));
 }
-
-const PLAIN_READERS = [
-  "cat",
-  "head",
-  "tail",
-  "wc",
-  "ls",
-  "pwd",
-  "stat",
-  "du",
-  "df",
-  "which",
-  "type",
-  "whoami",
-  "id",
-  "date",
-  "uname",
-  "echo",
-  "printf",
-  "cut",
-  "tr",
-  "nl",
-  "basename",
-  "dirname",
-  "realpath",
-  "readlink",
-  "cmp",
-  "comm",
-  "diff",
-  "jq",
-  "grep",
-];
-
-// A Map, not an object: `READERS["toString"]` on an object literal would find Object.prototype's.
-const READERS = new Map<string, ArgCheck>([
-  ...PLAIN_READERS.map((name): [string, ArgCheck] => [name, () => true]),
-  // `-o` writes the listing to a file.
-  ["tree", (args) => !hasShort(args, "o") && !hasLong(args, ["--output"])],
-  // `-C` compiles a magic file into the cwd.
-  ["file", (args) => !hasShort(args, "C") && !hasLong(args, ["--compile"])],
-  ["find", (args) => !args.some((w) => /^-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)$/.test(w))],
-  ["fd", (args) => !hasShort(args, "xX") && !hasLong(args, ["--exec", "--exec-batch"])],
-  ["rg", (args) => !hasLong(args, ["--pre", "--hostname-bin"])],
-  ["sort", (args) => !hasShort(args, "o") && !hasLong(args, ["--output", "--compress-program"])],
-  // `uniq in out` writes `out`.
-  ["uniq", (args) => operands(args).length <= 1],
-  ["sed", sed],
-  ["git", git],
-  ["npm", ([sub = ""]) => ["ls", "list", "view", "info", "outdated"].includes(sub)],
-]);

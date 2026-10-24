@@ -63,26 +63,6 @@ export function isPublicAddress(address: string): boolean {
   return !NOT_PUBLIC.check(address, "ipv6");
 }
 
-/** The IPv4 address inside a NAT64 address (`64:ff9b::7f00:1` is 127.0.0.1), or `undefined` for any other. */
-function nat64Target(address: string): string | undefined {
-  // The URL parser writes IPv6 in its shortest form, so the prefix always reads `64:ff9b::`.
-  const normal = new URL(`http://[${address}]/`).hostname.slice(1, -1);
-  if (!normal.startsWith(NAT64)) return undefined;
-  const groups = normal.slice(NAT64.length).split(":").filter(Boolean);
-  if (groups.length > 2) return undefined;
-  const [high = "0", low = "0"] = groups.length === 2 ? groups : ["0", groups[0] ?? "0"];
-  const value = ((Number.parseInt(high, 16) << 16) | Number.parseInt(low, 16)) >>> 0;
-  return [value >>> 24, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join(".");
-}
-
-/** Why `host` can't be fetched, with the way around it for the model. */
-function notPublic(host: string, address = host) {
-  return (
-    `${host === address ? host : `${host} resolves to ${address}, which`} is not a public address. web_fetch only ` +
-    "reads public sites; for a local server, use curl in bash."
-  );
-}
-
 /**
  * Throws unless `hostname` (as `URL.hostname` gives it, with IPv6 in brackets) is public: the address itself, or
  * every address DNS returns for the name. One local answer is enough to refuse, since an attacker's DNS can mix them.
@@ -113,3 +93,23 @@ export const publicLookup: LookupFunction = (hostname, options, callback) => {
     callback(Object.assign(new Error(notPublic(hostname, blocked.address)), { code: BLOCKED }), address, family);
   });
 };
+
+/** The IPv4 address inside a NAT64 address (`64:ff9b::7f00:1` is 127.0.0.1), or `undefined` for any other. */
+function nat64Target(address: string): string | undefined {
+  // The URL parser writes IPv6 in its shortest form, so the prefix always reads `64:ff9b::`.
+  const normal = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  if (!normal.startsWith(NAT64)) return undefined;
+  const groups = normal.slice(NAT64.length).split(":").filter(Boolean);
+  if (groups.length > 2) return undefined;
+  const [high = "0", low = "0"] = groups.length === 2 ? groups : ["0", groups[0] ?? "0"];
+  const value = ((Number.parseInt(high, 16) << 16) | Number.parseInt(low, 16)) >>> 0;
+  return [value >>> 24, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join(".");
+}
+
+/** Why `host` can't be fetched, with the way around it for the model. */
+function notPublic(host: string, address = host) {
+  return (
+    `${host === address ? host : `${host} resolves to ${address}, which`} is not a public address. web_fetch only ` +
+    "reads public sites; for a local server, use curl in bash."
+  );
+}

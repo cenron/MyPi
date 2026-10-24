@@ -28,7 +28,12 @@ afterEach(async () => {
 });
 
 function create(...specs: ServerSpec[]) {
-  manager = new ServerManager(specs, dir, warn);
+  return createIn(dir, ...specs);
+}
+
+/** A manager whose session folder is `cwd`. */
+function createIn(cwd: string, ...specs: ServerSpec[]) {
+  manager = new ServerManager(specs, cwd, warn);
   return manager;
 }
 
@@ -59,6 +64,21 @@ describe("ServerManager", () => {
 
     const servers = create(fakeSpec("ok", overrides));
     await servers.clientFor(file("a/inner/x.ts"));
+    expect(status(servers)?.running).toEqual([file(root)]);
+  });
+
+  // The folder guard's rule for lsp: a root never reaches above the session's folder for a file inside it.
+  it.each([
+    ["the session's folder, not a marked folder above it", "a/sub", {}, "a/sub/x.ts", "a/sub"],
+    ["the outermost marked folder inside the session's", "a/inner", { outermostRoot: true }, "a/inner/x.ts", "a/inner"],
+    ["a file outside the session's folder by its own markers", "a/sub", {}, "b/z.ts", "b"],
+  ])("roots a server at %s", async (_case, cwd, overrides, path, root) => {
+    await mkdir(join(dir, "a/sub"));
+    await mkdir(join(dir, "a/inner"));
+    await writeFile(join(dir, "a/inner/package.json"), "{}");
+
+    const servers = createIn(file(cwd), fakeSpec("ok", overrides));
+    await servers.clientFor(file(path));
     expect(status(servers)?.running).toEqual([file(root)]);
   });
 

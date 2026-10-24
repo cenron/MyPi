@@ -5,12 +5,12 @@ import { fakeSpec } from "../fakes";
 
 describe("capAnswer", () => {
   it("keeps every block that fits", () => {
-    expect(capAnswer("2 symbols:", ["a", "b"], "Narrow it.")).toBe("2 symbols:\na\nb");
+    expect(capAnswer("2 symbols:", ["a", "b"], "symbol", "Narrow it.")).toBe("2 symbols:\na\nb");
   });
 
   it("leaves out whole blocks past the cap, and says how many and how to narrow", () => {
     const block = "x".repeat(MAX_ANSWER_CHARS / 4);
-    const text = capAnswer("5 symbols:", [block, block, block, block, block], "Narrow it.");
+    const text = capAnswer("5 symbols:", [block, block, block, block, block], "symbol", "Narrow it.");
     expect(text.length).toBeLessThan(MAX_ANSWER_CHARS + 200);
     expect(text).toMatch(/\n\nCut at 20000 characters: 2 of 5 symbols not shown\. Narrow it\.$/);
   });

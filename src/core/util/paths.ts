@@ -2,8 +2,17 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type Segment, tokenize } from "./shell";
 
 const UNICODE_SPACES = /[  -   　]/g;
+/** `name=value` words, such as `--file=x`, `if=x` (dd), or `VAR=x`: the value is what may be a path. */
+const ASSIGNMENT = /^[-\w.]+=(.*)$/s;
+
+/** `$HOME` and `${HOME}` where they start a path, for commands `tokenize` gives up on. */
+const HOME_VARIABLE = /\$(?:HOME|\{HOME\})(?=\/|$|[\s;|&)'"`])/g;
+
+/** What splits a command into words when `tokenize` gives up: spaces, operators, quotes, and `=`. */
+const RAW_WORD_BREAK = /[\s;|&()<>'"`=]+/;
 
 /**
  * Resolves a tool's `path` argument to the file pi's edit and write will touch. Mirrors pi's unexported
@@ -39,4 +48,66 @@ export function isInside(dir: string, path: string): boolean {
  */
 export function tempFilePath(prefix: string, extension: string): string {
   return join(tmpdir(), `${prefix}-${randomBytes(8).toString("hex")}${extension}`);
+}
+
+/**
+ * The places a bash command names, resolved to absolute paths: every word that reads as a path (see `isPathWord`),
+ * every `<` target, and every `cd` target, with later words resolved from the folder a `cd` moved to. When `tokenize`
+ * gives up (`$(…)`, variables, redirects to files), the raw text is split instead and `$HOME` counts as `~`.
+ */
+export function commandPaths(command: string, cwd: string, home: string): string[] {
+  const segments = tokenize(command);
+  if (segments === undefined) return rawPaths(command, cwd, home);
+
+  return segmentPaths(segments, cwd, home);
+}
+
+function segmentPaths(segments: Segment[], cwd: string, home: string): string[] {
+  const paths: string[] = [];
+  let dir = cwd;
+
+  for (const { words, inputs } of segments) {
+    for (const input of inputs) paths.push(resolveToolPath(input, dir, home));
+
+    const [name, ...args] = words;
+    if (name === "cd") {
+      const target = cdTarget(args);
+      // `cd -` goes to the shell's previous folder, which no word names.
+      if (target !== "-") {
+        dir = resolveToolPath(target ?? "~", dir, home);
+        paths.push(dir);
+      }
+      continue;
+    }
+
+    for (const word of words.map(assignedValue).filter(isPathWord)) paths.push(resolveToolPath(word, dir, home));
+  }
+
+  return paths;
+}
+
+function rawPaths(command: string, cwd: string, home: string): string[] {
+  const words = command.replace(HOME_VARIABLE, "~").split(RAW_WORD_BREAK);
+  return words.filter(isPathWord).map((word) => resolveToolPath(word, cwd, home));
+}
+
+/** `cd`'s folder: its first argument that isn't an option (`-L`, `-P`, `--`), or undefined for a bare `cd`. */
+function cdTarget(args: string[]): string | undefined {
+  return args.find((arg) => arg === "-" || !arg.startsWith("-"));
+}
+
+/** A word without its `name=` part, if it has one. */
+function assignedValue(word: string): string {
+  return ASSIGNMENT.exec(word)?.[1] ?? word;
+}
+
+/**
+ * True for a word that names a place, so the guard should check it: it starts with `/`, `~/`, or `file://`, is `~`,
+ * or has a `..` step. Other URLs (`https://…`) aren't paths, and a plain relative word (`src/a.ts`) stays inside.
+ */
+function isPathWord(word: string): boolean {
+  if (word.startsWith("file://")) return true;
+  if (word.includes("://")) return false;
+
+  return word.startsWith("/") || word === "~" || word.startsWith("~/") || word.split("/").includes("..");
 }

@@ -44,10 +44,12 @@ beforeAll(() => initTheme("dark"));
 afterEach(() => vi.restoreAllMocks());
 
 describe("LspModule", () => {
-  it("offers the lsp tool, marked read-only so Plan mode allows it", () => {
-    const [tool, ...rest] = start().module.tools();
+  it("offers lsp, marked read-only so Plan mode allows it, and lsp_edit, which Plan asks about", () => {
+    const [lsp, lspEdit, ...rest] = start().module.tools();
     expect(rest).toEqual([]);
-    expect(tool).toMatchObject({ name: "lsp", annotations: { readOnlyHint: true } });
+    expect(lsp).toMatchObject({ name: "lsp", annotations: { readOnlyHint: true } });
+    expect(lspEdit).toMatchObject({ name: "lsp_edit" });
+    expect(lspEdit?.annotations?.readOnlyHint).toBeUndefined();
   });
 
   it("reports each successful edit as changed and write as created", async () => {
