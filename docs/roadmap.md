@@ -6,20 +6,21 @@ here; when the order changes, say why in the row.
 
 ## Next up
 
-Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23. Change it freely.
+Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23; folder-guard added after lsp 2026-10-24. Change it freely.
 
 | # | What | Kind | Why at this point | Needs first |
 |---|---|---|---|---|
 | 1 | [memory](modules/memory.md) | module | **Done 2026-10-23.** Small, no dependencies, and every later session gets better from it. Also answers pair-programmer's "how does it remember how I work". | Nothing |
-| 2 | [lsp](modules/lsp.md) | module | **Building: slice 1 done 2026-10-24** (servers start and stop, `/lsp` menu). Exact navigation by symbol, and the diagnostics the done check wants. | Microsoft's `vscode-languageserver-protocol` (passed the dependency check 2026-10-23) |
-| 3 | [done-check](modules/done-check.md) | module | Catches broken work before I see it. Can start with commands only (typecheck, tests) and add LSP diagnostics once 2 is done. | Nothing; LSP makes it better |
-| 4 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
-| 5 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 4 (worktree) for parallel writers |
-| 6 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (5) |
-| 7 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
-| 8 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
-| 9 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
-| 10 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
+| 2 | [lsp](modules/lsp.md) | module | **Building: slices 1 and 2 done 2026-10-24** (servers start and stop, `/lsp` menu; the `lsp` tool's outline and find_symbol). Exact navigation by symbol, and the diagnostics the done check wants. | Microsoft's `vscode-languageserver-protocol` (passed the dependency check 2026-10-23) |
+| 3 | [folder-guard](rules/folder-guard.md) | core rule | **Building: slice 1 done 2026-10-24** (tools with a `path`). Added 2026-10-24 after a live test where pi ran `find` over the home folder unasked. Small, and every session is safer with it. | Nothing; reuses `ToolGuard` and Plan's `tokenize` |
+| 4 | [done-check](modules/done-check.md) | module | Catches broken work before I see it. Can start with commands only (typecheck, tests) and add LSP diagnostics once 2 is done. | Nothing; LSP makes it better |
+| 5 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
+| 6 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 5 (worktree) for parallel writers |
+| 7 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (6) |
+| 8 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
+| 9 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
+| 10 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
+| 11 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
 
 ## Deferred
 

@@ -7,10 +7,11 @@ import type {
   ToolCallEvent,
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
-
 import { Session } from "#core/session";
 import { registerMcpServers } from "#mcp/index";
 import { loadModules } from "#module/index";
+import type { PromptPaths } from "#rule/base";
+import { registerRules, updatePromptPaths } from "#rule/index";
 import { backgroundRenderer } from "#tool/bash/render";
 import type { Tool } from "#tool/types";
 import { registerCommands } from "./command";
@@ -21,6 +22,8 @@ export class MyPi {
   private session!: Session;
   /** The built-in tools `registerTools` returned, kept to run their `shutdown()` on `session_shutdown`. */
   private tools: Tool[] = [];
+  /** The prompt paths MyPi's own rules share, from `registerRules`; filled on the first run. */
+  private prompt: PromptPaths = { paths: [] };
 
   constructor(readonly pi: ExtensionAPI) {
     // Once per extension load: pi keeps resolvers in a list, so registering on every session_start would stack them.
@@ -29,6 +32,7 @@ export class MyPi {
 
   onSessionStart(ev: SessionStartEvent, ctx: ExtensionContext) {
     this.session = new Session(ctx, this.pi);
+    this.prompt = registerRules(this.session);
     loadModules(this.session, ev.reason);
     // Tools before init(): a module's init() may turn its tools on, and pi ignores names it doesn't know yet.
     this.tools = registerTools(this.pi, this.session);
@@ -40,6 +44,7 @@ export class MyPi {
 
   onBeforeAgentStart(ev: BeforeAgentStartEvent, _ctx: ExtensionContext) {
     this.session.promptManager.apply(ev.systemPromptOptions.sections);
+    updatePromptPaths(this.prompt, ev.systemPromptOptions);
   }
 
   async onToolCall(ev: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> {

@@ -1,16 +1,29 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  CancellationTokenSource,
+  ConfigurationRequest,
   createProtocolConnection,
+  DidChangeTextDocumentNotification,
+  DidChangeWatchedFilesNotification,
+  DidCloseTextDocumentNotification,
+  DidOpenTextDocumentNotification,
+  type DocumentSymbol,
+  DocumentSymbolRequest,
   ExitNotification,
   InitializedNotification,
   type InitializeParams,
   InitializeRequest,
   type ProtocolConnection,
   ShutdownRequest,
+  type SymbolInformation,
+  type WorkspaceSymbol,
+  WorkspaceSymbolRequest,
 } from "vscode-languageserver-protocol/node";
-import { errorMessage } from "#core/util/errors";
+import { errorMessage, isNodeError } from "#core/util/errors";
+import type { FileChange } from "./util/walk";
 
 /** How long a server gets to answer `initialize`; a large project can take a while to load. */
 const INIT_TIMEOUT_MS = 30_000;
@@ -19,10 +32,17 @@ const SHUTDOWN_TIMEOUT_MS = 1_000;
 /** How much of the server's stderr to keep for the error when it fails to start. */
 const STDERR_TAIL_CHARS = 2_000;
 
+/** A file as the server last saw it. */
+type OpenDocument = { version: number; text: string; languageId: string };
+
 /** A running language server: its process and the JSON-RPC connection to it over stdio. */
 export class LspClient {
   /** Resolves once the process has exited, whatever the reason. */
   readonly exited: Promise<void>;
+  /** When `initialize` was answered; a server may still be indexing for a while after. */
+  readonly startedAt = Date.now();
+  /** The files sent to the server, by URI. */
+  private readonly documents = new Map<string, OpenDocument>();
 
   private constructor(
     private readonly child: ChildProcessWithoutNullStreams,
@@ -46,6 +66,8 @@ export class LspClient {
     });
 
     const client = new LspClient(child, createProtocolConnection(child.stdout, child.stdin));
+    // Pyright waits for its settings before it indexes the project; empty settings mean its defaults.
+    client.connection.onRequest(ConfigurationRequest.type, (params) => params.items.map(() => ({})));
     client.connection.listen();
 
     try {
@@ -59,6 +81,80 @@ export class LspClient {
     }
 
     return client;
+  }
+
+  /** True once any file has been sent; an `open_file` server (`beforeSearch`) searches only after that. */
+  get hasOpenDocuments(): boolean {
+    return this.documents.size > 0;
+  }
+
+  /**
+   * Sends `file`'s text from disk: opened the first time, replaced when it changed since (the agent edits between
+   * calls). Returns its URI and the text the server now has.
+   */
+  async sync(file: string, languageId: string): Promise<{ uri: string; text: string }> {
+    const text = await readFile(file, "utf8");
+    const uri = pathToFileURL(file).href;
+    const open = this.documents.get(uri);
+
+    if (!open) {
+      this.documents.set(uri, { version: 1, text, languageId });
+      await this.connection.sendNotification(DidOpenTextDocumentNotification.type, {
+        textDocument: { uri, languageId, version: 1, text },
+      });
+    } else if (open.text !== text) {
+      const version = open.version + 1;
+      this.documents.set(uri, { version, text, languageId });
+      await this.connection.sendNotification(DidChangeTextDocumentNotification.type, {
+        textDocument: { uri, version },
+        contentChanges: [{ text }],
+      });
+    }
+
+    return { uri, text };
+  }
+
+  /**
+   * Sends every open file again that changed on disk since, so a project search doesn't answer from old text. A file
+   * that's gone is closed, so the server stops offering its symbols; one that can't be read for another reason is
+   * left as the server has it.
+   */
+  async syncOpen(): Promise<void> {
+    for (const [uri, { languageId }] of this.documents) {
+      try {
+        await this.sync(fileURLToPath(uri), languageId);
+      } catch (error) {
+        if (isNodeError(error) && error.code === "ENOENT") await this.close(uri);
+      }
+    }
+  }
+
+  private async close(uri: string) {
+    this.documents.delete(uri);
+    await this.connection.sendNotification(DidCloseTextDocumentNotification.type, { textDocument: { uri } });
+  }
+
+  /**
+   * Tells the server files changed on disk; without it, a server keeps its old copy of a file that isn't open. A
+   * "created" report also makes a server re-read a file it already knew.
+   */
+  async reportFileChanges(changes: readonly FileChange[]): Promise<void> {
+    await this.connection.sendNotification(DidChangeWatchedFilesNotification.type, {
+      changes: changes.map(({ file, type }) => ({ uri: pathToFileURL(file).href, type })),
+    });
+  }
+
+  /** The symbols of a file sent with `sync`: a tree when the server follows the capability below, else a flat list. */
+  async documentSymbols(uri: string, signal?: AbortSignal): Promise<DocumentSymbol[] | SymbolInformation[]> {
+    const token = cancelledBy(signal);
+    const symbols = await this.connection.sendRequest(DocumentSymbolRequest.type, { textDocument: { uri } }, token);
+    return symbols ?? [];
+  }
+
+  /** The project's symbols the server matches to `query`, often loosely: callers check the names. */
+  async workspaceSymbols(query: string, signal?: AbortSignal): Promise<(SymbolInformation | WorkspaceSymbol)[]> {
+    const symbols = await this.connection.sendRequest(WorkspaceSymbolRequest.type, { query }, cancelledBy(signal));
+    return symbols ?? [];
   }
 
   get isRunning(): boolean {
@@ -88,10 +184,24 @@ function initializeParams(root: string): InitializeParams {
   return {
     processId: process.pid,
     clientInfo: { name: "MyPi" },
-    rootUri: uri,
+    // Deprecated in favour of workspaceFolders, but still a required field; null leaves the root to the folders.
+    rootUri: null,
     workspaceFolders: [{ uri, name: basename(root) }],
-    capabilities: {},
+    capabilities: {
+      // workspaceFolders: servers read the folders above only from a client that says it supports them.
+      workspace: { configuration: true, workspaceFolders: true, symbol: {}, didChangeWatchedFiles: {} },
+      // Without it, servers send a file's symbols as a flat list, losing which class a method is in.
+      textDocument: { documentSymbol: { hierarchicalDocumentSymbolSupport: true } },
+    },
   };
+}
+
+/** A token that cancels the request when `signal` aborts, such as when the user stops the tool call. */
+function cancelledBy(signal: AbortSignal | undefined) {
+  const source = new CancellationTokenSource();
+  if (signal?.aborted) source.cancel();
+  signal?.addEventListener("abort", () => source.cancel(), { once: true });
+  return source.token;
 }
 
 /** Sends `initialize` and resolves on its answer; rejects when the process fails to spawn, exits, or times out. */

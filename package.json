@@ -19,7 +19,8 @@
     "#tool/*": "./src/tool/*.ts",
     "#module/*": "./src/module/*.ts",
     "#ui/*": "./src/ui/*.ts",
-    "#mcp/*": "./src/mcp/*.ts"
+    "#mcp/*": "./src/mcp/*.ts",
+    "#rule/*": "./src/rule/*.ts"
   },
   "pi": {
     "extensions": [

@@ -26,6 +26,7 @@ MyPi/
 │   ├── command/           # Slash commands: registry, one file or folder per command          (#command/<file>)
 │   ├── tool/              # Built-in tools: registerTools, one file or folder per tool, utils.ts for helpers they share   (#tool/<file>)
 │   ├── mcp/               # MCP servers MyPi registers with pi: registerMcpServers, one file per server   (#mcp/<file>)
+│   ├── rule/              # MyPi's own tool rules, always on: BaseRule, registerRules, one file per rule   (#rule/<file>)
 │   ├── module/            # BaseModule (the module SDK), module list, loadModules, one folder per module   (#module/<file>)
 │   └── ui/                # Feature UI (modules-modal.ts), shared footer.ts and editor.ts; components/: Dialog, ToggleList   (#ui/<file>)
 ├── test/                  # vitest tests, mirroring src/ (index.test.ts covers the wiring; fakes.ts: shared fakes)
@@ -50,6 +51,7 @@ MyPi/
 | Module code | `src/module/<name>/index.ts`, a class extending `BaseModule` (its state type is its own) | Add it to the list in `src/module/index.ts`; tests in `test/module/<name>/` |
 | A module's tool | `src/module/<name>/tools/<tool>.ts`, returning a `ToolDefinition` | Return it from the module's `tools()`, wrapped in `defineTool`; tests in `test/module/<name>/tools/` |
 | A module's command | `src/module/<name>/commands/<command>/index.ts`, returning a `Command`, with files only it uses beside it | Return it from the module's `commands()`; tests in `test/module/<name>/commands/<command>/` |
+| A built-in tool rule (always on, not a module's) | `src/rule/<name>.ts`, a class extending `BaseRule` (`info`, `check`) | Add it to `createRules` in `src/rule/index.ts`; tests in `test/rule/`; a doc in `docs/rules/` |
 | A shared service or helper | `src/core/` (helpers in `src/core/util/`) | Only once more than one place needs it; tests in `test/core/` |
 | A skill | `resources/skills/<name>/SKILL.md` | |
 | A prompt template | `resources/prompts/<name>.md` | |

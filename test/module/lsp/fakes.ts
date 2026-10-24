@@ -11,7 +11,7 @@ export function fakeSpec(mode = "ok", overrides: Partial<ServerSpec> = {}): Serv
     language: "Fake",
     command: process.execPath,
     args: [FAKE_SERVER, mode],
-    extensions: [".ts"],
+    languageIds: { ".ts": "typescript" },
     rootMarkers: ["package.json"],
     install: "npm i -g fake-server",
     ...overrides,

@@ -93,9 +93,18 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   - The sections are fixed for a whole run, so a change made mid-run reaches the model on the next prompt.
   - Pi rejects names outside `^[a-z][a-z0-9_-]*$` when it builds the prompt, outside the handler's try/catch, so a bad
     name fails every prompt. Module names already fit.
-- **`ToolGuard`** (`tool-guard.ts`) lets modules object to tool calls. It's
+- **`ToolGuard`** (`tool-guard.ts`) lets modules, and MyPi itself, object to tool calls. It's
   `session.toolGuard`, and modules add one rule each with `BaseModule.onToolCall(rule)`, keyed by `info.name`.
   `MyPi.onToolCall` is MyPi's only `tool_call` handler and hands each call to the guard.
+  - **MyPi's own rules** live in `src/rule/` (`#rule/<file>`), next to `src/command/` and `src/tool/`, one file each,
+    each a class extending `BaseRule` (`rule/base.ts`): an
+    `info` getter (`name`, `description`) and `check(call, env)`, like a module's `info`. They're listed in
+    `createRules` (`rule/index.ts`); `registerRules(session)` sets each on the guard under `info.name` on every
+    `session_start`, before the modules load, so they're always on. Every rule shares the session's one
+    `PromptPaths`, which `registerRules` creates and returns to `MyPi`: the skill folders and context files pi listed
+    in the prompt. pi hands those over only in `before_agent_start`, so `MyPi.onBeforeAgentStart` calls
+    `updatePromptPaths` (`rule/index.ts`), which fills them once; they change only on `/reload`, which starts over. The first rule is the [folder guard](rules/folder-guard.md)
+    (`rule/folder.ts`). Their docs are in [`docs/rules/`](rules/README.md).
   - Modules also say what a read-only mode (Plan) may still let them write, with `BaseModule.setWritable({ dirs,
     tools })`, keyed by `info.name` like the rules. The guard merges every module's entry into the rule's `env` as
     `writableDirs` and `writableTools` on each call, so no rule holds a copy and module init order doesn't matter.
@@ -426,6 +435,7 @@ Imports use Node subpath imports, declared under `imports` in `package.json`:
 | `#module/<file>`  | `src/module/<file>.ts`  | `import { loadModules } from "#module/index";`    |
 | `#ui/<file>`      | `src/ui/<file>.ts`      | `import { Dialog } from "#ui/components/dialog";` |
 | `#mcp/<file>`     | `src/mcp/<file>.ts`     | `import { registerMcpServers } from "#mcp/index";` |
+| `#rule/<file>`    | `src/rule/<file>.ts`    | `import { registerRules } from "#rule/index";`     |
 
 Each alias maps to a file, not a folder. Nested paths work too: `#core/util/errors` resolves to
 `src/core/util/errors.ts`, and a module folder is `#module/<name>/index`. Inside a folder, use relative imports.
@@ -452,6 +462,7 @@ and only a new process sees the change. Edits to `.ts` files are picked up by `/
 - A session switch (`/new`, `/resume`, `/fork`) builds a new runtime too (`AgentSessionRuntime` in pi 1.2.0 calls its
   `createRuntime` again after `session_shutdown`), so handlers a module adds with `pi.on` in `init()` never stack. A
   module that owns processes releases them that way: lsp registers `session_shutdown` in `init()` to stop its
-  language servers, and starts them only on first use, not in `session_start`.
+  language servers (and `tool_result` to report the agent's file changes to them), and starts them only on first
+  use, not in `session_start`.
 
 See the pi extension docs (`docs/extensions.md` in the installed package) for the event list and API.

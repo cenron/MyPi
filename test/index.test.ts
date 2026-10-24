@@ -70,6 +70,11 @@ function fakeContext() {
   } as unknown as ExtensionCommandContext;
 }
 
+/** pi's prompt options as a run starts: empty sections, and the skills and context files it loaded. */
+function promptOptions(skills: { baseDir: string }[] = []) {
+  return { sections: {}, skills, contextFiles: [] };
+}
+
 function startSession(handlers: Map<string, Handler>) {
   const event: SessionStartEvent = { type: "session_start", reason: "startup" };
   handlers.get("session_start")?.(event, fakeContext());
@@ -123,9 +128,27 @@ describe("mypi extension", () => {
   it.each([["user"], ["custom"]])("writes the modules' prompt sections on a %s run", (messageType) => {
     const { handlers } = loadExtension();
     startSession(handlers);
-    const event = { type: "before_agent_start", messageType, systemPromptOptions: { sections: {} } };
+    const event = { type: "before_agent_start", messageType, systemPromptOptions: promptOptions() };
     handlers.get("before_agent_start")?.(event, fakeContext());
     expect(Object.keys(event.systemPromptOptions.sections)).toContain("mypi-plan-build");
+  });
+
+  // The folder rule is core: it guards every session, and allows what the prompt points the agent at.
+  it("asks before a call reaches outside the folder, except where the last prompt pointed", async () => {
+    const { handlers } = loadExtension();
+    startSession(handlers);
+    const ctx = { ...fakeContext(), hasUI: false };
+    const read = { type: "tool_call", toolCallId: "1", toolName: "read", input: { path: "/skills/herdr/SKILL.md" } };
+    await expect(handlers.get("tool_call")?.(read, ctx)).resolves.toMatchObject({
+      reason: expect.stringContaining("folder-guard: Reaches outside /project: /skills/herdr/SKILL.md"),
+    });
+
+    const options = promptOptions([{ baseDir: "/skills/herdr" }]);
+    handlers.get("before_agent_start")?.(
+      { type: "before_agent_start", messageType: "user", systemPromptOptions: options },
+      ctx,
+    );
+    await expect(handlers.get("tool_call")?.(read, ctx)).resolves.toBeUndefined();
   });
 
   // pi keeps resolvers in a list, so one added on every session_start would stack.

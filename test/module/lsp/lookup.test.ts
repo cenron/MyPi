@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findCommand, markedFolders } from "#module/lsp/util/lookup";
 
@@ -33,7 +33,7 @@ describe("markedFolders", () => {
     ["any of the markers", "repo/a.ts", ["repo"]],
     ["none when no folder has one", "loose/a.ts", []],
   ])("finds %s", (_rule, file, folders) => {
-    const found = markedFolders(join(dir, file), ["tsconfig.json", "package.json"]);
+    const found = markedFolders(dirname(join(dir, file)), ["tsconfig.json", "package.json"]);
     // The temp folder's parents can hold markers of their own; only the ones inside it are under test.
     expect(found.filter((folder) => folder.startsWith(dir))).toEqual(folders.map((folder) => join(dir, folder)));
   });

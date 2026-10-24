@@ -1,6 +1,6 @@
 # Sub-agents
 
-**Status:** planned (design agreed 2026-10-23; #5 on the [roadmap](../roadmap.md), after worktree; milestone 1 first)
+**Status:** planned (design agreed 2026-10-23; #6 on the [roadmap](../roadmap.md), after worktree; milestone 1 first)
 
 **Load type:** `ON_LOAD`. On by default, so the agent can use the `subagent` tool whenever the module is loaded; the user
 can turn it off in `/modules`.

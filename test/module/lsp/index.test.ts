@@ -14,6 +14,11 @@ const ENTER = "\r";
 const ESCAPE = "\x1b";
 const DOWN = "\x1b[B";
 
+/** A `tool_result` event, as pi sends it after a tool ran. */
+function toolResult(toolName: string, path: string, isError = false) {
+  return { type: "tool_result", toolCallId: "1", toolName, input: { path }, content: [], isError, details: undefined };
+}
+
 /** The module, after `init()`, over a fake session whose branch holds `branch`. */
 function start(branch: unknown[] = []) {
   const fake = fakeSession(branch);
@@ -39,6 +44,27 @@ beforeAll(() => initTheme("dark"));
 afterEach(() => vi.restoreAllMocks());
 
 describe("LspModule", () => {
+  it("offers the lsp tool, marked read-only so Plan mode allows it", () => {
+    const [tool, ...rest] = start().module.tools();
+    expect(rest).toEqual([]);
+    expect(tool).toMatchObject({ name: "lsp", annotations: { readOnlyHint: true } });
+  });
+
+  it("reports each successful edit as changed and write as created", async () => {
+    const fileChanged = vi.spyOn(ServerManager.prototype, "fileChanged").mockResolvedValue();
+    const { emit } = start();
+
+    await emit("tool_result", toolResult("edit", "src/a.ts"));
+    await emit("tool_result", toolResult("write", "src/b.ts"));
+    await emit("tool_result", toolResult("write", "src/c.ts", true));
+    await emit("tool_result", toolResult("read", "src/d.ts"));
+
+    expect(fileChanged.mock.calls).toEqual([
+      ["/project/src/a.ts", false],
+      ["/project/src/b.ts", true],
+    ]);
+  });
+
   it("stops every server when the session shuts down", async () => {
     const stopAll = vi.spyOn(ServerManager.prototype, "stopAll").mockResolvedValue();
     const { emit } = start();

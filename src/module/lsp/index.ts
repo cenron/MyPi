@@ -1,8 +1,18 @@
+import { homedir } from "node:os";
+import {
+  type ExtensionContext,
+  isEditToolResult,
+  isWriteToolResult,
+  type ToolDefinition,
+  type ToolResultEvent,
+} from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { resolveToolPath } from "#core/util/paths";
 import { BaseModule } from "../base";
 import { lspCmd } from "./commands/lsp";
 import { ServerManager } from "./manager";
 import { SERVERS } from "./servers";
+import { lspTool } from "./tools/lsp";
 
 /** What the module saves: the ids of the servers turned off in `/lsp`. */
 type LspState = { off: string[] };
@@ -25,11 +35,28 @@ export class LspModule extends BaseModule<LspState> {
   init(): void {
     // Nothing is running yet, so this only restores the off set.
     void this.servers.setOff(this.savedOff());
+    this.session.pi.on("tool_result", (ev, ctx) => this.onToolResult(ev, ctx));
     this.session.pi.on("session_shutdown", () => this.servers.stopAll());
   }
 
   commands(): Command[] {
     return [this.lspCommand];
+  }
+
+  tools(): ToolDefinition[] {
+    return [lspTool(this.servers)];
+  }
+
+  /**
+   * Reports a file the agent edited or wrote to the running servers, so a project search sees it. `write` may have
+   * created the file, so it's reported as created, which servers also take as "read it again".
+   */
+  private async onToolResult(ev: ToolResultEvent, ctx: ExtensionContext) {
+    if (ev.isError || !(isEditToolResult(ev) || isWriteToolResult(ev))) return;
+
+    const path = ev.input.path;
+    if (typeof path !== "string") return;
+    await this.servers.fileChanged(resolveToolPath(path, ctx.cwd, homedir()), isWriteToolResult(ev));
   }
 
   /** The off set from the session; anything that isn't a list of strings counts as none. */

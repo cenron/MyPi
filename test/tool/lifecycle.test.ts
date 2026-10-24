@@ -50,6 +50,7 @@ describe("built-in tool hooks", () => {
       "register web_fetch",
       "register submit_plan",
       "register ask_user",
+      "register lsp",
       "init",
       "module init",
       "module init",
