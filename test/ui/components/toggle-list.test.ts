@@ -82,14 +82,14 @@ describe("ToggleList", () => {
       list.handleInput(ENTER);
 
       expect(handlers.onToggle).not.toHaveBeenCalled();
-      expect(renderText(list)[0]).toMatch(/a \(locked\)\s+●/);
+      expect(renderText(list)[0]).toMatch(/a\s+●/);
     });
 
     // SettingsList pads every label to the longest before styling it, so the disabled one must still match.
     it("stays dim next to a longer label", () => {
       const tagDim = { fg: (color: string, text: string) => (color === "dim" ? `<dim>${text}</dim>` : text) };
       const lines = renderText(new ToggleList(tagDim as unknown as Theme, locked, fakeHandlers()));
-      expect(lines[0]).toMatch(/<dim>a \(locked\)\s*<\/dim>/);
+      expect(lines[0]).toMatch(/<dim>a\s*<\/dim>/);
     });
   });
 });

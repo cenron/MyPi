@@ -34,7 +34,8 @@ export class ToggleList implements Component {
 
     const disabledItems = items.filter((item) => item.disabled);
     const disabledIds = new Set(disabledItems.map((item) => item.id));
-    const disabledLabels = new Set(disabledItems.map((item) => disabledLabel(item.label)));
+    // SettingsList's theme sees only the label text, so a disabled row is found by its label; keep labels unique.
+    const disabledLabels = new Set(disabledItems.map((item) => item.label));
 
     // Set our theme for the label, so it can show disabled items in dim text
     const settingsTheme = getSettingsListTheme();
@@ -48,7 +49,7 @@ export class ToggleList implements Component {
       const currentValue = item.on ? on : off;
       return {
         id: item.id,
-        label: item.disabled ? disabledLabel(item.label) : item.label,
+        label: item.label,
         description: item.description,
         currentValue,
         values: item.disabled ? [currentValue] : [on, off],
@@ -88,9 +89,4 @@ export class ToggleList implements Component {
   handleInput(data: string): void {
     this.list.handleInput(data);
   }
-}
-
-/** A disabled row's label, marked so it reads as locked. */
-function disabledLabel(label: string): string {
-  return `${label} (locked)`;
 }
