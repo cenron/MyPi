@@ -1,15 +1,23 @@
 import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { FileChangeType } from "vscode-languageserver-protocol/node";
 
 /** How many folders `findSourceFile` looks through before giving up, so a huge tree can't stall a call. */
 const MAX_SEARCHED_FOLDERS = 200;
 /** How many folders a project's file times cover; changes in folders past it go unseen. */
 const MAX_TRACKED_FOLDERS = 2_000;
 
-/** A file that changed on disk, as the protocol reports it. */
-export type FileChange = { file: string; type: FileChangeType };
+/** How a file changed on disk between two looks. */
+export const FileChangeKind = {
+  CREATED: "created",
+  CHANGED: "changed",
+  DELETED: "deleted",
+} as const;
+
+export type FileChangeKind = (typeof FileChangeKind)[keyof typeof FileChangeKind];
+
+/** A file that changed on disk between two `fileTimes` results. */
+export type FileChange = { file: string; kind: FileChangeKind };
 
 /**
  * The first file under `root` with one of `extensions`, nearest folders first. Undefined when none turns up in
@@ -25,13 +33,16 @@ export async function findSourceFile(root: string, extensions: readonly string[]
 }
 
 /**
- * Every file under `root` with one of `extensions`, with its modification time, from up to `MAX_TRACKED_FOLDERS`
- * folders. Compared with an earlier one by `fileChanges`, it shows what changed on disk however it changed.
+ * Every file under `root`, or only those with one of `extensions`, with its modification time, from up to
+ * `MAX_TRACKED_FOLDERS` folders. Compared with an earlier one by `fileChanges`, it shows what changed on disk however
+ * it changed: lsp tracks its servers' files with it, and the done check a run's.
  */
-export async function sourceFileTimes(root: string, extensions: readonly string[]): Promise<Map<string, number>> {
+export async function fileTimes(root: string, extensions?: readonly string[]): Promise<Map<string, number>> {
   const times = new Map<string, number>();
   for await (const { dir, entries } of walkFolders(root, MAX_TRACKED_FOLDERS)) {
-    const files = entries.filter((entry) => entry.isFile() && extensions.includes(extname(entry.name)));
+    const files = entries.filter(
+      (entry) => entry.isFile() && (extensions === undefined || extensions.includes(extname(entry.name))),
+    );
     const stats = await Promise.all(files.map((entry) => modifiedAt(join(dir, entry.name))));
     files.forEach((entry, i) => {
       const time = stats[i];
@@ -41,16 +52,16 @@ export async function sourceFileTimes(root: string, extensions: readonly string[
   return times;
 }
 
-/** What changed between two `sourceFileTimes` results: files that appeared, changed, or went away. */
+/** What changed between two `fileTimes` results: files that appeared, changed, or went away. */
 export function fileChanges(before: ReadonlyMap<string, number>, after: ReadonlyMap<string, number>): FileChange[] {
   const changes: FileChange[] = [];
   for (const [file, time] of after) {
     const old = before.get(file);
-    if (old === undefined) changes.push({ file, type: FileChangeType.Created });
-    else if (old !== time) changes.push({ file, type: FileChangeType.Changed });
+    if (old === undefined) changes.push({ file, kind: FileChangeKind.CREATED });
+    else if (old !== time) changes.push({ file, kind: FileChangeKind.CHANGED });
   }
   for (const file of before.keys()) {
-    if (!after.has(file)) changes.push({ file, type: FileChangeType.Deleted });
+    if (!after.has(file)) changes.push({ file, kind: FileChangeKind.DELETED });
   }
   return changes;
 }

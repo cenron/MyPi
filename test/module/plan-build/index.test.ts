@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionContext, ToolCallEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ask } from "#core/events";
 import type { Session } from "#core/session";
 import { PlanBuildModule } from "#module/plan-build/index";
 import { BUILD_PROMPT, PLAN_PROMPT } from "#module/plan-build/prompts";
@@ -57,6 +58,15 @@ describe("PlanBuildModule", () => {
     const { session, appendEntry } = fakeSession([saved("build")]);
     new PlanBuildModule(session).init();
     expect(appendEntry).not.toHaveBeenCalled();
+  });
+
+  it("answers mode on the bus with the current mode", async () => {
+    const { session, run } = startPlanBuild();
+    expect(await ask(session.pi.events, "mode", undefined)).toEqual([
+      { from: "plan-build", kind: "answer", value: "plan" },
+    ]);
+    await run("build");
+    expect(await ask(session.pi.events, "mode", undefined)).toMatchObject([{ value: "build" }]);
   });
 
   it("restores the mode /plan saved, as after a /reload", async () => {

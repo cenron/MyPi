@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FileChangeType } from "vscode-languageserver-protocol/node";
+import { FileChangeKind } from "#core/util/walk";
 import { LspClient } from "#module/lsp/client";
 import { FAKE_SERVER } from "./fakes";
 
@@ -84,8 +85,8 @@ describe("LspClient talking to a server", () => {
 
   it("reports files changed or created on disk", async () => {
     await client.reportFileChanges([
-      { file: join(dir, "a.ts"), type: FileChangeType.Changed },
-      { file: join(dir, "b.ts"), type: FileChangeType.Created },
+      { file: join(dir, "a.ts"), kind: FileChangeKind.CHANGED },
+      { file: join(dir, "b.ts"), kind: FileChangeKind.CREATED },
     ]);
     const [reported] = await client.workspaceSymbols("__changes__");
     expect(JSON.parse(reported?.name ?? "")).toEqual([

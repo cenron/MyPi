@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Editor } from "#ui/editor";
 import { Footer, FooterColor } from "#ui/footer";
+import { subscribe } from "./events";
 import { JobManager } from "./job-manager";
 import { ModuleManager } from "./module-manager";
 import { Notifier } from "./notifier";
@@ -33,9 +34,9 @@ export class Session {
     this.editor = new Editor(ctx);
     this.promptManager = new PromptManager();
     this.toolGuard = new ToolGuard(pi);
-    this.jobs = new JobManager();
+    this.jobs = new JobManager(pi.events);
     // How many jobs are running, of any kind, shown only while there are some.
-    this.jobs.onChange((running) =>
+    subscribe(pi.events, "jobs", (running) =>
       this.footer.set(
         "jobs",
         running ? { text: running === 1 ? "1 job" : `${running} jobs`, color: FooterColor.ACCENT } : undefined,

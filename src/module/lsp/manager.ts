@@ -1,11 +1,10 @@
 import { dirname, extname } from "node:path";
-import { FileChangeType } from "vscode-languageserver-protocol/node";
 import { errorMessage } from "#core/util/errors";
 import { isInside } from "#core/util/paths";
+import { FileChangeKind, fileChanges, fileTimes, modifiedAt } from "#core/util/walk";
 import { LspClient } from "./client";
 import { languageIdOf, type ServerSpec } from "./servers";
 import { findCommand, markedFolders } from "./util/lookup";
-import { fileChanges, modifiedAt, sourceFileTimes } from "./util/walk";
 
 /**
  * One server for one project root: starting (`starting` pending), running (`client`), or failed to start (`error`).
@@ -101,7 +100,7 @@ export class ServerManager {
    * `created`. Servers that aren't running read it fresh when they start.
    */
   async fileChanged(file: string, created: boolean): Promise<void> {
-    const type = created ? FileChangeType.Created : FileChangeType.Changed;
+    const kind = created ? FileChangeKind.CREATED : FileChangeKind.CHANGED;
     const time = await modifiedAt(file);
 
     const reports = [...this.instances.values()]
@@ -109,7 +108,7 @@ export class ServerManager {
       .map((instance) => {
         // Already reported, so the next look at the disk doesn't report it again.
         if (time !== undefined) instance.times?.set(file, time);
-        return instance.client?.reportFileChanges([{ file, type }]);
+        return instance.client?.reportFileChanges([{ file, kind }]);
       });
     await Promise.allSettled(reports);
   }
@@ -122,7 +121,7 @@ export class ServerManager {
     const instance = this.instances.get(instanceKey(spec, root));
     if (!instance?.times) return;
 
-    const times = await sourceFileTimes(root, Object.keys(spec.languageIds));
+    const times = await fileTimes(root, Object.keys(spec.languageIds));
     const changes = fileChanges(instance.times, times);
     instance.times = times;
     if (changes.length > 0) await client.reportFileChanges(changes);
@@ -195,7 +194,7 @@ export class ServerManager {
     try {
       client = await LspClient.start(spec.command, spec.args, root);
       // What the server sees now: later looks report what changed since.
-      instance.times = await sourceFileTimes(root, Object.keys(spec.languageIds));
+      instance.times = await fileTimes(root, Object.keys(spec.languageIds));
     } catch (error) {
       instance.error = errorMessage(error);
       this.warn(`LSP: ${spec.language} server failed to start in ${root}: ${instance.error}\nRetry with Save in /lsp.`);

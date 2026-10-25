@@ -62,6 +62,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
     // submit_plan writes only its own file in .pi/plans/.
     this.setWritable({ dirs: [join(this.session.ctx.cwd, PLANS_DIR)], tools: [SUBMIT_PLAN] });
+    // Other modules, such as the done check, ask which mode is on.
+    this.answer("mode", () => this.mode);
   }
 
   commands(): Command[] {

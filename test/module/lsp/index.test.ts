@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { type ExtensionCommandContext, initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { ask } from "#core/events";
 import { LspModule } from "#module/lsp/index";
 import { ServerManager } from "#module/lsp/manager";
 import { SERVERS } from "#module/lsp/servers";
@@ -44,6 +45,20 @@ beforeAll(() => initTheme("dark"));
 afterEach(() => vi.restoreAllMocks());
 
 describe("LspModule", () => {
+  // problemsIn's own tests cover what's checked; here, that the module answers on the bus and warns once.
+  it("answers diagnostics on the bus, warning once per server that can't run", async () => {
+    const [typescript] = SERVERS;
+    vi.spyOn(ServerManager.prototype, "clientFor").mockResolvedValue({ kind: "missing", spec: typescript });
+    const { session, notify } = start();
+    const request = { files: ["/project/a.ts", "/project/b.ts"] };
+
+    expect(await ask(session.pi.events, "diagnostics", request)).toEqual([{ from: "lsp", kind: "answer", value: [] }]);
+    await ask(session.pi.events, "diagnostics", request);
+    expect(notify.mock.calls).toEqual([
+      [expect.stringMatching(/^LSP: the done check skips \.ts files: tsc isn't installed/), "warning"],
+    ]);
+  });
+
   it("offers lsp, marked read-only so Plan mode allows it, and lsp_edit, which Plan asks about", () => {
     const [lsp, lspEdit, ...rest] = start().module.tools();
     expect(rest).toEqual([]);

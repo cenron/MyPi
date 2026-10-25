@@ -83,7 +83,7 @@ Decided 2026-10-22.
 | Output | The log file, read with pi's `read` | No output tool, as in Claude Code. `pi-job-<hex>.log` in `os.tmpdir()`, mode `0600`, kept after the job ends. |
 | `job_list`, `job_stop` | Two small tools | The model can stop what it started, as with Claude Code's `TaskStop`. |
 | Exit notice | `pi.sendMessage({ customType: "mypi-job", … }, { deliverAs: "followUp", triggerTurn: true })` | Queued for after the current run while the agent works; starts a turn when idle. The `bash` description says not to poll. |
-| Footer | `session.footer` | The number of running jobs, shown only while there are any. |
+| Footer | `session.footer` | The number of running jobs, shown only while there are any, published on the `jobs` channel of the [event bus](../modules/done-check.md#the-event-bus). |
 | Cleanup | `MyPi.onSessionEnd` calls `session.jobs.stopAll()` | pi also kills tracked children on an emergency exit. |
 
 ## Slices
@@ -364,7 +364,8 @@ always "Stopped", reporting a racing exit as stopped, a line without its log fil
 
 ## Slice 5: the footer item and display
 
-Done 2026-10-22. The footer shows how many jobs are running, and background `bash` calls get their own short drawing;
+Done 2026-10-22. Since 2026-10-24 (done-check slice 1), the count goes over the event bus's `jobs` channel, and
+`onChange` below is gone; `stopAll()` stops publishing instead of dropping listeners. The footer shows how many jobs are running, and background `bash` calls get their own short drawing;
 foreground calls keep pi's.
 
 Files: `onChange` in `src/core/job-manager.ts`, the footer wiring in `src/core/session.ts`, `src/tool/bash/render.ts`

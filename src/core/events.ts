@@ -1,0 +1,101 @@
+import type { EventBus } from "@earendil-works/pi-coding-agent";
+import { errorMessage } from "./util/errors";
+
+/** A problem a diagnostics source found in a file, 1-based, such as a type error. */
+export type Problem = {
+  file: string;
+  line: number;
+  column: number;
+  severity: "error" | "warning" | "info" | "hint";
+  message: string;
+  /** Where it came from, such as `ts 2322`. */
+  origin?: string;
+};
+
+/**
+ * Every notice MyPi publishes, by channel, with what it carries. One place to see what parts tell each other; each
+ * says who publishes and who listens.
+ */
+export type MyPiNotices = {
+  /** How many jobs are running. `JobManager` publishes; `Session`'s footer item listens (later the fleet view). */
+  jobs: number;
+};
+
+/**
+ * Every question MyPi asks, by channel: what the asker sends and what each listener answers. Each says who asks and
+ * who answers.
+ */
+export type MyPiQuestions = {
+  /** Plan or Build. The done check asks; plan-build answers. */
+  mode: { request: undefined; answer: "plan" | "build" };
+  /** The problems in `files`. The done check asks; the LSP module answers. */
+  diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
+};
+
+/** One listener's answer to a question, or why it failed, with the module it came from. */
+export type Answer<T> = { from: string; kind: "answer"; value: T } | { from: string; kind: "failed"; error: string };
+
+/** What an asked question carries on the bus: the request, and the list every answering listener adds to. */
+type Asked<K extends keyof MyPiQuestions> = {
+  request: MyPiQuestions[K]["request"];
+  answers: { from: string; answer: Promise<MyPiQuestions[K]["answer"]> }[];
+};
+
+/** pi's bus is shared by every extension, so MyPi's channels carry its name. */
+const NOTICE_PREFIX = "mypi:";
+const QUESTION_PREFIX = "mypi:ask:";
+
+/** Tells every listener on `channel`, through pi's bus. Nothing comes back. */
+export function publish<K extends keyof MyPiNotices>(events: EventBus, channel: K, notice: MyPiNotices[K]): void {
+  events.emit(NOTICE_PREFIX + channel, notice);
+}
+
+/** Calls `handler` with each notice on `channel`. Returns a function that stops it; pi also stops it on `/reload`. */
+export function subscribe<K extends keyof MyPiNotices>(
+  events: EventBus,
+  channel: K,
+  handler: (notice: MyPiNotices[K]) => void,
+): () => void {
+  // A cast at the boundary: MyPi's channels are written only through `publish`.
+  return events.on(NOTICE_PREFIX + channel, (data) => handler(data as MyPiNotices[K]));
+}
+
+/**
+ * Asks every listener on `channel` and waits for all their answers. Each answering listener adds its answer to the
+ * request as it's emitted: Node's `EventEmitter`, which pi's bus is, calls every listener before `emit` returns, so
+ * the list is complete then. Empty when nobody answers. A listener that fails comes back as `failed`, for the asker
+ * to report.
+ */
+export async function ask<K extends keyof MyPiQuestions>(
+  events: EventBus,
+  channel: K,
+  request: MyPiQuestions[K]["request"],
+): Promise<Answer<MyPiQuestions[K]["answer"]>[]> {
+  const asked: Asked<K> = { request, answers: [] };
+  events.emit(QUESTION_PREFIX + channel, asked);
+
+  return Promise.all(
+    asked.answers.map(async ({ from, answer }): Promise<Answer<MyPiQuestions[K]["answer"]>> => {
+      try {
+        return { from, kind: "answer", value: await answer };
+      } catch (error) {
+        return { from, kind: "failed", error: errorMessage(error) };
+      }
+    }),
+  );
+}
+
+/** Answers every question on `channel` as module `from`. Returns a function that stops it; pi also stops it on `/reload`. */
+export function answer<K extends keyof MyPiQuestions>(
+  events: EventBus,
+  channel: K,
+  from: string,
+  handler: (request: MyPiQuestions[K]["request"]) => Promise<MyPiQuestions[K]["answer"]> | MyPiQuestions[K]["answer"],
+): () => void {
+  return events.on(QUESTION_PREFIX + channel, (data) => {
+    // A cast at the boundary: MyPi's questions are emitted only through `ask`.
+    const asked = data as Asked<K>;
+    // Added now, while `ask`'s emit is still running; the handler itself runs after.
+    asked.answers.push({ from, answer: Promise.resolve(asked.request).then(handler) });
+  });
+}

@@ -1,11 +1,12 @@
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-  ExtensionContext,
-  RegisteredCommand,
-  SessionStartEvent,
-  ToolCallEvent,
-  ToolDefinition,
+import {
+  createEventBus,
+  type ExtensionAPI,
+  type ExtensionCommandContext,
+  type ExtensionContext,
+  type RegisteredCommand,
+  type SessionStartEvent,
+  type ToolCallEvent,
+  type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
@@ -31,6 +32,7 @@ function loadExtension() {
   const toolRenderers: unknown[] = [];
   let active = [...registered];
   const pi = {
+    events: createEventBus(),
     // Keeps the entry point's own handler: modules subscribe later, from init(), and would replace it here.
     on: (event: string, handler: Handler) => {
       if (!handlers.has(event)) handlers.set(event, handler);

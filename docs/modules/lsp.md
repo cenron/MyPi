@@ -161,7 +161,7 @@ severity in the header, or "No problems in <file>". Two ways, by what the server
   changes on its own (checked: an edited file stayed old after waiting). Changes are reported to the servers with
   `workspace/didChangeWatchedFiles`, two ways, and no watcher runs in the background:
   - **Checked before each project search** (`ServerManager.projectClients`). When a server starts, the module records
-    the modification time of each of its project's source files (`sourceFileTimes` in `util/walk.ts`: the files with
+    the modification time of each of its project's source files (`fileTimes` in `src/core/util/walk.ts`: the files with
     its extensions, skipping hidden folders and `node_modules`, in up to 2,000 folders). Before each project-wide
     search it looks again and reports what was created, changed, or deleted since (`fileChanges`), however it
     happened: the agent, bash, `git checkout`, or the user's editor. A scan took 4 ms for MyPi (142 files) and
@@ -186,7 +186,7 @@ severity in the header, or "No problems in <file>". Two ways, by what the server
   (the server's defaults). Pyright waits for that answer before it indexes the project.
 - **Before a project search** (`beforeSearch` in the server list). Servers differ in when a project search works:
   - `open_file` (TypeScript): it searches nothing until a file of the project is open, so the tool opens one first
-    (`findSourceFile` in `util/walk.ts`: nearest folders first, skipping hidden folders and `node_modules`).
+    (`findSourceFile` in `src/core/util/walk.ts`: nearest folders first, skipping hidden folders and `node_modules`).
   - `wait_for_index` (Pyright): it indexes for a few seconds after starting, and an open file would make the first
     answer cover only that file. An empty answer is asked again every 0.5 s until 5 s after the server started.
   - unset (gopls): it answers once started.
@@ -290,7 +290,8 @@ export const SERVERS = [
 | Diagnostics after a turn | Asked for by the [done check](done-check.md) | Pi lets an extension rewrite another tool's result (`tool_result` returns `content`, checked in pi 1.2.0's `types.d.ts`), so per-edit diagnostics stay possible if they're ever wanted. |
 | Tools | `lsp` and `lsp_edit`, each with an `action` parameter, returned from the module's `tools()` | One schema per side instead of one per operation keeps the context cost per request down. `lsp` is marked `readOnlyHint: true`, so Plan mode allows it. `lsp_edit` isn't marked read-only, so Plan mode asks first, like any other tool that writes. Two tools because Plan's rule (`src/module/plan-build/rule.ts`) judges a whole tool, not an action; the alternative, a seam that lets a tool say which inputs are read-only, would change core and plan-build for one user. |
 | Menu | `/lsp` command from the module's `commands()` (`commands/lsp.ts`), UI in `menu.ts` | See [The `/lsp` menu](#the-lsp-menu). |
-| Servers | `ServerManager` (`manager.ts`) over `LspClient` (`client.ts`); `markedFolders` and `findCommand` in `util/lookup.ts`; `findSourceFile`, `sourceFileTimes`, and `fileChanges` in `util/walk.ts` | Started by the `lsp` tool on first use (`clientFor`, `projectClients`); stopped on `session_shutdown`. `projectClients` reports what changed on disk since the last look; a `tool_result` handler reports the agent's edits and writes at once (`fileChanged`). Both handlers are registered in `init()`: pi builds a new extension runtime for every session, so they don't stack. |
+| Servers | `ServerManager` (`manager.ts`) over `LspClient` (`client.ts`); `markedFolders` and `findCommand` in `util/lookup.ts`; `findSourceFile`, `fileTimes`, and `fileChanges` in `src/core/util/walk.ts` | Started by the `lsp` tool on first use (`clientFor`, `projectClients`); stopped on `session_shutdown`. `projectClients` reports what changed on disk since the last look; a `tool_result` handler reports the agent's edits and writes at once (`fileChanged`). Both handlers are registered in `init()`: pi builds a new extension runtime for every session, so they don't stack. |
+| The done check | `answer("diagnostics")` on the [event bus](done-check.md#the-event-bus), in `init()` (`problems.ts`) | For each changed file a server serves: the server is brought up to date with the disk once, then asked, as the `diagnostics` action does (`fileProblems` in `tools/diagnostics.ts`). A server turned off is skipped quietly; one not installed, or that failed to start, is skipped with one warning per session ("the done check skips .ts files: …"), so the user can fix it. |
 | Name paths | `symbols.ts` | Pure: a server's outline to name paths (`namedSymbols`), Serena's rule (`matchesNamePath`), kind names. |
 | Server list | `src/module/lsp/servers.ts` | See [Adding a server](#adding-a-server). |
 

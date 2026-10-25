@@ -2,14 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { FileChangeType } from "vscode-languageserver-protocol/node";
-import { fileChanges, findSourceFile, sourceFileTimes } from "#module/lsp/util/walk";
+import { FileChangeKind, fileChanges, fileTimes, findSourceFile } from "#core/util/walk";
 
 let tree: string;
 
 // Nearest first: the hidden and node_modules files sit one folder down, c.ts two, far.ts (last by name) three.
 beforeAll(async () => {
-  tree = await mkdtemp(join(tmpdir(), "mypi-lsp-walk-"));
+  tree = await mkdtemp(join(tmpdir(), "mypi-walk-"));
   for (const folder of ["z/y/x", ".hidden", "node_modules", "src/lib"]) {
     await mkdir(join(tree, folder), { recursive: true });
   }
@@ -29,11 +28,18 @@ describe("findSourceFile", () => {
   });
 });
 
-describe("sourceFileTimes", () => {
+describe("fileTimes", () => {
   it("times every file with the extensions, skipping hidden folders and node_modules", async () => {
-    const times = await sourceFileTimes(tree, [".ts"]);
+    const times = await fileTimes(tree, [".ts"]);
     expect([...times.keys()].sort()).toEqual([join(tree, "src/lib/c.ts"), join(tree, "z/y/x/far.ts")]);
     expect(times.get(join(tree, "src/lib/c.ts"))).toBeGreaterThan(0);
+  });
+
+  it("times every file when no extensions are given", async () => {
+    const times = await fileTimes(tree);
+    expect([...times.keys()].sort()).toEqual(
+      [join(tree, "README.md"), join(tree, "src/lib/c.ts"), join(tree, "z/y/x/far.ts")].sort(),
+    );
   });
 });
 
@@ -51,9 +57,9 @@ describe("fileChanges", () => {
 
   it("reports files that appeared, changed, or went away, and nothing for the rest", () => {
     expect(fileChanges(before, after)).toEqual([
-      { file: "edited", type: FileChangeType.Changed },
-      { file: "new", type: FileChangeType.Created },
-      { file: "gone", type: FileChangeType.Deleted },
+      { file: "edited", kind: FileChangeKind.CHANGED },
+      { file: "new", kind: FileChangeKind.CREATED },
+      { file: "gone", kind: FileChangeKind.DELETED },
     ]);
   });
 });

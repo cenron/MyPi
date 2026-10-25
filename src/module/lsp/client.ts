@@ -18,6 +18,7 @@ import {
   type DocumentSymbol,
   DocumentSymbolRequest,
   ExitNotification,
+  FileChangeType,
   ImplementationRequest,
   InitializedNotification,
   type InitializeParams,
@@ -38,7 +39,7 @@ import {
   WorkspaceSymbolRequest,
 } from "vscode-languageserver-protocol/node";
 import { errorMessage, isNodeError } from "#core/util/errors";
-import type { FileChange } from "./util/walk";
+import { type FileChange, FileChangeKind } from "#core/util/walk";
 
 /** How long a server gets to answer `initialize`; a large project can take a while to load. */
 const INIT_TIMEOUT_MS = 30_000;
@@ -48,6 +49,13 @@ const SHUTDOWN_TIMEOUT_MS = 1_000;
 const STDERR_TAIL_CHARS = 2_000;
 /** How long to wait for a server that pushes diagnostics to send them for a file's current text. */
 const PUBLISH_TIMEOUT_MS = 10_000;
+
+/** MyPi's file change kinds as the protocol numbers them. */
+const PROTOCOL_CHANGES = {
+  [FileChangeKind.CREATED]: FileChangeType.Created,
+  [FileChangeKind.CHANGED]: FileChangeType.Changed,
+  [FileChangeKind.DELETED]: FileChangeType.Deleted,
+} as const satisfies Record<FileChangeKind, FileChangeType>;
 
 /** A file as the server last saw it. */
 type OpenDocument = { version: number; text: string; languageId: string };
@@ -170,7 +178,7 @@ export class LspClient {
    */
   async reportFileChanges(changes: readonly FileChange[]): Promise<void> {
     await this.connection.sendNotification(DidChangeWatchedFilesNotification.type, {
-      changes: changes.map(({ file, type }) => ({ uri: pathToFileURL(file).href, type })),
+      changes: changes.map(({ file, kind }) => ({ uri: pathToFileURL(file).href, type: PROTOCOL_CHANGES[kind] })),
     });
   }
 

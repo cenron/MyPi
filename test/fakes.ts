@@ -1,4 +1,10 @@
-import type { ExtensionAPI, ExtensionContext, McpServerConfig, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import {
+  createEventBus,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type McpServerConfig,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import { type Mock, vi } from "vitest";
 import { Session } from "#core/session";
 import type { Module, ModuleLoadMode } from "#core/types";
@@ -44,6 +50,8 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project") {
       handlers.set(event, [...(handlers.get(event) ?? []), handler]);
       return () => {};
     },
+    // pi's own bus, so MyPi's publish, subscribe, ask, and answer run as they do in pi.
+    events: createEventBus(),
     sendUserMessage: vi.fn(),
     sendMessage: vi.fn(),
     registerMessageRenderer: vi.fn(),
@@ -64,8 +72,11 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project") {
     ui,
     sessionManager: { getBranch: () => branch },
   } as unknown as ExtensionContext;
+  /** Runs every handler of `event` in order, as pi does; returns the last one's result, for events that take one. */
   const emit = async (event: string, ev: unknown, eventCtx: ExtensionContext = ctx) => {
-    for (const handler of handlers.get(event) ?? []) await handler(ev, eventCtx);
+    let result: unknown;
+    for (const handler of handlers.get(event) ?? []) result = await handler(ev, eventCtx);
+    return result;
   };
   const session = new Session(ctx, pi as unknown as ExtensionAPI);
   return {

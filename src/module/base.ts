@@ -1,5 +1,6 @@
 import type { SessionManager, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
+import * as bus from "#core/events";
 import type { Session } from "#core/session";
 import type { ToolRule, Writable } from "#core/tool-guard";
 import type { Command, Module, ModuleInfo } from "#core/types";
@@ -67,6 +68,31 @@ export abstract class BaseModule<State = never> implements Module {
   /** Sets this module's system prompt section, or removes it with `undefined`; the next run sends it. */
   protected setPrompt(prompt: string | undefined) {
     this.session.promptManager.set(this.info.name, prompt);
+  }
+
+  /** Tells every listener on `channel` (`MyPiNotices`). */
+  protected publish<K extends keyof bus.MyPiNotices>(channel: K, notice: bus.MyPiNotices[K]) {
+    bus.publish(this.session.pi.events, channel, notice);
+  }
+
+  /** Calls `handler` with each notice on `channel` (`MyPiNotices`) until `/reload`. */
+  protected subscribe<K extends keyof bus.MyPiNotices>(channel: K, handler: (notice: bus.MyPiNotices[K]) => void) {
+    bus.subscribe(this.session.pi.events, channel, handler);
+  }
+
+  /** Asks every module that answers on `channel` (`MyPiQuestions`); empty when none does. */
+  protected ask<K extends keyof bus.MyPiQuestions>(channel: K, request: bus.MyPiQuestions[K]["request"]) {
+    return bus.ask(this.session.pi.events, channel, request);
+  }
+
+  /** Answers every question on `channel` (`MyPiQuestions`) as this module, until `/reload`. */
+  protected answer<K extends keyof bus.MyPiQuestions>(
+    channel: K,
+    handler: (
+      request: bus.MyPiQuestions[K]["request"],
+    ) => Promise<bus.MyPiQuestions[K]["answer"]> | bus.MyPiQuestions[K]["answer"],
+  ) {
+    bus.answer(this.session.pi.events, channel, this.info.name, handler);
   }
 
   /**

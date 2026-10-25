@@ -152,6 +152,10 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
       most redirects). `isReadOnlyCommand(command)` is an allowlist on top of it; plan-build's
       [Plan rule](modules/plan-build.md#plan-rule) lists what it allows. `paths.ts`'s `commandPaths`, the folder
       guard's bash check, reads the places a command names from it.
+    - `walk.ts`: `fileTimes(root, extensions?)` times every file under a folder (skipping hidden folders and
+      `node_modules`), and `fileChanges(before, after)` says what was created, changed, or deleted between two; lsp
+      tracks its servers' files with them, and the done check a run's. `findSourceFile` finds the nearest file with
+      given extensions.
     - `paths.ts`: `resolveToolPath(path, cwd, home)` mirrors pi's unexported `resolveToCwd`, the resolver `edit` and
       `write` use (`dist/utils/paths.js`), step for step: Unicode spaces to plain spaces, strip one leading `@`,
       expand `~` and `~/` (not `~user`), convert `file://` URLs, then resolve against `cwd`. A test compares it with
@@ -160,12 +164,19 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
       compares text only: a symlink under `dir` that points outside counts as inside. `tempFilePath(prefix, ext)` is
       a new random path in `os.tmpdir()` (`<prefix>-<16 hex><ext>`), for job logs and web_fetch's saved full text;
       create it with `flag: "wx"`.
+- **The event bus** (`events.ts`): MyPi's messages between parts, over pi's own `pi.events` (a Node `EventEmitter`
+  shared by every extension; pi drops an extension's listeners on `/reload`). `publish`/`subscribe` carry notices;
+  `ask`/`answer` carry questions every listener answers, gathered because `emit` calls every listener before it
+  returns (a test pins that). Channels go out as `mypi:<name>`; `MyPiNotices` and `MyPiQuestions` list every one, with
+  who publishes or asks and who listens or answers. Modules use `BaseModule`'s `publish`, `subscribe`, `ask`, and
+  `answer`; core calls the functions with `session.pi.events`. For messages between parts that core doesn't combine;
+  the services below stay services. See [done check](modules/done-check.md#the-event-bus).
 - **`JobManager`** (`job-manager.ts`) is `session.jobs`: long-running work that goes on after the tool call that
   started it. A job is a `JobSpec` (`kind`, `label`, `run(signal, write)`; in `types.ts` with `JobInfo` and
   `JobStatus`); `start` gives it an id counting up from 1, a log file (`pi-job-<hex>.log` in `os.tmpdir()`, `0600`,
   kept after it ends), and a 50K-character tail in memory, and records how it ended: `completed`, `failed` (an exit
-  code or a thrown error), or `stopped`. `onChange` tells listeners the running count on every start and end;
-  `Session` uses it for the `jobs` footer item, and `stopAll()` drops the listeners. Generic on purpose: shell
+  code or a thrown error), or `stopped`. It publishes the running count on the bus's `jobs` channel on every start and
+  end; `Session` listens for the `jobs` footer item, and `stopAll()` stops publishing. Generic on purpose: shell
   commands are one kind (`shellJob` in `src/tool/bash/`, through pi's own `createLocalBashOperations().exec`, which
   kills the process tree on abort), and subagents can be a second. `MyPi.onSessionEnd` calls `stopAll()` before the
   tools' shutdown. See [background process](tools/background-process.md).

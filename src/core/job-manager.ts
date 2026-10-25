@@ -1,5 +1,6 @@
 import { createWriteStream, type WriteStream } from "node:fs";
-import { DEFAULT_MAX_BYTES } from "@earendil-works/pi-coding-agent";
+import { DEFAULT_MAX_BYTES, type EventBus } from "@earendil-works/pi-coding-agent";
+import { publish } from "./events";
 import type { Job, JobInfo, JobSpec } from "./types";
 import { errorMessage } from "./util/errors";
 import { tempFilePath } from "./util/paths";
@@ -12,12 +13,16 @@ type Entry = Job & { controller: AbortController };
 
 /**
  * The session's jobs: long-running work that goes on after the tool call that started it. Shell commands are the
- * first kind; subagents can be another. One per `Session`; `stopAll()` runs on `session_shutdown`.
+ * first kind; subagents can be another. One per `Session`; `stopAll()` runs on `session_shutdown`. Publishes how many
+ * are running on the `jobs` channel whenever one starts or ends.
  */
 export class JobManager {
   private nextId = 1;
   private readonly jobs = new Map<string, Entry>();
-  private readonly listeners = new Set<(running: number) => void>();
+  /** Set by `stopAll()`: the jobs end after the session has, when nothing should reach its UI. */
+  private closed = false;
+
+  constructor(readonly events: EventBus) {}
 
   /** Starts `spec` at once. Ids count up from 1 in this session. */
   start(spec: JobSpec): Job {
@@ -68,20 +73,11 @@ export class JobManager {
   }
 
   /**
-   * Calls `listener` with the number of running jobs whenever a job starts or ends. Returns a function that removes
-   * it. `stopAll()` drops every listener, since it runs only when the session ends.
-   */
-  onChange(listener: (running: number) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  /**
-   * Stops every running job without waiting, so `session_shutdown` stays synchronous. Safe to call twice. Drops the
-   * listeners first: the jobs end after the session has, when nothing should reach its UI.
+   * Stops every running job without waiting, so `session_shutdown` stays synchronous. Safe to call twice. Stops
+   * publishing first: the jobs end after the session has, when nothing should reach its UI.
    */
   stopAll(): void {
-    this.listeners.clear();
+    this.closed = true;
     for (const job of this.jobs.values()) job.controller.abort();
   }
 
@@ -108,8 +104,10 @@ export class JobManager {
   }
 
   private notify() {
+    if (this.closed) return;
+
     const running = [...this.jobs.values()].filter((job) => job.info.status === "running").length;
-    for (const listener of this.listeners) listener(running);
+    publish(this.events, "jobs", running);
   }
 
   /** A new job's info: the next id, running from now, with a new log file. */

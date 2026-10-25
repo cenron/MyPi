@@ -1,4 +1,9 @@
-import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import {
+  createEventBus,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { JobManager } from "#core/job-manager";
 import mypi from "../../index";
@@ -23,6 +28,7 @@ describe("built-in tool hooks", () => {
     vi.spyOn(JobManager.prototype, "stopAll").mockImplementation(() => calls.push("stop jobs"));
     const handlers = new Map<string, Handler>();
     const pi = {
+      events: createEventBus(),
       on: (event: string, handler: Handler) => {
         if (!handlers.has(event)) handlers.set(event, handler);
         return () => {};

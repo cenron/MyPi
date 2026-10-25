@@ -1,10 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { isNodeError } from "#core/util/errors";
 import { isInside } from "#core/util/paths";
+import { findSourceFile } from "#core/util/walk";
 import type { ReadyLookup, ServerManager } from "../manager";
 import { languageIdOf } from "../servers";
 import { lastName, matchesNamePath, type NamedSymbol, plainName } from "../symbols";
-import { findSourceFile } from "../util/walk";
 import { afterIndexing, fileSymbols, ready } from "./document";
 import { capAnswer, counted, displayPath, lineSpan, symbolLine, unavailable } from "./format";
 

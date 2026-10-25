@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createEventBus, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
 import { customEntry, fakeSession } from "../fakes";
@@ -10,7 +10,7 @@ function fakeContext(hasUI: boolean) {
   return { ctx, notify };
 }
 
-const pi = {} as ExtensionAPI;
+const pi = { events: createEventBus() } as unknown as ExtensionAPI;
 
 describe("Session", () => {
   it("sends each log level as the matching notify type", () => {

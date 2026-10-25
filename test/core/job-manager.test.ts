@@ -1,5 +1,7 @@
 import { readFile, rm, stat } from "node:fs/promises";
+import { createEventBus } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
+import { subscribe } from "#core/events";
 import { JobManager } from "#core/job-manager";
 import type { JobSpec } from "#core/types";
 
@@ -45,7 +47,7 @@ function start(jobs: JobManager, spec: JobSpec) {
 
 describe("JobManager", () => {
   it("counts ids up from 1 and lists jobs oldest first", () => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     start(jobs, controlled("first").spec);
     start(jobs, controlled("second").spec);
     expect(jobs.list().map(({ id, label, status }) => ({ id, label, status }))).toEqual([
@@ -57,7 +59,7 @@ describe("JobManager", () => {
   });
 
   it("writes output to the log file and keeps its last lines, a character split across chunks whole", async () => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     const run = controlled();
     const job = start(jobs, run.spec);
     const euro = Buffer.from("€\n");
@@ -73,7 +75,7 @@ describe("JobManager", () => {
   });
 
   it("drops output written after the job ended", async () => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     const run = controlled();
     const job = start(jobs, run.spec);
     run.write("kept\n");
@@ -85,7 +87,7 @@ describe("JobManager", () => {
   });
 
   it("keeps only the last 50K characters in memory", async () => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     const run = controlled();
     const job = start(jobs, run.spec);
     run.write(`start\n${"x".repeat(60_000)}`);
@@ -103,7 +105,7 @@ describe("JobManager", () => {
       { status: "failed", error: "boom" },
     ],
   ])("%s", async (_rule, finish, expected) => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     const run = controlled();
     const job = start(jobs, run.spec);
     finish(run);
@@ -113,7 +115,7 @@ describe("JobManager", () => {
   });
 
   it("stops a running job and waits for it to end", async () => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     const job = start(jobs, controlled().spec);
     const info = await jobs.stop("1");
     expect(info).toMatchObject({ status: "stopped" });
@@ -123,7 +125,7 @@ describe("JobManager", () => {
   });
 
   it("returns an ended job as it is, and undefined for an unknown id", async () => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     const run = controlled();
     start(jobs, run.spec);
     run.end(0);
@@ -131,10 +133,11 @@ describe("JobManager", () => {
     expect(await jobs.stop("9")).toBeUndefined();
   });
 
-  it("reports the running count when a job starts or ends, until removed or stopAll() runs", async () => {
-    const jobs = new JobManager();
+  it("publishes the running count on jobs when a job starts or ends, until stopAll() runs", async () => {
+    const events = createEventBus();
+    const jobs = new JobManager(events);
     const counts: number[] = [];
-    const remove = jobs.onChange((running) => counts.push(running));
+    subscribe(events, "jobs", (running) => counts.push(running));
     const first = controlled();
     start(jobs, first.spec);
     const second = start(jobs, controlled().spec);
@@ -142,18 +145,13 @@ describe("JobManager", () => {
     await jobs.get("1")?.done;
     expect(counts).toEqual([1, 2, 1]);
 
-    remove();
-    start(jobs, controlled().spec);
-    expect(counts).toEqual([1, 2, 1]);
-
-    jobs.onChange((running) => counts.push(running));
     jobs.stopAll();
     await second.done;
     expect(counts).toEqual([1, 2, 1]);
   });
 
   it("stops every running job, and a second call is harmless", async () => {
-    const jobs = new JobManager();
+    const jobs = new JobManager(createEventBus());
     const done = [start(jobs, controlled().spec), start(jobs, controlled().spec)].map((job) => job.done);
     jobs.stopAll();
     jobs.stopAll();

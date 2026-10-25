@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FileChangeType } from "vscode-languageserver-protocol/node";
+import { FileChangeKind } from "#core/util/walk";
 import { LspClient } from "#module/lsp/client";
 import { ServerManager } from "#module/lsp/manager";
 import type { ServerSpec } from "#module/lsp/servers";
@@ -162,7 +162,7 @@ describe("ServerManager", () => {
     await servers.fileChanged(file("a/y.ts"), true);
     await servers.fileChanged(file("a/notes.md"), false);
 
-    expect(reportA.mock.calls).toEqual([[[{ file: file("a/y.ts"), type: FileChangeType.Created }]]]);
+    expect(reportA.mock.calls).toEqual([[[{ file: file("a/y.ts"), kind: FileChangeKind.CREATED }]]]);
     expect(reportB).not.toHaveBeenCalled();
   });
 
@@ -184,8 +184,8 @@ describe("ServerManager", () => {
     expect(report.mock.calls).toEqual([
       [
         [
-          { file: file("a/new.ts"), type: FileChangeType.Created },
-          { file: file("a/edited.ts"), type: FileChangeType.Deleted },
+          { file: file("a/new.ts"), kind: FileChangeKind.CREATED },
+          { file: file("a/edited.ts"), kind: FileChangeKind.DELETED },
         ],
       ],
     ]);

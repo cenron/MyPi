@@ -1,12 +1,11 @@
 # Done check
 
-**Status:** idea (recorded 2026-10-22)
+**Status:** building (slice 1 done 2026-10-24)
 
 ## Goal
 
-When the agent says it's done, check the work before I look at it: the typecheck, the tests near the change, and new
-diagnostics once the [LSP](lsp.md) module exists. Report only what got worse, and send the agent back to fix it or say
-why it's fine. A module, so it can be turned off.
+When the agent is about to stop, check the files it changed before I look at them. If something is broken, send it
+back to fix it or say why it's fine; if nothing is, say nothing. A module, so it can be turned off.
 
 ## Where the idea comes from
 
@@ -15,58 +14,173 @@ why it's fine. A module, so it can be turned off.
   dozen real fixes across about 15 agents, through a "fix it or justify it in writing" rule.
 - **Serena** ([inspiration](../inspiration/serena.md)): diagnostics diffed before and after an edit, but switched off
   per edit, since one edit often breaks what the next one fixes. Checking once, at the end, avoids that noise.
-
-## What pi offers
-
-- **`agent_settled`:** fires once pi won't continue on its own. plan-build's "Implement this plan?" dialog uses it.
-- **`tool_result`:** carries each call's input, so the module can collect the files a turn wrote or edited.
-- **`sendMessage` with `followUp` and `triggerTurn`:** how background-job exit notices (`mypi-job`) send the agent
-  back to work.
-- **Running commands:** pi's `createLocalBashOperations`, which MyPi's `JobManager` already uses.
+- **Claude Code's Stop hook**: a hook that exits with code 2 stops Claude from stopping, and its message tells Claude
+  why. `agent_before_settle` is pi's version of that moment.
 
 ## Behavior
 
-- Runs only in Build, and only when the turn changed files.
-- Runs the project's checks, such as the typecheck and the tests for the changed files (where they're configured is
-  open).
-- Reports only new problems: errors in the files the turn changed, or the difference from a baseline taken when the
-  turn started (open).
-- Sends one follow-up message with the failures, asking the agent to fix them or explain why they're fine.
-- Can't loop: at most a few rounds per prompt, and it stops when the same failures come back.
-- Shows `checking…` in the footer while it runs.
-- Later, [analytics](analytics.md) counts how often it caught something, to show whether it pays.
+- **When:** at the end of a run in Build that finished normally (not aborted, no error) and changed files. Plan
+  makes no edits, so it's never checked. A `/plan implement` run is a Build run, so it ends with the check too. The
+  mode is plan-build's, so the check asks for it on the [event bus](#the-event-bus) (`mode`); with no answer (no
+  plan-build), it counts as Build.
+- **Changed files:** every file whose modification time differs from the start of the run, or that was created or
+  deleted since, skipping hidden folders and `node_modules`. That catches `bash` (`sed -i`, code generators,
+  `git checkout`), not only `edit`, `write`, and `lsp_edit`. Two scans per Build run: 4 ms for MyPi, 245 ms for a
+  2,768-file tree (measured for lsp, 2026-10-24).
+- **What it checks:** errors (not warnings or hints) in the changed files, at most 50 of them (`MAX_CHECKED_FILES`, so
+  a big `git checkout` doesn't open hundreds of files in a server; the report counts the rest), from everything that
+  answers `diagnostics` on the [event bus](#the-event-bus). Today that's the [LSP](lsp.md) module; slice 2 adds the
+  project's own commands.
+- **A source that can't check** is told to the user, not the agent, which couldn't fix it: a source that fails is a
+  warning ("Done check: lsp couldn't check: …"), and the LSP module warns once per session about a server that isn't
+  installed or failed to start ("LSP: the done check skips .ts files: …"). A server turned off in `/lsp` is skipped
+  quietly: that's the user's choice. Never dropped silently.
+- **No baseline:** an error that was already in a file the agent touched is reported too. The report asks the agent to
+  fix it or say why it's fine, so "that was already there" is a fine answer, and the loop guard stops a repeat. A real
+  baseline would need diagnostics before the first edit, which means starting language servers on edit; lsp rejected
+  that (it starts servers on first use).
+- **The report:** one message, shown in the TUI and sent to the model, then one more model request in the same run. At
+  most 20 errors are listed ("… and N more"); the next round shows the rest.
+
+  ```
+  Done check: 2 errors in files changed during this run.
+  src/store.ts:12:7  Type 'string' is not assignable to type 'number'. (ts 2322)
+  src/main.ts:4:1  Cannot find name 'makeStore'. (ts 2304)
+  Fix these, or say why they're fine.
+  ```
+
+- **Nothing to report:** says nothing. The footer shows `checking…` while it runs.
+- **Loop guard:** at most 3 rounds per prompt, and it stops early when a round's report is the same as the last one.
+  After that it's quiet until the next prompt.
+- **Esc** during the check aborts the run, as at any other point.
+- **Turned off** in `/modules` (`ON_LOAD`), everything else works as before: nothing asks on the bus, and LSP's
+  answer just isn't called. With the LSP module turned off, nothing answers `diagnostics`, and the done check checks
+  nothing.
 
 ## Design in pi
 
 | Piece | pi hook | Notes |
 |---|---|---|
-| Module | `BaseModule`, `src/module/done-check/` | Load type open. |
-| Changed files | `tool_result` on `write`, `edit`, and `apply_patch`, through `session.pi.on` in `init()` | Files changed by `bash` aren't seen this way; `git status` before and after is the fallback (open). |
-| Trigger | `agent_settled`, in Build only | Plan mode makes no edits. |
-| Checks | Commands run through pi's bash operations, or `session.jobs` | A long check shouldn't block the TUI. |
-| Report | `sendMessage(…, { deliverAs: "followUp", triggerTurn: true })` | Like `mypi-job` notices. |
-| Diagnostics | From the LSP module when it's loaded | Optional; the module works without it. |
+| Module | `BaseModule`, `src/module/done-check/`, `ON_LOAD` | On by default; `/modules` turns it off. |
+| Run start | `before_agent_start` | Takes the snapshot of modification times, and resets the round count, in either mode: the mode is checked at the end, which also covers a switch to Plan during the run. A continuation asked for by the check stays in the same run, so it keeps both. |
+| The check | `agent_before_settle`, in Build, when `outcome` is `"completed"` (`index.ts`; the report is pure, in `report.ts`) | pi awaits the handler (`_runBeforeSettleBoundary` in `dist/core/agent-session.js`), so the check runs before the run ends. It returns `{ entries: [custom_message], continue: true }` to send the report and ask for one more model request; pi's docs warn that an unconditional continuation loops, hence the guard. |
+| Report | A `custom_message` entry, `customType: "mypi-done-check"`, `display: true` | In the transcript like any message; a renderer can come later. |
+| Changed files | `fileTimes` and `fileChanges`, moved from `lsp/util/walk.ts` to `src/core/util/walk.ts` | Two parts need them now, so they went to core, as [principles](../principles.md) say. `fileTimes` takes every file, or the extensions lsp asks for; core has its own change kinds (`FileChangeKind`), which lsp's client maps to the protocol's. |
+| Mode | `ask("mode")` on the [event bus](#the-event-bus) | plan-build answers with `"plan"` or `"build"`. |
+| Diagnostics | `ask("diagnostics", { files, signal })` on the event bus | The LSP module answers in `init()` (`problems.ts`), for each file a server serves, through the same `fileProblems` as its `diagnostics` action; each server is brought up to date with the disk once first. Files no server serves are skipped; a server not yet running starts then, as on any first use. See [lsp](lsp.md#design-in-pi). |
+| Footer | `BaseModule.setFooter` | `checking…` while it runs. |
+
+### The event bus
+
+The done check needs things other modules own: the mode (plan-build) and the problems in files (LSP). It can't import
+them ([Modular](../principles.md#modular): parts talk through seams), and a new service on `Session` for each such
+need would grow `Session` with every one. So MyPi gets one in-memory event bus, on top of the one pi already gives every
+extension: `pi.events`, with `emit(channel, data)` and `on(channel, handler)` (pi's `docs/extensions.md`: "Communicate
+with another extension").
+
+**What pi's bus is** (read in pi 1.2.0's `dist/core/event-bus.js` and `extensions/loader.js`):
+
+- A Node `EventEmitter`, shared by every extension in the process, so MyPi's channels go out as `mypi:<channel>`.
+- pi drops every listener an extension added when its runtime goes away (`/reload`, a session switch), so handlers
+  never stack.
+- A handler that throws is caught and logged to the console, so a listener can't break whoever published.
+- `emit` returns nothing: there's no answer back.
+
+**MyPi's helpers**, in `src/core/events.ts`, over `pi.events`:
+
+- `publish(channel, data)` and `subscribe(channel, handler)` for notices ("something happened").
+- `ask(channel, request)` and `answer(channel, handler)` for questions every listener answers. The request goes out
+  with an empty list of answers; each answering listener adds its answer (a promise) to it. Node's `emit` calls every
+  listener before it returns, so once it returns, `ask` waits on the whole list and knows exactly who answered, with
+  no registry. A test pins that `emit` calls listeners at once, so a pi upgrade that changes it fails loudly.
+- `ask` gives back each answer, and each failure with its source's name (`Answer`: `answer` or `failed`), for the
+  asker to report.
+- Two channel maps type them all, next to the helpers in `events.ts`: `MyPiNotices` and `MyPiQuestions`, each channel
+  with what it carries and a comment naming who publishes or asks and who listens or answers. Publishing and listening
+  are type-checked, and every channel is listed in one place.
+
+  ```ts
+  export type MyPiNotices = {
+    /** How many jobs are running. `JobManager` publishes; `Session`'s footer item listens (later the fleet view). */
+    jobs: number;
+  };
+
+  export type MyPiQuestions = {
+    /** Plan or Build. The done check asks; plan-build answers. */
+    mode: { request: undefined; answer: "plan" | "build" };
+    /** The problems in `files`. The done check asks; the LSP module answers. */
+    diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
+  };
+  ```
+
+- Modules use them through `BaseModule` (`this.publish`, `this.subscribe`, `this.ask`, `this.answer`); core uses the
+  functions with `session.pi.events`. `Session` doesn't grow.
+
+**Its first three channels:**
+
+| Channel | Kind | Publishes or asks | Listens or answers |
+|---|---|---|---|
+| `jobs` | notice: how many jobs are running | `JobManager` | `Session`'s footer item; later the subagents fleet view |
+| `mode` | ask | done check | plan-build |
+| `diagnostics` | ask | done check | LSP |
+
+- **`jobs` moved over from `JobManager.onChange`**, its own listener list, which is gone. `stopAll` stops publishing
+  before the jobs end, as `onChange` dropped its listeners first: a job ending after the session has would otherwise
+  reach a stale context.
+- **What stays a service:** the tool rules, prompt sections, footer items, editor keys, the writable list, and the
+  module, tool, and command lists. Core combines those by a fixed rule at a fixed moment, without waiting (any block
+  wins; sections are written on every run; writable folders are merged on every tool call), and a tool call can't
+  wait on an `ask`. The bus is for messages between parts that don't need that.
 
 ## Slices
 
-1. Collect the files each turn changed.
-2. On `agent_settled` in Build, run the configured commands and send failures back.
-3. The loop guard.
-4. Only what got worse: a baseline, or errors in changed files only.
-5. LSP diagnostics, once the LSP module exists.
+1. **Done 2026-10-24.** The event bus (`src/core/events.ts`, the `BaseModule` helpers, the channel maps) with its
+   first three channels: `jobs` moved over from `JobManager.onChange`, `mode` answered by plan-build, and
+   `diagnostics` answered by LSP. Then the done check itself: the changed-files snapshot (the walk helpers moved to
+   core), the `agent_before_settle` report, the loop guard, and the footer. Tried live in pi with TypeScript, Go, and
+   Python files holding type errors: one report listed all three servers' errors; told the errors were real, pi fixed
+   them and the next check was quiet; told to keep them, pi said why and the repeat stopped the loop; an error already
+   in an edited file was reported and pi called it pre-existing; a file written from outside during a Build run was
+   caught, and during a Plan run wasn't; the footer's job count still shows over the bus.
+2. The project's own commands, such as the typecheck and the tests:
+   - Listed in `.pi/done-check.json` (`{ "commands": ["npm run typecheck"] }`), written by the user or by the agent
+     when asked.
+   - **Approved once:** the first time a project's list is seen, and whenever it changes, the done check asks before
+     running it ("Run these after each turn?"), and remembers the approved list per project in its own global folder.
+     A command that runs on its own after every turn is code a cloned repo could choose, the same worry as lsp's
+     `node_modules/.bin` question.
+   - Each command runs with a time limit; a failure sends the end of its output, cut to fit.
+   - A `/done-check` command shows the list and whether it's approved.
+3. Later: [analytics](analytics.md) counts how often the check caught something, to show whether it pays.
+
+## Decided 2026-10-24
+
+- Changed files come from modification times at the start and end of the run, so changes made through `bash` count.
+- All errors in changed files are reported, with no baseline; warnings and hints aren't.
+- At most 3 rounds per prompt, fewer when the same report comes back.
+- `ON_LOAD`, and turning it off leaves everything else working.
+- Commands live in `.pi/done-check.json` and run only after the user approves the list, again when it changes.
+- The check runs in `agent_before_settle` and continues the same run, not as a follow-up message that starts a new
+  one (my call; the follow-up was the idea doc's plan).
+- LSP diagnostics come first (slice 1) and commands second: diagnostics need no setup and run no project code.
+- Parts reach each other's information through one in-memory event bus over pi's `pi.events`, not a new service on
+  `Session` per need (the user's call, so `Session` stops growing). Notices and asks; the existing services stay.
+- The report says "files changed during this run", not "files you changed": a file changed by something else during
+  the run (an editor, a build) is checked too, and in the live test pi rightly said it hadn't touched it.
+- Built with slice 1 (my calls, easy to change): a source that can't check is a warning to the user, not a line in
+  the agent's report, since the agent can't fix a crashed or missing server; at most 50 files checked and 20 errors
+  listed per round; the mode is checked only at the end of the run.
 
 ## Open questions
 
-- Where are the commands set: a project file (`.pi/done-check.json`?), read from `package.json` scripts, or listed in
-  `AGENTS.md`?
-- Baseline: run the checks when the turn starts (slow), or report errors in changed files only?
-- Files changed through `bash`: compare `git status` before and after?
-- Its own module, or part of the LSP module? (Its own works without LSP.)
-- How many rounds before it gives up?
-- Should a build started from "Implement this plan?" always end with it?
+- How long may one round take before it gives up on a slow source? Pyright's pushed diagnostics already wait up to
+  10 s per file.
+- Should the report go to the model only, with the TUI showing a one-line summary, once a renderer exists?
 
 ## References
 
 - ripwire: README § "Better Code", the field report, `--quality-delta` in `docs/COMMANDS.md`
 - Serena: `EditingToolWithDiagnostics` in `src/serena/tools/tools_base.py`
-- MyPi: background-process exit notices in [background-process](../tools/background-process.md)
+- pi: `agent_before_settle` in `docs/extensions.md` (§ events) and `AgentBeforeSettleEvent` in
+  `dist/core/extensions/types.d.ts`; `pi.events` in `docs/extensions.md` and `dist/core/event-bus.js`
+- Claude Code: Stop hooks in the hooks reference
