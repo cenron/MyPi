@@ -72,8 +72,14 @@ export function managedName(entry: Worktree, main: string): string | undefined {
 /** Bounded output fails rather than silently truncating. Only explicitly expected exit codes are returned. */
 export async function git(cwd: string, args: string[], signal?: AbortSignal, expectedCode?: number) {
   try {
-    const result = await execute("git", args, { cwd, signal, maxBuffer: MAX_GIT_OUTPUT, encoding: "utf8" });
-    return { stdout: result.stdout, code: 0 };
+    const result = await execute("git", args, {
+      cwd,
+      signal,
+      maxBuffer: MAX_GIT_OUTPUT,
+      encoding: "utf8",
+      env: { ...process.env, LC_ALL: "C" },
+    });
+    return { stdout: result.stdout, stderr: result.stderr, code: 0 };
   } catch (error) {
     if (
       expectedCode !== undefined &&
@@ -81,23 +87,30 @@ export async function git(cwd: string, args: string[], signal?: AbortSignal, exp
       "code" in error &&
       error.code === expectedCode &&
       "stdout" in error &&
-      typeof error.stdout === "string"
+      typeof error.stdout === "string" &&
+      "stderr" in error &&
+      typeof error.stderr === "string"
     ) {
-      return { stdout: error.stdout, code: expectedCode };
+      return { stdout: error.stdout, stderr: error.stderr, code: expectedCode };
     }
     throw new Error(
-      `Git ${args.join(" ")} failed in ${JSON.stringify(cwd)}: ${errorMessage(error)}. Inspect the repository before retrying.`,
+      `Git ${args.join(" ")} failed in ${JSON.stringify(cwd)}: ${errorMessage(error)}. Inspect the repository.`,
       { cause: error },
     );
   }
 }
 
 /** Discovery does no writes; bare-primary layouts are deliberately unsupported. */
-export async function discover(cwd: string, signal?: AbortSignal) {
+export async function mainAndWorktrees(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<{ main: string; entries: Worktree[] }> {
   const entries = parseWorktrees((await git(cwd, ["worktree", "list", "--porcelain", "-z"], signal)).stdout);
   const primary = entries[0];
-  if (!primary || primary.bare)
+  if (!primary || primary.bare) {
     throw new Error("Worktrees require a non-bare primary checkout; use a regular Git checkout.");
+  }
+
   const main = await realpath(primary.path);
   return { main, entries: entries.map((entry) => ({ ...entry, managedName: managedName(entry, main) })) };
 }

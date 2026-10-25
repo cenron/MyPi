@@ -9,7 +9,15 @@ import { fileChanges, fileTimes } from "#core/util/walk";
 import { FooterColor } from "#ui/footer";
 import { BaseModule } from "../base";
 import { doneCheckCmd } from "./commands/done-check";
-import { approve, COMMANDS_FILE, type CommandFailure, isApproved, readCommands, runCommand } from "./project-commands";
+import {
+  approvalKey,
+  approve,
+  COMMANDS_FILE,
+  type CommandFailure,
+  isApproved,
+  readCommands,
+  runCommand,
+} from "./project-commands";
 import { doneCheckReport, filesToCheck } from "./report";
 
 /** Most times one run is sent back; after that the agent may stop with whatever is left. */
@@ -37,7 +45,7 @@ export class DoneCheckModule extends BaseModule {
   /** Warnings already shown this session, each shown once. */
   private readonly warned = new Set<string>();
   // Built once: `info` lists its info.
-  private readonly doneCheckCommand = doneCheckCmd();
+  private readonly doneCheckCommand = doneCheckCmd(this.session);
 
   get info(): ModuleInfo {
     return {
@@ -138,7 +146,14 @@ export class DoneCheckModule extends BaseModule {
     }
 
     if (commands === undefined || commands.length === 0) return [];
-    if (await isApproved(ctx.cwd, commands)) return commands;
+    let key: string;
+    try {
+      key = await approvalKey(this.session.project, ctx.cwd);
+    } catch (error) {
+      this.warnOnce(`Done check: cannot resolve approval identity: ${errorMessage(error)}`);
+      return [];
+    }
+    if (await isApproved(key, commands)) return commands;
     if (this.declined.has(commands.join("\n"))) return [];
     if (!ctx.hasUI) {
       this.warnOnce(
@@ -154,7 +169,7 @@ export class DoneCheckModule extends BaseModule {
       return [];
     }
 
-    await approve(ctx.cwd, commands);
+    await approve(key, commands);
     return commands;
   }
 

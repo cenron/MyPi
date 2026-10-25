@@ -127,8 +127,10 @@ access:
 - **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
   Without one, only one `write` run works in the main checkout at a time, and the main agent leaves its files alone.
 - **Children don't commit. A writer's work comes back as a patch:**
-  1. The worktree branches from the main checkout's `HEAD`. (`Session.worktrees.create` uses the calling checkout's
-     `HEAD`; the same thing while the main agent is in the main checkout. Settled in worktree slice 3.)
+  1. The worktree branches from the **calling checkout's committed `HEAD`** (decided 2026-10-25), matching
+     `Session.worktrees.create`. If the parent works inside a worktree, the writer branches from that checkout,
+     not the primary checkout. Storage remains under the main checkout's `.pi/worktrees/`. The clean-caller
+     preflight below applies to the calling checkout.
   2. When the run ends, MyPi stages everything in the worktree (new files too) and writes `git diff --cached --binary`
      to a patch file, plus a handoff file: the agent, the task, the base commit, the files changed, the patch's path,
      and the child's summary.
@@ -143,8 +145,8 @@ access:
      asks me first: a dialog with the agent, the task, the files and their diff stat, and the child's summary, and
      Apply, Drop, or Cancel (Cancel is the default, as in Radian's merge dialog). Apply runs `git apply --3way` (Build
      only); a clash is reported, never forced. Patches are applied one at a time.
-- **Uncommitted changes refuse a worktree writer:** the worktree comes from `HEAD`, so the child wouldn't see work I
-  haven't committed, and its patch could clash with it. Before launch, `git status --porcelain` must be empty
+- **Uncommitted changes in the calling checkout refuse a worktree writer:** the worktree comes from its `HEAD`, so
+  the child wouldn't see work I haven't committed, and its patch could clash with it. Before launch, `git status --porcelain` must be empty
   (MyPi's own state folders aside); otherwise the run is refused with the list of files. Nothing falls back to the
   main checkout on its own.
 - **No `git apply` through `bash`:** the prompt section tells the main agent to apply patches only with

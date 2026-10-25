@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { commandsStatus } from "#module/done-check/commands/done-check";
-import { approve } from "#module/done-check/project-commands";
+import { approvalKey, approve } from "#module/done-check/project-commands";
 
 let project: string;
 let agentDir: string;
@@ -31,6 +31,10 @@ it("says how to list commands, then lists them, not approved and then approved",
       "that changes files):\n  npm test",
   );
 
-  await approve(project, ["npm test"]);
+  await approve(await approvalKey(undefined, project), ["npm test"]);
   expect(await commandsStatus(project)).toBe("Done check commands in .pi/done-check.json (approved):\n  npm test");
+  const repository = { main: project, commonDir: join(project, ".git"), checkout: project };
+  expect(await commandsStatus(project, repository)).toContain("not approved yet");
+  await approve(await approvalKey(repository, project), ["npm test"]);
+  expect(await commandsStatus(project, repository)).toContain("(approved)");
 });

@@ -15,7 +15,7 @@ const pi = { events: createEventBus() } as unknown as ExtensionAPI;
 describe("Session", () => {
   it("sends each log level as the matching notify type", () => {
     const { ctx, notify } = fakeContext(true);
-    const session = new Session(ctx, pi);
+    const session = new Session(ctx, pi, undefined);
 
     session.log("hello");
     session.logWarning("careful");
@@ -30,7 +30,7 @@ describe("Session", () => {
 
   it("sends nothing without a UI", () => {
     const { ctx, notify } = fakeContext(false);
-    const session = new Session(ctx, pi);
+    const session = new Session(ctx, pi, undefined);
 
     session.log("hello");
     session.logWarning("careful");

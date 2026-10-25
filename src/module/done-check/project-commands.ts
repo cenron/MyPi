@@ -1,9 +1,10 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { createLocalBashOperations, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { errorMessage, isNodeError } from "#core/util/errors";
 import { isRecord } from "#core/util/guards";
+import type { Project } from "#core/worktree/index";
 
 /** Where a project lists its check commands, relative to its folder. */
 export const COMMANDS_FILE = ".pi/done-check.json";
@@ -41,18 +42,23 @@ export async function readCommands(cwd: string): Promise<string[] | undefined> {
   return commands;
 }
 
-/** True when the user approved exactly `commands` for the project in `cwd`. */
-export async function isApproved(cwd: string, commands: readonly string[]): Promise<boolean> {
-  const approved = (await readApprovals())[cwd];
+/** Git checkouts share approval, but separate repositories and non-Git folders never inherit it. */
+export async function approvalKey(project: Project | undefined, cwd: string): Promise<string> {
+  return project ? `git:${project.commonDir}` : `folder:${await realpath(cwd)}`;
+}
+
+/** True when the user approved exactly `commands` for this repository/folder key. */
+export async function isApproved(key: string, commands: readonly string[]): Promise<boolean> {
+  const approved = (await readApprovals())[key];
   return approved !== undefined && sameList(approved, commands);
 }
 
 /**
- * Remembers that the user approved `commands` for the project in `cwd`, on this machine only: in the done check's
+ * Remembers that the user approved `commands` for this repository/folder key, on this machine only: in the done check's
  * own folder in pi's agent dir, never in the project, so a repo can't arrive approved.
  */
-export async function approve(cwd: string, commands: readonly string[]): Promise<void> {
-  const approvals = { ...(await readApprovals()), [cwd]: [...commands] };
+export async function approve(key: string, commands: readonly string[]): Promise<void> {
+  const approvals = { ...(await readApprovals()), [key]: [...commands] };
   await mkdir(dirname(approvalsPath()), { recursive: true });
   await writeFile(approvalsPath(), `${JSON.stringify(approvals, null, 2)}\n`);
 }
@@ -88,7 +94,7 @@ export async function runCommand(
   }
 }
 
-/** The approved lists, by project folder. A missing or unreadable file means none; entries that aren't lists are dropped. */
+/** The approved lists, by repository/folder key. A missing or unreadable file means none; entries that aren't lists are dropped. */
 async function readApprovals(): Promise<Record<string, string[]>> {
   let parsed: unknown;
   try {

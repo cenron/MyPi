@@ -37,9 +37,11 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
   output (2,000 characters, escape codes stripped) to the same report as the errors. Esc stops them.
 - **Approved once per list, per machine:** before running a list it hasn't seen, the check asks ("Done check: run
   these after each Build run in <folder>?") and lists them. Yes is remembered in
-  `~/.pi/agent/done-check/approved.json`, by project folder, as the exact list; a list that changes in any way asks
-  again, so a `git pull`, a cloned repo, or the agent editing the file can't run anything unseen. No holds for the
-  session. Without a UI, nothing runs and the user is warned once. A file that isn't a list of commands is a warning
+  `~/.pi/agent/done-check/approved.json`, by repository (`git:<canonical Git common directory>`) or non-Git folder
+  (`folder:<canonical cwd>`), as the exact ordered list. Linked worktrees share approval, separate clones do not;
+  configuration and execution stay in the active checkout. A list that changes in any way asks again, so a `git pull`
+  or the agent editing the file can't run anything unseen. Legacy cwd-only keys are not reused; this hard cutover may
+  ask once again. No holds for the session. Without a UI, nothing runs and the user is warned once. A file that isn't a list of commands is a warning
   too, once per session.
 - **`.pi/done-check.json` is the project's file:** MyPi doesn't touch git for it (unlike `.pi/plans/` and
   `.pi/memories/`, which `keepOutOfGit` hides), so it can be committed and shared; each machine still approves it.
@@ -84,7 +86,7 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 | Changed files | `fileTimes` and `fileChanges`, moved from `lsp/util/walk.ts` to `src/core/util/walk.ts` | Two parts need them now, so they went to core, as [principles](../principles.md) say. `fileTimes` takes every file, or the extensions lsp asks for; core has its own change kinds (`FileChangeKind`), which lsp's client maps to the protocol's. |
 | Mode | `ask("mode")` on the [event bus](#the-event-bus) | plan-build answers with `"plan"` or `"build"`. |
 | Diagnostics | `ask("diagnostics", { files, signal })` on the event bus | The LSP module answers in `init()` (`problems.ts`), for each file a server serves, through the same `fileProblems` as its `diagnostics` action; each server is brought up to date with the disk once first. Files no server serves are skipped; a server not yet running starts then, as on any first use. See [lsp](lsp.md#design-in-pi). |
-| Commands | `project-commands.ts`: `readCommands`, `isApproved`, `approve`, `runCommand` | The list is validated at the boundary (`{ "commands": string[] }`, else an error saying so); approvals in pi's agent dir (`getAgentDir()`), never the project. |
+| Commands | `project-commands.ts`: `readCommands`, `approvalKey`, `isApproved`, `approve`, `runCommand` | The list is validated at the boundary (`{ "commands": string[] }`, else an error saying so); approvals in pi's agent dir (`getAgentDir()`), never the project. |
 | Approval | `ctx.ui.select` with Yes and No, in `approvedCommands` (`index.ts`) | Like the tool guard's dialog. |
 | `/done-check` | `commands/done-check.ts` | Shows the list and its approval. |
 | Footer | `BaseModule.setFooter` | `checking…` while it runs. |
@@ -195,8 +197,9 @@ with another extension").
   `Session` per need (the user's call, so `Session` stops growing). Notices and asks; the existing services stay.
 - The report says "files changed during this run", not "files you changed": a file changed by something else during
   the run (an editor, a build) is checked too, and in the live test pi rightly said it hadn't touched it.
-- Slice 2 (the user took all five suggestions): approvals in `~/.pi/agent/done-check/approved.json` by project
-  folder; one report for errors and failed commands; 2 minutes per command, fixed; without a UI, nothing runs and the
+- Slice 2 (the user took all five suggestions): approvals in `~/.pi/agent/done-check/approved.json`, originally by
+  project folder; worktree slice 3 (2026-10-25) keys Git repositories by canonical common directory, non-Git folders
+  by canonical cwd, with no reuse of legacy keys; one report for errors and failed commands; 2 minutes per command, fixed; without a UI, nothing runs and the
   user is warned once; commands run one at a time through pi's own shell. `.pi/done-check.json` is left to git like
   any project file.
 - Built with slice 1 (my calls, easy to change): a source that can't check is a warning to the user, not a line in

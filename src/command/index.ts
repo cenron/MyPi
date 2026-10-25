@@ -3,6 +3,7 @@ import type { Session } from "#core/session";
 import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { modulesCmd } from "./modules";
+import { worktreeCmd } from "./worktree";
 
 /** Registers MyPi's own commands, then the running modules', each wrapped in `runCommand`. */
 export function registerCommands(pi: ExtensionAPI, session: Session) {
@@ -19,7 +20,7 @@ export function registerCommands(pi: ExtensionAPI, session: Session) {
 
 /** MyPi's own commands. Add new ones here. */
 function createCommands(session: Session): Command[] {
-  return [modulesCmd(session)];
+  return [modulesCmd(session), worktreeCmd(session)];
 }
 
 /**
@@ -31,7 +32,12 @@ async function runCommand(cmd: Command, args: string, ctx: ExtensionCommandConte
     const message = await cmd.execute(ctx, splitArgs(args));
     if (message) session.log(message);
   } catch (error) {
-    session.logError(errorMessage(error));
+    try {
+      session.logError(errorMessage(error));
+    } catch {
+      // Replacement can invalidate the notifier too. Let pi report the original failure, not a stale-context error.
+      throw error;
+    }
   }
 }
 

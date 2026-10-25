@@ -9,6 +9,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { identityPrompt, MYPI_ROOT } from "#core/identity";
 import { Session } from "#core/session";
+import { errorMessage } from "#core/util/errors";
+import { type Project, Worktrees } from "#core/worktree/index";
 import { registerMcpServers } from "#mcp/index";
 import { loadModules } from "#module/index";
 import type { PromptPaths } from "#rule/base";
@@ -31,9 +33,19 @@ export class MyPi {
     pi.registerToolRenderer(backgroundRenderer);
   }
 
-  onSessionStart(ev: SessionStartEvent, ctx: ExtensionContext) {
-    this.session = new Session(ctx, this.pi);
+  async onSessionStart(ev: SessionStartEvent, ctx: ExtensionContext) {
+    let project: Project | undefined;
+    let discoveryError: string | undefined;
+    try {
+      project = await new Worktrees(ctx.cwd).project();
+    } catch (error) {
+      discoveryError = `Project discovery failed: ${errorMessage(error)}. Inspect the repository; starting without a project.`;
+    }
+
+    this.session = new Session(ctx, this.pi, project);
     this.prompt = registerRules(this.session);
+    if (discoveryError) this.session.logWarning(discoveryError);
+
     loadModules(this.session, ev.reason);
     // Tools before init(): a module's init() may turn its tools on, and pi ignores names it doesn't know yet.
     this.tools = registerTools(this.pi, this.session);

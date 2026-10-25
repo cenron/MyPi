@@ -23,7 +23,9 @@ Pi supplies the host packages (`@earendil-works/pi-coding-agent`, `@earendil-wor
 ```
 index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "before_agent_start" | "tool_call" | "session_shutdown", …)
 └─ src/mypi.ts         MyPi.onSessionStart(ev, ctx)
-   ├─ new Session(ctx, pi)                       src/core/session.ts: builds its ModuleManager, Footer, Editor, PromptManager, JobManager
+   ├─ await new Worktrees(ctx.cwd).project()     canonical main/commonDir/checkout; discovery errors warn and leave no project
+   ├─ new Session(ctx, pi, project)              src/core/session.ts: readonly project and per-session services
+   ├─ registerRules(session)                    src/rule/index.ts: core rules, before module loading
    ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start() picks the running ones
    ├─ registerTools(pi, session)                 src/tool/index.ts: the built-in tools + the running modules'
    ├─ initTools(tools)                           init() on the built-in tools that have one
@@ -38,8 +40,9 @@ index.ts               default factory: new MyPi(pi), then pi.on("session_start"
 `index.ts` at the repo root is the single extension entry point. It creates the `MyPi` object and routes pi events to
 its methods. It holds no logic.
 
-`MyPi` (`src/mypi.ts`) owns the event handlers. On `session_start` it builds a `Session` for that session's context,
-keeps it, picks the modules to load, registers the tools (the built-ins and the modules'), runs the modules' `init()`,
+`MyPi` (`src/mypi.ts`) owns the event handlers. On `session_start` it resolves the project, passes it to `new Session(ctx, pi, project)`,
+keeps the session, installs the core rules, and picks the modules to load. Discovery failures warn once and leave no project. It
+registers the tools (the built-ins and the modules'), runs the modules' `init()`,
 registers the commands, its own and the modules', and registers MyPi's MCP servers. Tools come before `init()` because
 a module's `init()` may turn its tools on with `setActiveTools`, and pi ignores names that aren't registered yet
 ("Unknown and hidden tool names are ignored", `setActiveToolsByName` in `dist/core/agent-session.js`). On `before_agent_start` it writes
@@ -57,7 +60,10 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`Session`** wraps the `ExtensionContext` from `session_start` and the `ExtensionAPI`. It's the handle passed to
   commands and modules. It logs through `log`, `logWarning`, and `logError`, keeps state in the session through `save`
   and `load`, and owns the session's `ModuleManager` as `moduleManager`, plus the shared `footer`, `editor`, and
-  `promptManager`, and `toolGuard`.
+  `promptManager`, and `toolGuard`. `worktrees` is the cwd-bound shared Git worktree service (commands and future
+  subagents); `project` is its resolved canonical main checkout, common Git directory, and active checkout, or
+  undefined outside Git or after a discovery failure. It is readonly and passed to the constructor.
+  Discovery is awaited once before modules load; module `init()` remains synchronous.
 - **Saved state.** `session.save(name, data)` writes a `mypi-<name>` custom entry with `pi.appendEntry`, which pi keeps
   out of the model's context. `session.load(name)` returns the data of the last `mypi-<name>` entry on the current
   branch (`ctx.sessionManager.getBranch()`), or `undefined`, typed `unknown` because the file can hold anything. This is

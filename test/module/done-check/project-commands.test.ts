@@ -1,8 +1,11 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { approve, isApproved, readCommands, runCommand } from "#module/done-check/project-commands";
+import { Worktrees } from "#core/worktree/index";
+import { approvalKey, approve, isApproved, readCommands, runCommand } from "#module/done-check/project-commands";
 
 let project: string;
 let agentDir: string;
@@ -42,6 +45,40 @@ describe("readCommands", () => {
 });
 
 describe("approvals", () => {
+  it("shares exact-list approval across worktrees, not clones or legacy folder keys", async () => {
+    const execute = promisify(execFile);
+    await execute("git", ["init", "-b", "main"], { cwd: project });
+    await writeFile(join(project, "file"), "fixture");
+    await execute("git", ["add", "."], { cwd: project });
+    await execute(
+      "git",
+      ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "fixture"],
+      { cwd: project },
+    );
+    const service = new Worktrees(project);
+    const { worktree } = await service.create("task");
+    const primaryKey = await approvalKey(await service.project(), project);
+    const linkedKey = await approvalKey(await new Worktrees(worktree.path).project(), worktree.path);
+    expect(linkedKey).toBe(primaryKey);
+    await approve(project, ["npm test"]);
+    expect(await isApproved(linkedKey, ["npm test"])).toBe(false);
+    await approve(primaryKey, ["npm test", "npm run lint"]);
+    expect(await isApproved(linkedKey, ["npm test", "npm run lint"])).toBe(true);
+    expect(await isApproved(linkedKey, ["npm run lint", "npm test"])).toBe(false);
+    const clone = join(project, "clone");
+    await execute("git", ["clone", project, clone]);
+    expect(
+      await isApproved(await approvalKey(await new Worktrees(clone).project(), clone), ["npm test", "npm run lint"]),
+    ).toBe(false);
+  });
+
+  it("canonicalizes non-Git folder keys", async () => {
+    const alias = join(project, "alias");
+    await symlink(agentDir, alias);
+    expect(await approvalKey(undefined, alias)).toBe(`folder:${await realpath(agentDir)}`);
+    expect(await approvalKey(undefined, project)).not.toBe(await approvalKey(undefined, agentDir));
+  });
+
   it("hold for exactly the approved list, in that project only", async () => {
     expect(await isApproved(project, ["npm test"])).toBe(false);
     await approve(project, ["npm test"]);

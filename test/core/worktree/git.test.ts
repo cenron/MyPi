@@ -6,7 +6,7 @@ import {
   parseWorktrees,
   validateName,
   type Worktree,
-} from "../../../src/core/worktree/git";
+} from "#core/worktree/git";
 
 describe("worktree Git rules", () => {
   it.each([

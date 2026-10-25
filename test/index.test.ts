@@ -8,9 +8,10 @@ import {
   type ToolCallEvent,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
 import { ToolGuard } from "#core/tool-guard";
+import { Worktrees } from "#core/worktree/index";
 import { loadModules } from "#module/index";
 import { backgroundRenderer } from "#tool/bash/render";
 import mypi from "../index";
@@ -79,7 +80,7 @@ function promptOptions(skills: { baseDir: string }[] = []) {
 
 function startSession(handlers: Map<string, Handler>) {
   const event: SessionStartEvent = { type: "session_start", reason: "startup" };
-  handlers.get("session_start")?.(event, fakeContext());
+  return handlers.get("session_start")?.(event, fakeContext());
 }
 
 const bashCall = {
@@ -90,7 +91,45 @@ const bashCall = {
 } as ToolCallEvent;
 
 describe("mypi extension", () => {
+  beforeEach(() => {
+    vi.spyOn(Worktrees.prototype, "project").mockResolvedValue(undefined);
+  });
   afterEach(() => vi.restoreAllMocks());
+
+  it("awaits project discovery before loading modules and registering commands", async () => {
+    let finish: (() => void) | undefined;
+    vi.spyOn(Worktrees.prototype, "project").mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return undefined;
+    });
+    const { commands, handlers } = loadExtension();
+    const starting = startSession(handlers);
+    expect(commands.size).toBe(0);
+    finish?.();
+    await starting;
+    expect(commands.has("worktree")).toBe(true);
+    expect(Worktrees.prototype.project).toHaveBeenCalledOnce();
+  });
+
+  it("warns once on discovery failure and loads without a project, with the core folder guard on", async () => {
+    vi.spyOn(Worktrees.prototype, "project").mockRejectedValue(new Error("Git discovery failed"));
+    const { commands, handlers } = loadExtension();
+    const ctx = fakeContext();
+    await expect(
+      handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, ctx),
+    ).resolves.toBeUndefined();
+    expect(ctx.ui.notify).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining("Project discovery failed: Git discovery failed"),
+      "warning",
+    );
+    expect(commands.has("worktree")).toBe(true);
+    expect(commands.has("plan")).toBe(true);
+    ctx.hasUI = false;
+    const read = { type: "tool_call", toolCallId: "1", toolName: "read", input: { path: "/outside/file" } };
+    await expect(handlers.get("tool_call")?.(read, ctx)).resolves.toMatchObject({ block: true });
+  });
 
   it("registers no commands before a session starts", () => {
     const { commands, handlers } = loadExtension();
@@ -100,17 +139,17 @@ describe("mypi extension", () => {
 
   it("runs every registered command without throwing", async () => {
     const { commands, handlers } = loadExtension();
-    startSession(handlers);
+    await startSession(handlers);
     for (const command of commands.values()) {
       await expect(command.handler("", fakeContext())).resolves.toBeUndefined();
     }
   });
 
-  it("registers commands from running modules only", () => {
+  it("registers commands from running modules only", async () => {
     const { pi, commands, handlers } = loadExtension();
-    startSession(handlers);
+    await startSession(handlers);
 
-    const session = new Session(fakeContext(), pi);
+    const session = new Session(fakeContext(), pi, undefined);
     loadModules(session, "startup");
     for (const info of session.moduleManager.moduleInfos) {
       for (const command of info.commands) {
@@ -120,25 +159,25 @@ describe("mypi extension", () => {
   });
 
   // A module's init() turns its tools on, which pi ignores for tools it doesn't have yet.
-  it("registers the tools before the modules' init(), so a new session in Plan has Plan's tools on", () => {
+  it("registers the tools before the modules' init(), so a new session in Plan has Plan's tools on", async () => {
     const { handlers, activeTools } = loadExtension();
-    startSession(handlers);
+    await startSession(handlers);
     expect(activeTools()).toEqual(expect.arrayContaining(["web_search", "web_fetch", "submit_plan", "ask_user"]));
   });
 
   // Each run's sections start empty, so a run that skipped them would make pi remove the section, then add it back.
-  it.each([["user"], ["custom"]])("writes the modules' prompt sections on a %s run", (messageType) => {
+  it.each([["user"], ["custom"]])("writes the modules' prompt sections on a %s run", async (messageType) => {
     const { handlers } = loadExtension();
-    startSession(handlers);
+    await startSession(handlers);
     const event = { type: "before_agent_start", messageType, systemPromptOptions: promptOptions() };
     handlers.get("before_agent_start")?.(event, fakeContext());
     expect(Object.keys(event.systemPromptOptions.sections)).toContain("mypi-plan-build");
   });
 
   // Identity is core: every run says who the agent is, with the model of that run.
-  it("writes the identity section on every run, with that run's model and the running modules", () => {
+  it("writes the identity section on every run, with that run's model and the running modules", async () => {
     const { handlers } = loadExtension();
-    startSession(handlers);
+    await startSession(handlers);
     const event = { type: "before_agent_start", messageType: "user", systemPromptOptions: promptOptions() };
     const ctx = { ...fakeContext(), model: { provider: "openai", id: "gpt-6.1-sol" } };
     handlers.get("before_agent_start")?.(event, ctx as unknown as ExtensionContext);
@@ -151,7 +190,7 @@ describe("mypi extension", () => {
   // The folder rule is core: it guards every session, and allows what the prompt points the agent at.
   it("asks before a call reaches outside the folder, except where the last prompt pointed", async () => {
     const { handlers } = loadExtension();
-    startSession(handlers);
+    await startSession(handlers);
     const ctx = { ...fakeContext(), hasUI: false };
     const read = { type: "tool_call", toolCallId: "1", toolName: "read", input: { path: "/skills/herdr/SKILL.md" } };
     await expect(handlers.get("tool_call")?.(read, ctx)).resolves.toMatchObject({
@@ -167,17 +206,17 @@ describe("mypi extension", () => {
   });
 
   // pi keeps resolvers in a list, so one added on every session_start would stack.
-  it("registers the background bash renderer once, when loaded", () => {
+  it("registers the background bash renderer once, when loaded", async () => {
     const { handlers, toolRenderers } = loadExtension();
-    startSession(handlers);
-    startSession(handlers);
+    await startSession(handlers);
+    await startSession(handlers);
     expect(toolRenderers).toEqual([backgroundRenderer]);
   });
 
-  it("registers MyPi's MCP servers when a session starts", () => {
+  it("registers MyPi's MCP servers when a session starts", async () => {
     const { handlers, mcpServers } = loadExtension();
     expect(mcpServers).toEqual([]);
-    startSession(handlers);
+    await startSession(handlers);
     expect(mcpServers).toEqual(["parallel", "exa"]);
   });
 
@@ -186,7 +225,7 @@ describe("mypi extension", () => {
     const blocked = { block: true, reason: "no" };
     vi.spyOn(ToolGuard.prototype, "check").mockResolvedValue(blocked);
     const { handlers } = loadExtension();
-    startSession(handlers);
+    await startSession(handlers);
     await expect(handlers.get("tool_call")?.(bashCall, fakeContext())).resolves.toEqual(blocked);
   });
 });

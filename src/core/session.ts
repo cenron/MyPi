@@ -7,7 +7,7 @@ import { ModuleManager } from "./module-manager";
 import { Notifier } from "./notifier";
 import { PromptManager } from "./prompt-manager";
 import { ToolGuard } from "./tool-guard";
-import { Worktrees } from "./worktree";
+import { type Project, Worktrees } from "./worktree";
 
 /** Per-session handle passed to commands and modules: pi's context and API, logging, saved state, and the modules. */
 export class Session {
@@ -30,6 +30,8 @@ export class Session {
   constructor(
     readonly ctx: ExtensionContext,
     readonly pi: ExtensionAPI,
+    /** Resolved before construction; undefined outside Git or when discovery failed. */
+    readonly project: Project | undefined,
   ) {
     this.notifier = new Notifier(ctx);
     this.moduleManager = new ModuleManager(this);

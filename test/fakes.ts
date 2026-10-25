@@ -8,6 +8,7 @@ import {
 import { type Mock, vi } from "vitest";
 import { Session } from "#core/session";
 import type { Module, ModuleLoadMode } from "#core/types";
+import type { Project } from "#core/worktree/index";
 
 /** A custom session entry, the way pi stores what `appendEntry` writes. */
 export const customEntry = (customType: string, data: unknown) => ({ type: "custom", customType, data });
@@ -35,7 +36,7 @@ export function fakeUI() {
  * defaults count as registered). `emit` runs the handlers registered with `pi.on`, with the session's
  * own context unless one is given. `cwd` is the context's working directory.
  */
-export function fakeSession(branch: unknown[] = [], cwd = "/project") {
+export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: Project) {
   const ui = fakeUI();
   const appendEntry = vi.fn((customType: string, data: unknown) => {
     branch.push(customEntry(customType, data));
@@ -78,7 +79,7 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project") {
     for (const handler of handlers.get(event) ?? []) result = await handler(ev, eventCtx);
     return result;
   };
-  const session = new Session(ctx, pi as unknown as ExtensionAPI);
+  const session = new Session(ctx, pi as unknown as ExtensionAPI, project);
   return {
     session,
     notify: ui.notify,

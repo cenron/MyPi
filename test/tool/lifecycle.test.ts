@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { JobManager } from "#core/job-manager";
+import { Worktrees } from "#core/worktree/index";
 import mypi from "../../index";
 import { fakeUI } from "../fakes";
 
@@ -24,7 +25,8 @@ type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
 
 describe("built-in tool hooks", () => {
   // On shutdown, jobs stop before the tools' shutdown(), so nothing a job runs outlives the session.
-  it("runs init() after every tool is registered and before the modules' init(), and shutdown() on shutdown", () => {
+  it("runs init() after every tool is registered and before the modules' init(), and shutdown() on shutdown", async () => {
+    vi.spyOn(Worktrees.prototype, "project").mockResolvedValue(undefined);
     vi.spyOn(JobManager.prototype, "stopAll").mockImplementation(() => calls.push("stop jobs"));
     const handlers = new Map<string, Handler>();
     const pi = {
@@ -47,7 +49,10 @@ describe("built-in tool hooks", () => {
     const ctx = { hasUI: true, ui: fakeUI(), cwd: "/project", sessionManager: { getBranch: () => [] } };
     mypi(pi);
 
-    handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, ctx as unknown as ExtensionContext);
+    await handlers.get("session_start")?.(
+      { type: "session_start", reason: "startup" },
+      ctx as unknown as ExtensionContext,
+    );
     expect(calls).toEqual([
       "register bash",
       "register job_list",

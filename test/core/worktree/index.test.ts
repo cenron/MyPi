@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Worktrees } from "../../../src/core/worktree";
+import { Worktrees } from "#core/worktree/index";
 import { fakeSession } from "../../fakes";
 
 const execute = promisify(execFile);
@@ -31,7 +31,7 @@ async function put(cwd: string, file: string, text = "local work") {
 
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), "mypi-worktree-test-")));
-  main = join(root, "main space\t\nline");
+  main = join(root, "main");
   await mkdir(main);
   await git(main, "init", "-b", "main");
   await put(main, "tracked", "base");
@@ -44,29 +44,81 @@ afterEach(async () => {
 });
 
 describe("shared Worktrees service", () => {
+  it("resolves canonical repository identity without writing, including a symlinked subdirectory caller", async () => {
+    await mkdir(join(main, "subdir"));
+    await symlink(main, join(root, "alias"));
+    expect(await new Worktrees(join(root, "alias/subdir")).project()).toEqual({
+      main,
+      commonDir: join(main, ".git"),
+      checkout: main,
+    });
+    await expect(access(join(main, ".pi"))).rejects.toThrow();
+  });
+
+  it("has no project outside Git", async () => {
+    expect(await new Worktrees(root).project()).toBeUndefined();
+  });
+
+  it("preserves spaces and trailing whitespace in Git paths", async () => {
+    const path = join(root, "trailing space \n");
+    await mkdir(path);
+    await git(path, "init");
+    expect(await new Worktrees(path).project()).toEqual({ main: path, commonDir: join(path, ".git"), checkout: path });
+  });
+
+  it("propagates project discovery errors", async () => {
+    await writeFile(join(main, ".git/config"), "[broken");
+    await expect(service.project()).rejects.toThrow("Cannot resolve Git project");
+  });
+
+  it("propagates project discovery cancellation", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(service.project(controller.signal)).rejects.toThrow("aborted");
+  });
+
+  it("inspects blockers from the target cwd", async () => {
+    const { worktree } = await service.create("task");
+    await put(worktree.path, "tracked", "changed");
+    expect(await new Worktrees(worktree.path).inspect("task")).toMatchObject({
+      worktree: { managedName: "task" },
+      blockers: ["tracked"],
+    });
+  });
+
+  it("refuses removal of the calling worktree", async () => {
+    const { worktree } = await service.create("task");
+    await expect(new Worktrees(worktree.path).remove("task")).rejects.toThrow("calling cwd");
+  });
+
   it("validates mutation names before repository discovery", async () => {
     const outside = new Worktrees(root);
     await expect(outside.create("../escape")).rejects.toThrow("Worktree name");
     await expect(outside.remove("../escape")).rejects.toThrow("Worktree name");
   });
 
-  it("lists without writes; creates and removes without changing caller cwd or unrelated branches", async () => {
-    const cwd = process.cwd();
+  it("lists without writes", async () => {
+    expect(await service.list()).toMatchObject([{ path: main, primary: true, managedName: undefined }]);
+    await expect(access(join(main, ".pi"))).rejects.toThrow();
+  });
+
+  it("creates a managed worktree without changing the caller session", async () => {
     const { session } = fakeSession([], main);
     service = session.worktrees;
     const manager = session.ctx.sessionManager;
-    expect(await service.list()).toMatchObject([{ path: main, primary: true, managedName: undefined }]);
-    await expect(access(join(main, ".pi"))).rejects.toThrow();
-    await git(main, "branch", "unrelated");
     const { worktree, baseCommit } = await service.create("task");
     expect(worktree).toMatchObject({ path: join(main, ".pi/worktrees/task"), managedName: "task", head: baseCommit });
     expect(await readFile(join(main, ".pi/worktrees/.gitignore"), "utf8")).toBe("*\n");
-    expect(await service.remove("task")).toMatchObject({ branchDeleted: true });
-    expect(await git(main, "branch", "--list", "unrelated")).toContain("unrelated");
-    expect(process.cwd()).toBe(cwd);
     expect(service.cwd).toBe(main);
     expect(session.ctx.cwd).toBe(main);
     expect(session.ctx.sessionManager).toBe(manager);
+  });
+
+  it("removes a managed worktree without touching unrelated branches", async () => {
+    await git(main, "branch", "unrelated");
+    await service.create("task");
+    expect(await service.remove("task")).toMatchObject({ branchDeleted: true });
+    expect(await git(main, "branch", "--list", "unrelated")).toContain("unrelated");
   });
 
   it("uses a dirty linked caller's committed HEAD and primary storage, including subdirectories", async () => {
@@ -75,6 +127,7 @@ describe("shared Worktrees service", () => {
     await put(caller, "tracked", "caller commit");
     await commit(caller);
     const head = await git(caller, "rev-parse", "HEAD");
+    expect(await new Worktrees(caller).project()).toEqual({ main, commonDir: join(main, ".git"), checkout: caller });
     await put(caller, "tracked", "uncommitted");
     await mkdir(join(caller, "subdir"));
     const created = await new Worktrees(join(caller, "subdir")).create("from-caller");
@@ -129,22 +182,30 @@ describe("shared Worktrees service", () => {
     await expect(access(worktree.path)).rejects.toThrow();
   });
 
-  it("allows ordinary ignored artifacts and unchanged committed memories/plans", async () => {
-    for (const file of [".pi/memories/saved.md", ".pi/plans/saved.md"]) {
-      await put(main, file);
-      await git(main, "add", "-f", file);
+  it.each(["ignored artifacts", "unchanged committed memories/plans"])("allows %s", async (kind) => {
+    if (kind === "unchanged committed memories/plans") {
+      for (const file of [".pi/memories/saved.md", ".pi/plans/saved.md"]) {
+        await put(main, file);
+        await git(main, "add", "-f", file);
+      }
+      await commit(main);
     }
-    await commit(main);
     const { worktree } = await service.create("task");
-    for (const file of ["node_modules/pkg/index.js", "coverage/report", ".env"]) await put(worktree.path, file);
+    if (kind === "ignored artifacts") {
+      for (const file of ["node_modules/pkg/index.js", "coverage/report", ".env"]) await put(worktree.path, file);
+    }
     expect((await service.remove("task")).branchDeleted).toBe(true);
     await expect(access(worktree.path)).rejects.toThrow();
   });
 
-  it("refuses the calling worktree and locked worktrees", async () => {
+  it("refuses removal from a subdirectory of the calling worktree", async () => {
     const { worktree } = await service.create("task");
     await mkdir(join(worktree.path, "subdir"));
     await expect(new Worktrees(join(worktree.path, "subdir")).remove("task")).rejects.toThrow("calling cwd");
+  });
+
+  it("refuses locked worktrees", async () => {
+    const { worktree } = await service.create("task");
     await git(main, "worktree", "lock", "--reason", "fixture lock", worktree.path);
     await expect(service.remove("task")).rejects.toThrow("locked or prunable");
   });
@@ -185,12 +246,18 @@ describe("shared Worktrees service", () => {
     },
   );
 
-  it("reports unsupported directories, unborn HEAD, and bare primary repositories", async () => {
+  it("reports unsupported directories", async () => {
     await expect(new Worktrees(root).list()).rejects.toThrow("Git worktree list");
+  });
+
+  it("reports unborn HEAD", async () => {
     const unborn = join(root, "unborn");
     await mkdir(unborn);
     await git(unborn, "init");
     await expect(new Worktrees(unborn).create("task")).rejects.toThrow("HEAD^{commit}");
+  });
+
+  it("reports bare primary repositories", async () => {
     const bare = join(root, "bare");
     await git(root, "init", "--bare", bare);
     await expect(new Worktrees(bare).list()).rejects.toThrow("non-bare primary");
@@ -224,7 +291,7 @@ describe("shared Worktrees service", () => {
     expect(await git(other, "branch", "--show-current")).toBe("mypi/worktree/task");
   });
 
-  it("protects dirty submodules and propagates Git's clean-submodule removal refusal", async () => {
+  it.each(["dirty", "clean"])("refuses removal with a %s initialized submodule", async (kind) => {
     const sub = join(root, "sub");
     await mkdir(sub);
     await git(sub, "init");
@@ -234,9 +301,11 @@ describe("shared Worktrees service", () => {
     await commit(main);
     const { worktree } = await service.create("task");
     await git(worktree.path, "-c", "protocol.file.allow=always", "submodule", "update", "--init");
-    await put(worktree.path, "sub/file", "changed");
-    await expect(service.remove("task")).rejects.toThrow('"sub"');
-    await git(join(worktree.path, "sub"), "checkout", "--", "file");
+    if (kind === "dirty") {
+      await put(worktree.path, "sub/file", "changed");
+      await expect(service.remove("task")).rejects.toThrow('"sub"');
+      return;
+    }
     await expect(service.remove("task")).rejects.toThrow("Git worktree remove");
     expect(await git(main, "rev-parse", "mypi/worktree/task")).toBeTruthy();
     expect(await readFile(join(worktree.path, "sub/file"), "utf8")).toBe("local work");

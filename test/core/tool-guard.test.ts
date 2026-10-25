@@ -141,8 +141,7 @@ describe("ToolGuard", () => {
       const guard = newGuard();
       const one = vi.fn();
       const two = vi.fn();
-      let questions = ["Reach /a?", "Reach /b?"];
-      guard.set("one", () => ({ kind: "ask", questions, onAllowSession: one }));
+      guard.set("one", rule({ kind: "ask", questions: ["Reach /a?", "Reach /b?"], onAllowSession: one }));
       const { ctx, select } = fakeContext({ answer: "Allow for this session" });
       await expect(guard.check(event(), ctx)).resolves.toBeUndefined();
       expect(one).toHaveBeenCalledTimes(1);
@@ -151,7 +150,7 @@ describe("ToolGuard", () => {
       expect(select).toHaveBeenCalledTimes(1);
       expect(one).toHaveBeenCalledTimes(1);
 
-      questions = ["Reach /b?", "Reach /c?", "Reach /d?"];
+      guard.set("one", rule({ kind: "ask", questions: ["Reach /b?", "Reach /c?", "Reach /d?"], onAllowSession: one }));
       guard.set("two", rule({ kind: "ask", questions: ["Really?"], onAllowSession: two }));
       await guard.check(event(), ctx);
       expect(one).toHaveBeenCalledTimes(2);

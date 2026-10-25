@@ -32,5 +32,27 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["test/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/src/**"],
+                    "message": "Import across folders with the #core/, #module/, #tool/, and other aliases (AGENTS.md), not a relative path into src/."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

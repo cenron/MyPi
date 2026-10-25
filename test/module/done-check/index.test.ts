@@ -1,10 +1,12 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Problem } from "#core/channels";
 import { answer } from "#core/events";
+import type { Project } from "#core/worktree/index";
 import { DoneCheckModule } from "#module/done-check/index";
+import { approve } from "#module/done-check/project-commands";
 import { fakeSession } from "../../fakes";
 
 let dir: string;
@@ -19,8 +21,10 @@ afterEach(() => rm(dir, { recursive: true, force: true }));
  * The module over a fake session in `dir`, with plan-build's `mode` and LSP's `diagnostics` answered by the test:
  * `problems` gives each check's answer.
  */
-function start(options: { mode?: "plan" | "build"; problems?: (files: readonly string[]) => Problem[] } = {}) {
-  const fake = fakeSession([], dir);
+function start(
+  options: { mode?: "plan" | "build"; problems?: (files: readonly string[]) => Problem[]; project?: Project } = {},
+) {
+  const fake = fakeSession([], dir, options.project);
   const events = fake.session.pi.events;
   let mode = options.mode ?? "build";
   answer(events, "mode", "plan-build", () => mode);
@@ -159,6 +163,17 @@ describe("the project's commands", () => {
     await writeFile(join(dir, ".pi/done-check.json"), JSON.stringify({ commands }));
   };
   const FAILING = "echo boom; exit 1";
+
+  it("uses repository approval while reading configuration and executing in the active cwd", async () => {
+    await listCommands("pwd; exit 1");
+    const commonDir = join(dir, "common-git");
+    await approve(`git:${commonDir}`, ["pwd; exit 1"]);
+    const { runTurn, select } = start({ project: { main: "/not-the-active-checkout", commonDir, checkout: dir } });
+    expect(await runTurn(() => writeNew())).toMatchObject({
+      entries: [{ content: expect.stringContaining(await realpath(dir)) }],
+    });
+    expect(select).not.toHaveBeenCalled();
+  });
 
   it("asks before running a new list, then runs it unasked and sends its failures back", async () => {
     await listCommands(FAILING);

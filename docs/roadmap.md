@@ -6,7 +6,7 @@ here; when the order changes, say why in the row.
 
 ## Next up
 
-Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23; folder-guard added after lsp 2026-10-24; folder-guard slice 4 and identity added before worktree 2026-10-25. Change it freely.
+Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23; folder-guard added after lsp 2026-10-24; folder-guard slice 4 and identity added before worktree 2026-10-25; plan-build slice 9 added after worktree 2026-10-25. Change it freely.
 
 | # | What | Kind | Why at this point | Needs first |
 |---|---|---|---|---|
@@ -16,13 +16,14 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 | 4 | [done-check](modules/done-check.md) | module | **Done 2026-10-24** (the event bus; after each Build run, LSP errors in the changed files and the project's approved commands, sent back to the agent). Counting its catches moved to analytics. | 2 (lsp); slice 1 builds MyPi's event bus over `pi.events`, which LSP and plan-build answer on |
 | 5 | [folder-guard slices 4–5](rules/folder-guard.md#slices) | core rule | **Done 2026-10-25:** slice 4, and slice 5 (fewer false asks: `/tmp` allowed, patterns and markup no longer read as paths). "Allow for this session" on a folder allows everything under it, as every other harness does. A live test working on MyPi from another folder asked again for each file. Small, and the worktree work reaches outside its folder all the time. | Nothing; a small seam on `ToolGuard` |
 | 6 | [identity](core/identity.md) | core | **Done 2026-10-25.** pi's prompt says only "inside pi", nothing about MyPi or the model; a few prompt lines fix it and give it the paths to its own roadmap and docs, so "improve yourself, what's next?" works from any folder without searching. One small slice. | 5 (one "Allow for this session" covers MyPi's folder); `PromptManager` |
-| 7 | [worktree](tools/worktree.md) | tool | **Slices 1–2 delivered 2026-10-25:** verified native session replacement and anchored history forks; reusable `Session.worktrees` create/list/remove with safe cleanup, no model-facing tools. Optional for me, but sub-agent writers need separate worktrees (moved above subagents 2026-10-23). | Next: slice 3, production enter/exit and the model-facing interface decision; slice 4 copies ignored local work |
-| 8 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 7 (worktree) for parallel writers |
-| 9 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (8) |
-| 10 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
-| 11 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
-| 12 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
-| 13 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
+| 7 | [worktree](tools/worktree.md) | commands/core | **Slices 1–3 delivered 2026-10-25; review checkpoint:** native replacement and anchored forks; reusable `Session.worktrees`; commands-only enter/exit/re-entry/list/remove, exact new-caller return, repository-scoped done-check approval. No model-facing tools. Sub-agent writers need separate worktrees (moved above subagents 2026-10-23). | Next after review: slice 4, shared main-checkout memories/plans and keep-or-safe-remove exit. No copying; other ignored-file includes deferred |
+| 8 | [plan-build slice 9](modules/plan-build.md#slices) | module | **Planned 2026-10-25.** Plans that hand over cleanly: Clear context is the default implement choice, the plan file carries every decision from the chat, plans name the existing API they checked before adding machinery, and no new session while jobs run. Found building worktree in one long session. Small, and every later slice benefits. | Nothing |
+| 9 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 7 (worktree) for parallel writers |
+| 10 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (9) |
+| 11 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
+| 12 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
+| 13 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
+| 14 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
 
 ## Nice to have
 
