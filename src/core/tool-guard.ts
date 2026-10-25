@@ -9,13 +9,18 @@ import type {
 
 /**
  * A rule's answer: no objection, a block with the reason the model sees, or questions for the user. Each question is
- * its own line in the dialog and its own "Allow for this session", so a rule that asks about several things (the folder
- * guard's paths) lets the user allow each one apart.
+ * remembered as its own line for "Allow for this session". Rules may also remember broader approvals with an effect
+ * returned by `check`, which the guard runs only after that choice.
  */
 export type Verdict =
   | { kind: "allow" }
   | { kind: "block"; reason: string }
-  | { kind: "ask"; questions: readonly string[] };
+  | {
+      kind: "ask";
+      questions: readonly string[];
+      /** Remembers rule-specific approvals only after the user chooses "Allow for this session". */
+      onAllowSession?: () => void;
+    };
 
 /** A tool call as rules see it; `annotations` are the tool author's hints, unverified. */
 export type ToolCall = { toolName: string; input: Record<string, unknown>; annotations?: ToolAnnotations };
@@ -36,7 +41,7 @@ export type ToolEnv = {
 /** A module's objection check, run on every tool call; it must be cheap and side-effect free. */
 export type ToolRule = (call: ToolCall, env: ToolEnv) => Verdict;
 
-type ToolApprovalRequest = { name: string; question: string };
+type ToolApprovalRequest = { name: string; question: string; onAllowSession?: () => void };
 
 /** The guard's dialog choices; pi's own `confirm` is a select with Yes and No, so the dialog looks the same. */
 const Choice = {
@@ -70,7 +75,7 @@ export function previewAsk(ask: string): string {
 
 /**
  * Checks each tool call against the modules' rules, by module name: any block wins, and every ask goes into one
- * permission dialog, whose "Allow for this session" lets the same ask lines run unasked until `/reload`.
+ * permission dialog. "Allow for this session" remembers exact ask lines and any rule-specific approvals until `/reload`.
  */
 export class ToolGuard {
   private readonly rules = new Map<string, ToolRule>();
@@ -116,7 +121,9 @@ export class ToolGuard {
       const verdict = rule(toolCall, toolEnv);
 
       if (verdict.kind === "block") return blocked(verdict.reason);
-      if (verdict.kind === "ask") asks.push(...verdict.questions.map((question) => ({ name, question })));
+      if (verdict.kind === "ask") {
+        asks.push(...verdict.questions.map((question) => ({ name, question, onAllowSession: verdict.onAllowSession })));
+      }
     }
 
     return this.confirmToolRequests(ctx, asks);
@@ -127,9 +134,10 @@ export class ToolGuard {
     asks: ToolApprovalRequest[],
   ): Promise<ToolCallEventResult | undefined> {
     // Exact lines, so allowing `npm test` doesn't allow `npm install`. Only asks reach here; a block never does.
-    const lines = asks.map(({ name, question }) => `${name}: ${question}`).filter((line) => !this.allowed.has(line));
-    if (lines.length === 0) return undefined;
+    const pending = asks.filter(({ name, question }) => !this.allowed.has(`${name}: ${question}`));
+    if (pending.length === 0) return undefined;
 
+    const lines = pending.map(({ name, question }) => `${name}: ${question}`);
     const details = lines.map(previewAsk).join("\n\n");
     if (!ctx.hasUI) return blocked(`Confirmation needed, no UI to ask:\n ${details}`);
 
@@ -141,6 +149,7 @@ export class ToolGuard {
     switch (choice) {
       case Choice.ALLOW_SESSION:
         for (const line of lines) this.allowed.add(line);
+        for (const onAllowSession of new Set(pending.map((ask) => ask.onAllowSession))) onAllowSession?.();
         return undefined;
       case Choice.YES:
         return undefined;

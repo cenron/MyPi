@@ -15,9 +15,11 @@ const ALLOW: Verdict = { kind: "allow" };
  * Asks before a call that reaches outside the session's folder: a `path` input, or the places a `bash` command names
  * (`commandPaths`). Allowed without asking: the modules' own folders, the temp folder (background jobs and web_fetch
  * write there), the `/dev` streams, and the skills and context files pi put in the prompt. Each question names one
- * place, not the call, so "Allow for this session" covers every later call that reaches the same path.
+ * place, not the call, so "Allow for this session" covers that path and its whole tree across tools.
  */
 export class FolderRule extends BaseRule {
+  private readonly sessionAllowed = new Set<string>();
+
   get info(): RuleInfo {
     return {
       name: "folder-guard",
@@ -26,11 +28,18 @@ export class FolderRule extends BaseRule {
   }
 
   check({ toolName, input }: ToolCall, { cwd, home, writableDirs }: ToolEnv): Verdict {
-    const allowed = [cwd, ...writableDirs, tmpdir(), ...DEVICE_FILES, ...this.prompt.paths];
+    const allowed = [cwd, ...writableDirs, tmpdir(), ...DEVICE_FILES, ...this.prompt.paths, ...this.sessionAllowed];
     const outside = pathsOf(toolName, input, cwd, home).filter((path) => !allowed.some((dir) => isInside(dir, path)));
     if (outside.length === 0) return ALLOW;
 
-    return { kind: "ask", questions: [...new Set(outside)].map((path) => `Reaches outside ${cwd}: ${path}`) };
+    const paths = [...new Set(outside)];
+    return {
+      kind: "ask",
+      questions: paths.map((path) => `Reaches outside ${cwd}: ${path} (and anything under it)`),
+      onAllowSession: () => {
+        for (const path of paths) this.sessionAllowed.add(path);
+      },
+    };
   }
 }
 

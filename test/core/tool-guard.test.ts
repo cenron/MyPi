@@ -137,6 +137,42 @@ describe("ToolGuard", () => {
   });
 
   describe("Allow for this session", () => {
+    it("notifies each pending verdict once, including mixed remembered and new questions", async () => {
+      const guard = newGuard();
+      const one = vi.fn();
+      const two = vi.fn();
+      let questions = ["Reach /a?", "Reach /b?"];
+      guard.set("one", () => ({ kind: "ask", questions, onAllowSession: one }));
+      const { ctx, select } = fakeContext({ answer: "Allow for this session" });
+      await expect(guard.check(event(), ctx)).resolves.toBeUndefined();
+      expect(one).toHaveBeenCalledTimes(1);
+
+      await guard.check(event(), ctx);
+      expect(select).toHaveBeenCalledTimes(1);
+      expect(one).toHaveBeenCalledTimes(1);
+
+      questions = ["Reach /b?", "Reach /c?", "Reach /d?"];
+      guard.set("two", rule({ kind: "ask", questions: ["Really?"], onAllowSession: two }));
+      await guard.check(event(), ctx);
+      expect(one).toHaveBeenCalledTimes(2);
+      expect(two).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["Yes", { answer: "Yes" }, false],
+      ["No", { answer: "No" }, false],
+      ["Escape or abort", { answer: undefined }, false],
+      ["no UI", { hasUI: false, answer: "Allow for this session" }, false],
+      ["a winning block", { answer: "Allow for this session" }, true],
+    ])("does not notify approval effects on %s", async (_case, options, blocked) => {
+      const guard = newGuard();
+      const onAllowSession = vi.fn();
+      guard.set("one", rule({ kind: "ask", questions: ["Reach /a?"], onAllowSession }));
+      if (blocked) guard.set("blocker", block("no"));
+      await guard.check(event(), fakeContext(options).ctx);
+      expect(onAllowSession).not.toHaveBeenCalled();
+    });
+
     it("lets the call run, and the same ask line runs unasked after that", async () => {
       const guard = newGuard();
       guard.set("one", ask("Run ls?"));

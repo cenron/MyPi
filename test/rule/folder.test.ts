@@ -17,7 +17,8 @@ const rule = new FolderRule({ paths: ["/home/me/.agents/skills/herdr", "/home/me
 const verdict = (toolName: string, input: Record<string, unknown>) => rule.check({ toolName, input }, env);
 const asks = (...paths: string[]) => ({
   kind: "ask",
-  questions: paths.map((path) => `Reaches outside /home/me/work/app: ${path}`),
+  questions: paths.map((path) => `Reaches outside /home/me/work/app: ${path} (and anything under it)`),
+  onAllowSession: expect.any(Function),
 });
 
 describe("FolderRule", () => {
@@ -53,6 +54,38 @@ describe("FolderRule", () => {
     ["any tool with a path, lsp included", "lsp", { action: "outline", path: "/etc/hosts" }, "/etc/hosts"],
   ])("asks for %s, naming the resolved path", (_case, tool, input, path) => {
     expect(verdict(tool, input)).toEqual(asks(path));
+  });
+
+  it.each([
+    ["the same path", "/elsewhere/tree", "/elsewhere/tree", true],
+    ["a descendant two levels down", "/elsewhere/tree", "/elsewhere/tree/sub/file.md", true],
+    ["the parent", "/elsewhere/tree", "/elsewhere", false],
+    ["a sibling", "/elsewhere/tree", "/elsewhere/other", false],
+    ["a prefix lookalike", "/elsewhere/tree", "/elsewhere/tree-old", false],
+    ["a file's sibling", "/elsewhere/file.md", "/elsewhere/other.md", false],
+    ["a file's parent", "/elsewhere/file.md", "/elsewhere", false],
+  ])("session approval covers only the named tree: %s", (_case, path, laterPath, allowed) => {
+    const fresh = new FolderRule({ paths: [] });
+    const call = { toolName: "read", input: { path } };
+    const approval = fresh.check(call, env);
+    expect(fresh.check(call, env).kind).toBe("ask"); // Checking alone must not grant access.
+    if (approval.kind !== "ask") throw new Error("Expected an approval request");
+    approval.onAllowSession?.();
+
+    expect(fresh.check({ toolName: "read", input: { path: laterPath } }, env).kind).toBe(allowed ? "allow" : "ask");
+  });
+
+  it("remembers every approved path and asks only about paths outside those trees", () => {
+    const fresh = new FolderRule({ paths: [] });
+    const approval = fresh.check({ toolName: "bash", input: { command: "ls /elsewhere/tree /another/tree" } }, env);
+    if (approval.kind !== "ask") throw new Error("Expected an approval request");
+    approval.onAllowSession?.();
+
+    const command = "cat /elsewhere/tree/a /elsewhere/tree/sub/b /another/tree/c";
+    expect(fresh.check({ toolName: "bash", input: { command } }, env)).toEqual({ kind: "allow" });
+    expect(fresh.check({ toolName: "bash", input: { command: `${command} /unapproved/file` } }, env)).toEqual(
+      asks("/unapproved/file"),
+    );
   });
 
   // commandPaths' own table covers which words are paths; here, only that bash goes through it.

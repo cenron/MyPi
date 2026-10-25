@@ -1,5 +1,5 @@
 import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { registerRules, updatePromptPaths } from "#rule/index";
 import { fakeSession } from "../fakes";
 
@@ -17,6 +17,30 @@ describe("registerRules", () => {
       block: true,
       reason: expect.stringContaining("folder-guard: Reaches outside /project: /home/me/notes.md"),
     });
+  });
+
+  it("approves trees across tools until a fresh session registers its rules", async () => {
+    const { session } = fakeSession([], "/project");
+    registerRules(session);
+    const select = vi.fn(async () => "Allow for this session");
+    const interactive = { ...ctx, hasUI: true, ui: { select } } as unknown as ExtensionContext;
+    const bash = (command: string) => ({ ...read(""), toolName: "bash", input: { command } }) as ToolCallEvent;
+    await expect(session.toolGuard.check(bash("ls /elsewhere/tree"), interactive)).resolves.toBeUndefined();
+    expect(select).toHaveBeenCalledTimes(1);
+
+    await expect(session.toolGuard.check(read("/elsewhere/tree/sub/file.md"), interactive)).resolves.toBeUndefined();
+    await expect(
+      session.toolGuard.check(bash("cat /elsewhere/tree/a /elsewhere/tree/sub/b"), interactive),
+    ).resolves.toBeUndefined();
+    expect(select).toHaveBeenCalledTimes(1);
+
+    await session.toolGuard.check(read("/elsewhere/other"), interactive);
+    expect(select).toHaveBeenCalledTimes(2);
+
+    const fresh = fakeSession([], "/project").session;
+    registerRules(fresh);
+    await fresh.toolGuard.check(bash("ls /elsewhere/tree"), interactive);
+    expect(select).toHaveBeenCalledTimes(3);
   });
 
   it("allows the places pi's prompt points at, once they're filled in", async () => {
