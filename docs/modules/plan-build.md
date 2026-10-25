@@ -1,6 +1,6 @@
 # Plan / Build
 
-**Status:** done (slices 1–8 built and checked live, 2026-10-20)
+**Status:** building (slices 1–8 built and checked live, 2026-10-20; slice 9 planned 2026-10-25)
 
 ## Goal
 
@@ -247,6 +247,28 @@ built it in a sub-folder.
   `{ mode: "build" }`, seeded with the hand-off text, the plan's path, and the plan; the planning session's last mode
   stayed `plan`. `/plan implement nope.md` showed ENOENT and stayed; `/plan implement` with no file took the newest
   plan.
+
+9. **Planned 2026-10-25: plans that hand over cleanly.** Found while pi planned and built worktree slices 1–3 in one
+   session: the context reached 94% and auto-compacted mid-build, the code drifted from the principles as it filled,
+   and two plans grew machinery that existing pi APIs already covered. A fresh context per plan fixes most of it, but
+   only if the plan file carries everything.
+   - **Clear context is the default.** "Clear context and implement" moves first in `PLAN_CHOICES`, so Enter starts a
+     fresh Build session from the plan file. "Implement" (same session) stays, second, for small plans.
+   - **The plan file is the whole hand-off.** `PLAN_PROMPT` adds: before submitting again, fold every decision and
+     correction from the conversation into the plan, since the session that implements it may never see the chat.
+     (Decisions made in chat after a plan was written reached the plan on 2026-10-25 only because each was asked for.)
+   - **Look before you write, in the plan.** `PLAN_PROMPT` adds: for each new file, saved state, or lifecycle hook,
+     the plan names the existing pi or MyPi API it checked and why that falls short. That's the principle's own order
+     (pi exports, Node, a MyPi helper), asked at the point where it caught two oversized designs on 2026-10-25: an
+     association file where pi's `parentSession` links already served, and an async module `init()` where one await
+     in `onSessionStart` did.
+   - **No new session while jobs run.** `/plan implement` refuses while background jobs are running and lists them,
+     as `/worktree enter` does: a session switch stops them.
+   - Not taking: resetting the context with no choice (small plans gain nothing), and a reviewer subagent on every
+     `submit_plan` (it would depend on subagents, which may be turned off).
+   - **Tests:** the dialog's first choice is Clear context; `PLAN_PROMPT` holds both new lines (one test, key phrases);
+     `/plan implement` with a running job refuses and names it. Live: submit a plan, press Enter, land in a fresh
+     Build session seeded with the plan.
 
 ## Open questions
 
