@@ -63,6 +63,16 @@ export class JobManager {
     return [...this.jobs.values()].map((job) => ({ ...job.info }));
   }
 
+  /** Throws before a session switch when background jobs would be stopped. */
+  requireNoneRunning(): void {
+    const running = this.list().filter((job) => job.status === "running");
+    if (running.length) {
+      throw new Error(
+        `Stop or wait for running jobs first: ${running.map((job) => `${job.id} (${job.label})`).join(", ")}.`,
+      );
+    }
+  }
+
   /** Stops a running job and waits for it to end. Undefined for an unknown id; an ended job is returned as is. */
   async stop(id: string): Promise<JobInfo | undefined> {
     const job = this.jobs.get(id);

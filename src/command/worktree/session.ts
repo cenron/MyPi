@@ -27,7 +27,7 @@ type ReadableSession = ExtensionCommandContext["sessionManager"];
  */
 export async function enterWorktree(session: Session, ctx: ExtensionCommandContext, name: string) {
   await ctx.waitForIdle();
-  requireNoJobs(session);
+  session.jobs.requireNoneRunning();
 
   const entries = await session.worktrees.list();
   const current = await currentWorktree(entries, ctx.cwd);
@@ -55,7 +55,7 @@ export async function enterWorktree(session: Session, ctx: ExtensionCommandConte
 /** Returns to the conversation that entered this worktree, then keeps the checkout or safely removes it. */
 export async function exitWorktree(session: Session, ctx: ExtensionCommandContext, choice?: ExitChoice) {
   await ctx.waitForIdle();
-  requireNoJobs(session);
+  session.jobs.requireNoneRunning();
 
   const current = await currentWorktree(await session.worktrees.list(), ctx.cwd);
   if (!current?.managedName) throw new Error("Not in a MyPi worktree; nothing to exit.");
@@ -151,13 +151,4 @@ async function currentWorktree(entries: Worktree[], cwd: string): Promise<Worktr
 
 function notify(ctx: ExtensionContext, message: string, type: "info" | "warning" = "info") {
   if (ctx.hasUI) ctx.ui.notify(message, type);
-}
-
-function requireNoJobs(session: Session): void {
-  const running = session.jobs.list().filter((job) => job.status === "running");
-  if (running.length) {
-    throw new Error(
-      `Stop or wait for running jobs first: ${running.map((job) => `${job.id} (${job.label})`).join(", ")}.`,
-    );
-  }
 }

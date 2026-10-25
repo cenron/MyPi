@@ -1,6 +1,6 @@
 # Plan / Build
 
-**Status:** building (slices 1–8 built and checked live, 2026-10-20; slice 9 planned 2026-10-25)
+**Status:** building (slices 1–8 built and checked live 2026-10-20; slice 9 2026-10-25)
 
 ## Goal
 
@@ -248,7 +248,7 @@ built it in a sub-folder.
   stayed `plan`. `/plan implement nope.md` showed ENOENT and stayed; `/plan implement` with no file took the newest
   plan.
 
-9. **Planned 2026-10-25: plans that hand over cleanly.** Found while pi planned and built worktree slices 1–3 in one
+9. **Done 2026-10-25: plans that hand over cleanly.** Found while pi planned and built worktree slices 1–3 in one
    session: the context reached 94% and auto-compacted mid-build, the code drifted from the principles as it filled,
    and two plans grew machinery that existing pi APIs already covered. A fresh context per plan fixes most of it, but
    only if the plan file carries everything.
@@ -269,6 +269,13 @@ built it in a sub-folder.
      worth revisiting once they exist.
    - Goes with [context](../core/context.md) pieces B and D: the Build section names the plan being implemented, and
      asks for a principles check before "done".
+   - **Built 2026-10-25** (by pi on gpt-6-luna; the done check sent its first, unfinished pass back): Clear context
+     first in `PLAN_CHOICES`; the two `PLAN_PROMPT` lines; `buildPrompt(plan)` naming the plan and asking for the
+     principles check; the module's saved state is `{ mode, plan? }`, set by `/plan implement` and the dialog's
+     Implement, dropped on Plan; `JobManager.requireNoneRunning()`, shared with `/worktree`.
+   - **Tried live** (gpt-6-luna, throwaway repo): after `submit_plan`, Enter took Clear context and the new Build
+     session implemented the plan; after `/reload`, asked which plan it was implementing and told to use no tools,
+     it answered with the plan file's full path.
    - **Tests:** the dialog's first choice is Clear context; `PLAN_PROMPT` holds both new lines (one test, key phrases);
      `/plan implement` with a running job refuses and names it. Live: submit a plan, press Enter, land in a fresh
      Build session seeded with the plan.

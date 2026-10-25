@@ -1,6 +1,6 @@
 # Context management
 
-**Status:** building (A done 2026-10-25; B–D planned; E planned after measuring)
+**Status:** building (A, B, and D done 2026-10-25; C planned; E planned after measuring)
 
 ## Why
 
@@ -35,9 +35,9 @@ doesn't keep: the plan being implemented, `principles.md`, and recently edited f
 | | What | Where | Status |
 |---|---|---|---|
 | A | Compact earlier | `compaction.reserveTokens: 80000` in `~/.pi/agent/settings.json`: about 192k of 272k for gpt-6.1-sol, 120k for a 200k model | **Done 2026-10-25** (this machine's setting, not MyPi code) |
-| B | The plan stays in view | plan-build | Planned |
+| B | The plan stays in view | plan-build | **Done 2026-10-25** |
 | C | Steer the summary | core, `session_before_compact` | Planned |
-| D | Re-check the principles before "done" | plan-build's Build section | Planned |
+| D | Re-check the principles before "done" | plan-build's Build section | **Done 2026-10-25** |
 | E | Clear old tool results | core, pi's `context` event | Planned, after measuring |
 
 ### B: the plan stays in view

@@ -7,7 +7,7 @@ import { BaseModule } from "../base";
 import { planCmd } from "./commands/plan";
 import { offerPlan } from "./dialog";
 import { PLANS_DIR } from "./plan-file";
-import { BUILD_PROMPT, PLAN_PROMPT } from "./prompts";
+import { buildPrompt, PLAN_PROMPT } from "./prompts";
 import { planRule } from "./rule";
 import { ASK_USER, askUserTool } from "./tools/ask-user";
 import { SUBMIT_PLAN, submitPlanTool } from "./tools/submit-plan";
@@ -23,14 +23,11 @@ const FOOTER_ITEMS: Record<Mode, FooterItem> = {
 };
 
 /** The prompt section for each mode. */
-const PROMPTS: Record<Mode, string> = {
-  [Mode.PLAN]: PLAN_PROMPT,
-  [Mode.BUILD]: BUILD_PROMPT,
-};
-
-export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
+export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string }> {
   private readonly plansDir = join(this.session.project?.main ?? this.session.ctx.cwd, PLANS_DIR);
   private mode: Mode = Mode.PLAN;
+  /** The plan file a Build session is implementing: named in its prompt section, saved with the mode, dropped on Plan. */
+  private plan: string | undefined;
   /** The plan `submit_plan` saved in this run, until the dialog takes it or the next run starts. In memory only. */
   private submittedPlan: SubmittedPlan | undefined;
 
@@ -38,7 +35,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   private readonly planCommand = planCmd(this.plansDir, {
     toggleMode: () => this.toggleMode(),
     setMode: (mode) => this.setMode(mode),
-    saveBuildTo: (sessionManager) => this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
+    saveBuildTo: (sessionManager, plan) => this.saveStateTo(sessionManager, { mode: Mode.BUILD, plan }),
+    jobs: this.session.jobs,
   });
 
   get info(): ModuleInfo {
@@ -51,10 +49,11 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   }
 
   init(): void {
-    const savedMode = this.loadState()?.mode;
-    this.mode = isMode(savedMode) ? savedMode : Mode.PLAN;
+    const saved = this.loadState();
+    this.mode = isMode(saved?.mode) ? saved.mode : Mode.PLAN;
+    this.plan = typeof saved?.plan === "string" ? saved.plan : undefined;
     this.setFooter(FOOTER_ITEMS[this.mode]);
-    this.setPrompt(PROMPTS[this.mode]);
+    this.setPrompt(this.currentPrompt());
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
     this.applyPlanTools();
     // submit_plan writes only its own file in .pi/plans/.
@@ -96,7 +95,10 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
 
     this.submittedPlan = undefined;
     const actions: PlanActions = {
-      switchToBuild: () => this.setMode(Mode.BUILD),
+      switchToBuild: (path) => {
+        this.plan = path;
+        this.setMode(Mode.BUILD);
+      },
       sendUserMessage: (text) => this.session.pi.sendUserMessage(text),
       // Only commands can start sessions. A file URL preserves spaces through the command argument parser.
       implementInNewSession: (plan) =>
@@ -114,10 +116,15 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
   private setMode(mode: Mode): void {
     this.mode = mode;
 
-    this.saveState({ mode: this.mode });
+    if (mode === Mode.PLAN) this.plan = undefined;
+    this.saveState({ mode: this.mode, plan: this.plan });
     this.setFooter(FOOTER_ITEMS[this.mode]);
-    this.setPrompt(PROMPTS[this.mode]);
+    this.setPrompt(this.currentPrompt());
     this.applyPlanTools();
+  }
+
+  private currentPrompt(): string {
+    return this.mode === Mode.BUILD ? buildPrompt(this.plan) : PLAN_PROMPT;
   }
 
   private applyPlanTools() {

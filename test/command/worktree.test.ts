@@ -123,7 +123,7 @@ describe("/worktree", () => {
     await command("enter", "task");
     const plan = join(root, "plan.md");
     await writeFile(plan, "# Plan");
-    await implementInNewSession(active.ctx, plan, () => {});
+    await implementInNewSession(active.ctx, plan, active.session.jobs, () => {});
 
     await command("exit");
 

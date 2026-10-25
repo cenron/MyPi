@@ -12,7 +12,7 @@ export type SubmittedPlan = { title: string; plan: string; path: string };
 
 /** What a dialog choice may do, kept narrow so a choice never needs the whole module. */
 export type PlanActions = {
-  switchToBuild: () => void;
+  switchToBuild: (plan: string) => void;
   sendUserMessage: (text: string) => void;
   implementInNewSession: (plan: SubmittedPlan) => void;
 };

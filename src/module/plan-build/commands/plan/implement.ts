@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
+import type { JobManager } from "#core/job-manager";
 import { errorMessage } from "#core/util/errors";
 import { resolveToolPath } from "#core/util/paths";
 import { latestPlan } from "../../plan-file";
@@ -22,11 +23,13 @@ export async function findPlan(plansDir: string, cwd: string, file: string | und
 export async function implementInNewSession(
   ctx: ExtensionCommandContext,
   path: string,
+  jobs: JobManager,
   seed: (sessionManager: SessionManager) => void,
 ): Promise<string | undefined> {
   const plan = await readFile(path, "utf8");
   // Typed during a run, the command runs at once; the dialog's comes once the run has settled, so this returns.
   await ctx.waitForIdle();
+  jobs.requireNoneRunning();
 
   const result = await ctx.newSession({
     parentSession: ctx.sessionManager.getSessionFile(),

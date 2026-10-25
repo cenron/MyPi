@@ -7,10 +7,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ask } from "#core/events";
 import type { Session } from "#core/session";
 import { PlanBuildModule } from "#module/plan-build/index";
-import { BUILD_PROMPT, PLAN_PROMPT } from "#module/plan-build/prompts";
+import { buildPrompt, PLAN_PROMPT } from "#module/plan-build/prompts";
 import { customEntry, fakeSession } from "../../fakes";
 
-const saved = (mode: unknown) => customEntry("mypi-module-plan-build", { mode });
+const saved = (mode: unknown, plan?: string) =>
+  customEntry("mypi-module-plan-build", { mode, ...(plan ? { plan } : {}) });
 
 /** The module's prompt section, as the next run would send it. */
 function promptSection(session: Session) {
@@ -32,6 +33,11 @@ function startPlanBuild(branch: unknown[] = [], cwd = "/project", main?: string)
 }
 
 describe("PlanBuildModule", () => {
+  it("Plan prompt requires complete hand-offs and checking existing APIs", () => {
+    expect(PLAN_PROMPT).toContain("fold every decision and correction from the conversation into the plan");
+    expect(PLAN_PROMPT).toContain("name the existing pi or MyPi API you checked and why it falls short");
+  });
+
   it("starts in Plan when nothing is saved, with Plan's footer and prompt", () => {
     const { session, setStatus } = fakeSession();
     new PlanBuildModule(session).init();
@@ -44,7 +50,14 @@ describe("PlanBuildModule", () => {
     const { session, setStatus } = fakeSession([saved("build")]);
     new PlanBuildModule(session).init();
     expect(setStatus).toHaveBeenCalledWith("mypi-plan-build", "<dim>BUILD");
-    expect(promptSection(session)).toBe(BUILD_PROMPT);
+    expect(promptSection(session)).toBe(buildPrompt());
+    expect(promptSection(session)).toContain("before-done checklist");
+  });
+
+  it("restores the implementing plan path from saved state", () => {
+    const { session } = fakeSession([saved("build", ".pi/plans/p.md")]);
+    new PlanBuildModule(session).init();
+    expect(promptSection(session)).toContain("Implementing .pi/plans/p.md; re-read it when unsure what's left.");
   });
 
   // The session file can hold anything, so a bad value must still leave a mode and a label.
@@ -131,7 +144,10 @@ describe("PlanBuildModule", () => {
         const plan = module.commands().find((command) => command.info.name === "plan");
         await expect(plan?.execute(ctx as never, ["implement", ".pi/plans/p.md"])).resolves.toBeUndefined();
         // The new session's init() reads this entry, so it starts in Build.
-        expect(appendCustomEntry).toHaveBeenCalledWith("mypi-module-plan-build", { mode: "build" });
+        expect(appendCustomEntry).toHaveBeenCalledWith("mypi-module-plan-build", {
+          mode: "build",
+          plan: join(cwd, ".pi", "plans", "p.md"),
+        });
         expect(sendUserMessage).toHaveBeenCalledWith(expect.stringContaining("# P"));
       } finally {
         await rm(cwd, { recursive: true, force: true });
@@ -151,9 +167,10 @@ describe("PlanBuildModule", () => {
     it("follows each switch, and is never dropped", async () => {
       const { session, run } = startPlanBuild();
       await run("build");
-      expect(promptSection(session)).toBe(BUILD_PROMPT);
+      expect(promptSection(session)).toBe(buildPrompt());
       await run();
       expect(promptSection(session)).toBe(PLAN_PROMPT);
+      expect(promptSection(session)).not.toContain("Implementing");
     });
   });
 
@@ -218,15 +235,19 @@ describe("PlanBuildModule", () => {
       expect(select).toHaveBeenCalledTimes(1);
       const [title, options] = select.mock.calls[0] ?? [];
       expect(title).toMatch(/^Implement this plan\?\nAdd it \(\.pi\/plans\/\d{4}-\d\d-\d\d-\d{6}-add-it\.md\)$/);
-      expect(options).toEqual(["Implement", "Clear context and implement", "Stay in plan mode"]);
+      expect(options).toEqual(["Clear context and implement", "Implement", "Stay in plan mode"]);
     });
 
     it("Implement switches to Build, then asks the model to implement", async () => {
-      const { emit, ctx, select, sendUserMessage, setStatus, appendEntry, activeTools } = await submitted();
+      const { emit, ctx, select, sendUserMessage, setStatus, appendEntry, activeTools, session } = await submitted();
       select.mockResolvedValueOnce("Implement");
       await emit("agent_settled", settled(), ctx);
       expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<dim>BUILD");
-      expect(appendEntry).toHaveBeenLastCalledWith("mypi-module-plan-build", { mode: "build" });
+      expect(appendEntry).toHaveBeenLastCalledWith("mypi-module-plan-build", {
+        mode: "build",
+        plan: expect.stringContaining("add-it.md"),
+      });
+      expect(promptSection(session)).toContain("Implementing");
       expect(activeTools()).not.toContain("submit_plan");
       expect(sendUserMessage).toHaveBeenCalledWith("Implement the plan.");
       // The message runs under Build's prompt, so the switch must come first.

@@ -4,16 +4,16 @@ import type { PlanActions, PlanChoice, SubmittedPlan } from "./types";
 
 const IMPLEMENT_MESSAGE = "Implement the plan.";
 
-/** The choices in order; the first is highlighted, so Implement goes first. Escape stays, like the last one. */
+/** The first choice is highlighted: prefer a fresh Build context. Escape stays, like the last choice. */
 const PLAN_CHOICES: PlanChoice[] = [
+  { label: "Clear context and implement", run: (plan, actions) => actions.implementInNewSession(plan) },
   {
     label: "Implement",
-    run: (_plan, actions) => {
-      actions.switchToBuild();
+    run: (plan, actions) => {
+      actions.switchToBuild(plan.path);
       actions.sendUserMessage(IMPLEMENT_MESSAGE);
     },
   },
-  { label: "Clear context and implement", run: (plan, actions) => actions.implementInNewSession(plan) },
   { label: "Stay in plan mode", run: () => {} },
 ];
 

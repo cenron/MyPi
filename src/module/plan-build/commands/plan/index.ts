@@ -1,4 +1,5 @@
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
+import type { JobManager } from "#core/job-manager";
 import type { Command } from "#core/types";
 import { isMode, type Mode } from "../../types";
 import { findPlan, implementInNewSession } from "./implement";
@@ -7,7 +8,8 @@ import { findPlan, implementInNewSession } from "./implement";
 export type PlanCmdActions = {
   toggleMode: () => void;
   setMode: (mode: Mode) => void;
-  saveBuildTo: (sessionManager: SessionManager) => void;
+  saveBuildTo: (sessionManager: SessionManager, plan: string) => void;
+  jobs: JobManager;
 };
 
 /** `/plan`: toggles the mode, picks one, or implements a plan in a new session. */
@@ -23,7 +25,7 @@ export function planCmd(plansDir: string, actions: PlanCmdActions): Command {
       switch (arg) {
         case "implement": {
           const path = await findPlan(plansDir, ctx.cwd, file);
-          return implementInNewSession(ctx, path, actions.saveBuildTo);
+          return implementInNewSession(ctx, path, actions.jobs, (manager) => actions.saveBuildTo(manager, path));
         }
 
         case undefined:

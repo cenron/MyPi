@@ -3,6 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { JobManager } from "#core/job-manager";
 import { findPlan, implementInNewSession } from "#module/plan-build/commands/plan/implement";
 import { savePlan } from "#module/plan-build/plan-file";
 import { implementMessage } from "#module/plan-build/prompts";
@@ -60,6 +61,7 @@ describe("findPlan", () => {
 });
 
 describe("implementInNewSession", () => {
+  const jobs = { requireNoneRunning: vi.fn() } as unknown as JobManager;
   const writePlan = async () => {
     const path = join(cwd, "plan.md");
     await writeFile(path, "# T\n\nSteps.\n");
@@ -68,7 +70,7 @@ describe("implementInNewSession", () => {
 
   it("starts a new session with this one as its parent, once the agent is idle", async () => {
     const { ctx, newSession, waitForIdle } = fakeCommandContext(cwd);
-    await implementInNewSession(ctx, await writePlan(), () => {});
+    await implementInNewSession(ctx, await writePlan(), jobs, () => {});
     expect(newSession).toHaveBeenCalledWith(expect.objectContaining({ parentSession: "/sessions/old.jsonl" }));
     expect(waitForIdle.mock.invocationCallOrder[0]).toBeLessThan(newSession.mock.invocationCallOrder[0] ?? 0);
   });
@@ -76,7 +78,7 @@ describe("implementInNewSession", () => {
   it("sends the hand-off text, the plan's path, and the plan as the new session's first message", async () => {
     const { ctx, sendUserMessage } = fakeCommandContext(cwd);
     const path = await writePlan();
-    await implementInNewSession(ctx, path, () => {});
+    await implementInNewSession(ctx, path, jobs, () => {});
     expect(sendUserMessage).toHaveBeenCalledWith(implementMessage(path, "# T\n\nSteps.\n"));
     expect(implementMessage(path, "P")).toMatch(
       /^A previous agent produced the plan below[\s\S]*\nPlan file: .*\n\nP$/,
@@ -85,20 +87,31 @@ describe("implementInNewSession", () => {
 
   it("shows a failed first message in the new session", async () => {
     const { ctx, notify } = fakeCommandContext(cwd, { send: () => Promise.reject(new Error("no model")) });
-    await implementInNewSession(ctx, await writePlan(), () => {});
+    await implementInNewSession(ctx, await writePlan(), jobs, () => {});
     await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("no model", "error"));
   });
 
   it("says so when the new session is cancelled", async () => {
     const { ctx } = fakeCommandContext(cwd, { cancelled: true });
-    await expect(implementInNewSession(ctx, await writePlan(), () => {})).resolves.toBe(
+    await expect(implementInNewSession(ctx, await writePlan(), jobs, () => {})).resolves.toBe(
       "New session cancelled; still in this one.",
     );
   });
 
+  it("refuses to switch sessions while a background job is running", async () => {
+    const { ctx, newSession } = fakeCommandContext(cwd);
+    const runningJobs = {
+      requireNoneRunning: () => {
+        throw new Error("Stop or wait for running jobs first: 1 (test).");
+      },
+    } as unknown as JobManager;
+    await expect(implementInNewSession(ctx, await writePlan(), runningJobs, () => {})).rejects.toThrow("1 (test)");
+    expect(newSession).not.toHaveBeenCalled();
+  });
+
   it("fails before leaving the session when the plan can't be read", async () => {
     const { ctx, newSession } = fakeCommandContext(cwd);
-    await expect(implementInNewSession(ctx, join(cwd, "missing.md"), () => {})).rejects.toMatchObject({
+    await expect(implementInNewSession(ctx, join(cwd, "missing.md"), jobs, () => {})).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(newSession).not.toHaveBeenCalled();
