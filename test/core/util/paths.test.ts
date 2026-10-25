@@ -78,6 +78,14 @@ describe("commandPaths", () => {
       ["/etc", "/home/me/.ssh", "/home/me"],
     ],
     ["the raw text's redirect targets and assignments", "ls > /tmp/out; X=../y cmd", ["/tmp/out", "/home/me/work/y"]],
+    ["a raw < target glued to its path", "cat </etc/hosts $(x)", ["/etc/hosts"]],
+    ["a quoted path in the raw text, by its value", 'cmd "--file=/etc/x" "$X"', ["/etc/x"]],
+    ["a path a heredoc script names", "python3 - <<'PY'\nopen('/etc/passwd')\nPY", ["/etc/passwd"]],
+    ["a path in a shell heredoc", "bash <<'EOF'\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    // An apostrophe in a comment pairs with the next quote; that span has spaces, so it's split, and the path stays.
+    ["a path after a stray apostrophe", "python3 - <<'PY'\n# don't\nopen('/etc/passwd')\nPY", ["/etc/passwd"]],
+    ["a quoted path with spaces and an operator", "cat '/a b|c'", ["/a b|c"]],
+    ["the real path next to a pattern", "grep -E '/a/|/b/' /etc/x || test \"$?\" -eq 1", ["/etc/x"]],
   ])("names %s", (_case, command, expected) => {
     expect(commandPaths(command, commandCwd, commandHome)).toEqual(expected);
   });
@@ -87,6 +95,11 @@ describe("commandPaths", () => {
     ["flags and URLs", "curl -sL https://example.com/a/../b"],
     ["a $HOME that's part of a longer name", "echo $HOMEBREW_PREFIX"],
     ["~user, which isn't the home folder", "ls ~root"],
+    // Found in a worktree spike: each of these asked about a place nobody reaches.
+    ["a quoted pattern that starts with /", "git diff | grep -E '/Users/|/private/'"],
+    ["the same pattern when tokenize gives up", "git diff | grep -E '/Users/|/private/' || test \"$?\" -eq 1"],
+    ["a tag in a heredoc script's regex", "python3 - <<'PY'\nre.findall(r'<cwd>.*?</cwd>', s)\nPY"],
+    ["tags in a heredoc's markup", "cat > page.html <<'EOF'\n<div><b>x</b></div>\nEOF"],
   ])("names nothing for %s", (_case, command) => {
     expect(commandPaths(command, commandCwd, commandHome)).toEqual([]);
   });

@@ -32,6 +32,8 @@ describe("FolderRule", () => {
     ["a skill folder from the prompt", "read", { path: "/home/me/.agents/skills/herdr/SKILL.md" }],
     ["a context file from the prompt", "read", { path: "../AGENTS.md" }],
     ["the temp folder", "read", { path: join(tmpdir(), "pi-bash-1.log") }],
+    ["/tmp, by habit", "bash", { command: "mktemp -d /tmp/spike.XXXXXX" }],
+    ["/private/tmp, where macOS's /tmp points", "read", { path: "/private/tmp/spike/a.md" }],
     ["a /dev stream", "write", { path: "/dev/null" }],
     ["an MCP tool's path, which isn't a file", "mcp__docs__get", { path: "/v1/users" }],
     ["a bash command whose paths are all allowed", "bash", { command: "cat src/a.ts > /dev/null; ls ../AGENTS.md" }],
@@ -45,6 +47,7 @@ describe("FolderRule", () => {
     ["the home folder", "find", { path: "~" }, "/home/me"],
     ["an absolute path elsewhere", "grep", { path: "/home/me/Documents" }, "/home/me/Documents"],
     ["a folder that only starts like the session's", "ls", { path: "/home/me/work/app-old" }, "/home/me/work/app-old"],
+    ["a folder that only starts like /tmp", "ls", { path: "/tmpfoo" }, "/tmpfoo"],
     [
       "a skill pi didn't list",
       "read",

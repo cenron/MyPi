@@ -14,15 +14,25 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 | 2 | [lsp](modules/lsp.md) | module | **Done 2026-10-24** (servers and `/lsp` menu; `lsp`: outline, find_symbol, references, implementations, definition, diagnostics; `lsp_edit`: rename). Symbol edits wait for a need; diagnostics after a turn come with the done check. | Microsoft's `vscode-languageserver-protocol` (passed the dependency check 2026-10-23) |
 | 3 | [folder-guard](rules/folder-guard.md) | core rule | **Done 2026-10-24** (tools with a `path`, `bash`, and lsp roots). Added 2026-10-24 after a live test where pi ran `find` over the home folder unasked. Small, and every session is safer with it. | Nothing; reuses `ToolGuard` and Plan's `tokenize` |
 | 4 | [done-check](modules/done-check.md) | module | **Done 2026-10-24** (the event bus; after each Build run, LSP errors in the changed files and the project's approved commands, sent back to the agent). Counting its catches moved to analytics. | 2 (lsp); slice 1 builds MyPi's event bus over `pi.events`, which LSP and plan-build answer on |
-| 5 | [folder-guard slice 4](rules/folder-guard.md#slices) | core rule | **Done 2026-10-25.** "Allow for this session" on a folder allows everything under it, as every other harness does. A live test working on MyPi from another folder asked again for each file. Small, and the worktree work reaches outside its folder all the time. | Nothing; a small seam on `ToolGuard` |
+| 5 | [folder-guard slices 4–5](rules/folder-guard.md#slices) | core rule | **Done 2026-10-25:** slice 4, and slice 5 (fewer false asks: `/tmp` allowed, patterns and markup no longer read as paths). "Allow for this session" on a folder allows everything under it, as every other harness does. A live test working on MyPi from another folder asked again for each file. Small, and the worktree work reaches outside its folder all the time. | Nothing; a small seam on `ToolGuard` |
 | 6 | [identity](core/identity.md) | core | **Done 2026-10-25.** pi's prompt says only "inside pi", nothing about MyPi or the model; a few prompt lines fix it and give it the paths to its own roadmap and docs, so "improve yourself, what's next?" works from any folder without searching. One small slice. | 5 (one "Allow for this session" covers MyPi's folder); `PromptManager` |
-| 7 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
+| 7 | [worktree](tools/worktree.md) | tool | **Slice 1 verified 2026-10-25:** native session replacement moves cwd-bound services; a persisted branch anchor plus `forkFrom` carries the selected history; return restores the original without merging. Optional for me, but sub-agent writers need separate worktrees (moved above subagents 2026-10-23). | Next: slice 2, create/list/remove for subagents without moving the main session; production enter/exit is slice 3 |
 | 8 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 7 (worktree) for parallel writers |
 | 9 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (8) |
 | 10 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
 | 11 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
 | 12 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
 | 13 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
+
+## Nice to have
+
+Asked for 2026-10-25. Deferred until everything in **Next up** is done; a list, not an order.
+
+| What | Why | Notes |
+|---|---|---|
+| Readable question dialogs | The dialogs that ask me things are hard to read. | Covers `ask_user`'s question and options, and the tool guard's permission dialog (`previewAsk`, several `folder-guard:` lines in a row). Revisit spacing, wrapping, and what stands out; compare Claude Code's. |
+| A drill-in for running work | Claude Code shows "1 shell", and opening it shows what that shell is doing. Most useful for sub-agents. | MyPi's footer already shows `1 job`, but it can't be opened. The [subagents fleet view](modules/subagents.md#fleet-view) plans a collapsed line and an expanded runs list on the same `JobManager` list; build it so background shells get the same drill-in (output, state, stop). |
+| Auto mode | Plan, Build, and Auto: a mode that runs without asking for each call, but not unchecked. | Research Claude Code's auto mode first (a classifier reviews each action instead of me; what it sees, what it blocks, how it's turned on), then decide how it fits [plan-build](modules/plan-build.md) and the [folder guard](rules/folder-guard.md). |
 
 ## Deferred
 
@@ -37,7 +47,8 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 - Core: module loading (`/modules`), `PromptManager`, `ToolGuard` with "Allow for this session" and the writable list
   (`setWritable`), the shared footer and editor, `JobManager`, `keepOutOfGit`. See [architecture](architecture.md).
 - [folder-guard](rules/folder-guard.md) slice 4: "Allow for this session" on a path allows everything under it, through
-  an `onAllowSession` callback on the ask verdict.
+  an `onAllowSession` callback on the ask verdict. Slice 5: `/tmp` is allowed, and quoted patterns and tags no longer
+  read as paths.
 - [identity](core/identity.md): every run tells the agent it's MyPi on pi, its model and running modules, and the
   paths to its own map, roadmap, and principles, so "improve yourself" works from any folder without searching.
 - [plan-build](modules/plan-build.md), with Plan's shell check.

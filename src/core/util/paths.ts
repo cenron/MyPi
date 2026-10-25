@@ -14,6 +14,15 @@ const HOME_VARIABLE = /\$(?:HOME|\{HOME\})(?=\/|$|[\s;|&)'"`])/g;
 /** What splits a command into words when `tokenize` gives up: spaces, operators, quotes, and `=`. */
 const RAW_WORD_BREAK = /[\s;|&()<>'"`=]+/;
 
+/** What splits a quoted string with no spaces: the same, minus `|`, `<`, and `>`, which a pattern or tag keeps. */
+const QUOTED_WORD_BREAK = /[;&()`=]+/;
+
+/** A command's text in order: single-quoted strings, double-quoted strings, then the runs between (or a lone quote). */
+const RAW_PART = /'[^']*'|"(?:\\.|[^"\\])*"|[^'"]+|['"]/g;
+
+/** An HTML or XML tag (`<cwd>`, `</cwd>`), which in a heredoc's body is markup, not a redirect. */
+const MARKUP_TAG = /<\/?[A-Za-z][\w:-]*>/g;
+
 /**
  * Resolves a tool's `path` argument to the file pi's edit and write will touch. Mirrors pi's unexported
  * `resolveToCwd` (`normalizePath`/`resolvePath` in pi's `dist/utils/paths.js`), in the same order, minus its win32
@@ -86,8 +95,20 @@ function segmentPaths(segments: Segment[], cwd: string, home: string): string[] 
   return paths;
 }
 
+/**
+ * The path words in text `tokenize` gave up on. A quoted string with no spaces stays whole apart from `=` and
+ * separators, so a pattern (`'/a/|/b/'`) or a tag (`'</cwd>'`) isn't split into paths; anything with spaces, quoted
+ * or not, is split everywhere, so a stray apostrophe in a heredoc can't hide a path behind a long "quoted" span.
+ */
 function rawPaths(command: string, cwd: string, home: string): string[] {
-  const words = command.replace(HOME_VARIABLE, "~").split(RAW_WORD_BREAK);
+  const parts = command.replace(HOME_VARIABLE, "~").match(RAW_PART) ?? [];
+  const words = parts.flatMap((part) => {
+    const quoted = part.length > 1 && (part.startsWith("'") || part.startsWith('"'));
+    const text = quoted ? part.slice(1, -1) : part;
+    if (quoted && !/\s/.test(text)) return text.split(QUOTED_WORD_BREAK);
+    return text.replace(MARKUP_TAG, " ").split(RAW_WORD_BREAK);
+  });
+
   return words.filter(isPathWord).map((word) => resolveToolPath(word, cwd, home));
 }
 
@@ -103,9 +124,12 @@ function assignedValue(word: string): string {
 
 /**
  * True for a word that names a place, so the guard should check it: it starts with `/`, `~/`, or `file://`, is `~`,
- * or has a `..` step. Other URLs (`https://…`) aren't paths, and a plain relative word (`src/a.ts`) stays inside.
+ * or has a `..` step. Other URLs (`https://…`) aren't paths, and a plain relative word (`src/a.ts`) stays inside. A
+ * word with no spaces holding `|`, `<`, or `>` only gets here from quotes, so it's a pattern or markup
+ * (`grep -E '/a/|/b/'`, `'</cwd>'`), not a path.
  */
 function isPathWord(word: string): boolean {
+  if (/[|<>]/.test(word) && !/\s/.test(word)) return false;
   if (word.startsWith("file://")) return true;
   if (word.includes("://")) return false;
 

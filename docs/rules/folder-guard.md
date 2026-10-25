@@ -1,6 +1,6 @@
 # Folder guard
 
-**Status:** done (slices 1–3 done 2026-10-24, slice 4 done 2026-10-25)
+**Status:** done (slices 1–3 done 2026-10-24, slices 4–5 done 2026-10-25)
 
 A built-in rule, not a module: it's always on, in every session (decided 2026-10-24). The code is
 `src/rule/folder.ts`.
@@ -31,7 +31,9 @@ user's other projects and personal files are none of the agent's business unless
     wherever it lives (the agent dir, `~/.agents/skills`, a package such as MyPi's `resources/skills`, a project's
     parents), with no folder list to keep in step;
   - the temp folder (`os.tmpdir()`), where background jobs and `web_fetch` write their output. On macOS that's
-    `/var/folders/…/T`, not `/tmp`, so `/tmp` asks;
+    `/var/folders/…/T`, not `/tmp`;
+  - `/tmp` and `/private/tmp` (macOS's `/tmp` links there, and the guard compares text): shared scratch space that
+    agents reach for by habit ([slice 5](#slices));
   - `/dev/null` and the other `/dev/std*` streams.
 
   Not the whole agent dir: it holds `auth.json`.
@@ -44,13 +46,17 @@ user's other projects and personal files are none of the agent's business unless
 | Tool | Paths checked |
 |---|---|
 | Any tool with a string `path` input (`read`, `edit`, `write`, `grep`, `find`, `ls`, `lsp`, and later ones), except MCP tools (`mcp__…`) | `path`; none means the session's folder |
-| `bash` | Every word that reads as a path: starts with `/`, `~/`, or `file://`, is `~`, or has a `..` step (`..`, `../x`, `./..`, `a/../..`). A `name=value` word (`--file=x`, dd's `if=x`, `VAR=x`) is checked by its value. Other words holding `://` are URLs, not paths. Every `<` target, whatever its shape. Every `cd` target. |
+| `bash` | Every word that reads as a path: starts with `/`, `~/`, or `file://`, is `~`, or has a `..` step (`..`, `../x`, `./..`, `a/../..`). A word with no spaces that holds `|`, `<`, or `>` can only come from quotes, so it's a pattern or markup (`grep -E '/a/\|/b/'`, `'</cwd>'`), not a path. A `name=value` word (`--file=x`, dd's `if=x`, `VAR=x`) is checked by its value. Other words holding `://` are URLs, not paths. Every `<` target, whatever its shape. Every `cd` target. |
 | MCP tools, `web_search`, `web_fetch` | Nothing: they don't take local paths. |
 
 - **Words come from `tokenize`** (`src/core/util/shell.ts`, Plan's shell check), so quotes are removed and comma
-  braces expanded. `tokenize` also returns each segment's `<` targets, which it leaves out of the words. When it
-  gives up (`$(…)`, variables, redirects to files, heredocs), the raw command is split on spaces, operators, quotes,
-  and `=`, and the pieces are checked for the same path shapes, with `$HOME` and `${HOME}` read as `~`.
+  braces expanded. `tokenize` also returns each segment's `<` targets, which it leaves out of the words. When it gives
+  up (`$(…)`, variables, redirects to files, heredocs), the raw command is split on spaces, operators, quotes, and
+  `=`, and the pieces are checked for the same path shapes, with `$HOME` and `${HOME}` read as `~`. Two exceptions
+  keep patterns and markup whole: a quoted string with no spaces is split only on `;`, `&`, parentheses, backticks,
+  and `=`, not on `|`, `<`, or `>`; and HTML or XML tags (`<cwd>`, `</cwd>`) are dropped before splitting. A quoted
+  span with spaces is split like the rest, so a stray apostrophe in a heredoc can't hide a path inside a long "quoted"
+  span.
 - **`cd` counts:** `cd /elsewhere && ls` names `/elsewhere`, a bare `cd` names the home folder, and later words
   resolve from the folder `cd` moved to: `cd sub && cat ../../x` names `<cwd>/../x`. Each bash call starts a new
   shell in the session's folder (pi's `bash.js` spawns one per call), so a `cd` lasts only within one command.
@@ -68,6 +74,9 @@ Known gaps in `bash`, accepted for a guard against wandering:
   Checking every word after a `cd` would ask about flags and patterns too.
 - **`cd -`** goes to the shell's previous folder, which no word names; it isn't followed.
 - **A path stuck to a short flag** (`-I/usr/include`, `-o/tmp/x`): see [Not taking](#not-taking).
+- **Patterns and markup used to read as paths;** [slice 5](#slices) fixed it. What's left: a tag-shaped redirect
+  with no spaces (`cat </etc>out`) loses its target to the tag rule, and a quoted path holding `|`, `<`, or `>` with
+  no spaces isn't checked. Both are rare enough to accept.
 
 ## Design in pi
 
@@ -126,6 +135,32 @@ finding a `tsconfig.json` above, say) are theirs and unchanged. See [lsp](../mod
      still asked, and No declined it; Yes on `ls <sibling>` ran that call only, and the next call under the sibling
      asked again; after `/reload`, `ls <target>` asked again.
 
+5. **Done 2026-10-25: fewer false asks.** Found in the worktree slice 1 spike, where pi stopped three times on
+   questions that protected nothing.
+   - **`/tmp` is always allowed**, with `/private/tmp` (macOS's `/tmp` is a link to it, and the guard compares text),
+     next to `os.tmpdir()`. Agents reach for `/tmp` by habit for scratch files, the model can't see the guard's
+     rules, and a No tells it only "The user declined this call". With `mktemp -d /tmp/x.XXXXXX`, the guard sees the
+     literal template, so even "Allow for this session" misses the random folder `mktemp` creates. `/tmp` is shared
+     scratch space, not the user's projects or personal files, which the guard is for. Codex's default sandbox
+     makes both `$TMPDIR` and `/tmp` writable.
+   - **Patterns and markup aren't paths** (the [gap above](#what-it-isnt)): `grep -E '/Users/|/private/'` asked
+     about `/Users/|/private`; with `$?` in the command, the raw-text fallback split it into `/Users` and `/private`;
+     a heredoc regex with `</cwd>` asked about `/cwd`. Options: skip a piece that only looks like a path after
+     splitting on `<`, `>`, or `|`; leave a heredoc's body out of the fallback; skip the pattern argument of
+     `grep`, `rg`, and `sed`. Pick in the slice, the smallest that keeps every real path asked about, with a table
+     test of both.
+   - **Built:** `/tmp` and `/private/tmp` in `FolderRule`'s allowed places (`SCRATCH_DIRS`); in
+     `src/core/util/paths.ts`, `isPathWord` turns down a word with no spaces holding `|`, `<`, or `>`, and the
+     raw-text fallback keeps quoted strings with no spaces whole and drops tags. Not taken: skipping `grep`'s pattern
+     argument by name, which means knowing every flag that takes a value (`-f FILE` would hide a real path).
+   - **Tests:** `mktemp -d /tmp/…XXXXXX` and `/private/tmp/…` are allowed and `/tmpfoo` asks; the three spike
+     commands and a heredoc of HTML name nothing; a heredoc script's `open('/etc/passwd')`, a `bash` heredoc's
+     `~/.ssh/id`, a path after a stray apostrophe, a glued `</etc/hosts`, a quoted `--file=/etc/x`, and the real path
+     next to a grep pattern are still named. Removing each of the four changes on its own failed its tests.
+   - **Tried live 2026-10-25,** pi in `pi-workspace`, Build: `mktemp -d /tmp/s5.XXXXXX` with `rmdir`, the spike's
+     `grep -E '/Users/|/private/' || test "$?" -eq 1`, and a heredoc regex with `</cwd>` all ran without a question;
+     `head -1 /etc/shells` still asked. (`echo /Users/x | grep …` asks about `/Users/x`, which is a real path word.)
+
 ## Other harnesses
 
 Checked 2026-10-25, for slice 4.
@@ -160,3 +195,5 @@ Checked 2026-10-25, for slice 4.
 
 - "Allow for this session" on a path allows everything under it (slice 4), before the worktree tool.
 - A file allowed covers only itself; its folder isn't widened.
+- `/tmp` is always allowed, like `os.tmpdir()` (slice 5), reversing 2026-10-24's "`/tmp` asks".
+- Patterns and markup that only look like paths stop asking (slice 5); the gap was found twice in one spike.
