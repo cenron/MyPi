@@ -3,15 +3,15 @@ import { homedir } from "node:os";
 import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { errorMessage } from "#core/util/errors";
 import { resolveToolPath } from "#core/util/paths";
-import { latestPlan, PLANS_DIR } from "../../plan-file";
+import { latestPlan } from "../../plan-file";
 import { implementMessage } from "../../prompts";
 
 /** `/plan implement`'s plan file: the argument, resolved the way the file tools resolve paths, else the latest plan. */
-export async function findPlan(cwd: string, file: string | undefined): Promise<string> {
+export async function findPlan(plansDir: string, cwd: string, file: string | undefined): Promise<string> {
   if (file !== undefined) return resolveToolPath(file, cwd, homedir());
 
-  const latest = await latestPlan(cwd);
-  if (latest === undefined) throw new Error(`No plans in ${PLANS_DIR}/ to implement`);
+  const latest = await latestPlan(plansDir);
+  if (latest === undefined) throw new Error(`No plans in ${plansDir}/ to implement`);
   return latest;
 }
 

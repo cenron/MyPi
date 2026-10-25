@@ -42,7 +42,7 @@ The must-haves:
 | [todo](todo.md) | idea | A checklist the agent keeps while it works, shown to the user |
 | [background process](background-process.md) | done | Start long-running commands, read their output, stop them, and get told when they exit; monitor output |
 | [apply_patch](apply-patch.md) | idea | Multi-file edits in Codex's patch format |
-| [worktree](worktree.md) | building | Slices 1–3 delivered: shared service and commands-only enter/exit/re-entry/list/remove. No model-facing tools. Slice 4 (shared memories/plans and exit cleanup) awaits review |
+| [worktree](worktree.md) | done | `/worktree` enter, exit, list, remove: a conversation moves into a git worktree and back; memories and plans stay shared with the main checkout. No model-facing tools; subagents use `Session.worktrees`. |
 
 Tools that are modules instead, so they can be turned off, are documented in `docs/modules/`: `subagent`
 ([subagents](../modules/subagents.md)), [LSP](../modules/lsp.md), and desktop

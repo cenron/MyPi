@@ -132,7 +132,7 @@ What plan-build's `ToolGuard` rule returns in Plan, by tool:
 
 | Tool | Verdict |
 |---|---|
-| `edit`, `write` | Allow when `resolveToolPath(input.path, cwd, home)` is inside one of `env.writableDirs`, else block, naming those folders. Plan-build adds `<cwd>/.pi/plans`; other modules add theirs (memory's folders) with `setWritable`. |
+| `edit`, `write` | Allow when `resolveToolPath(input.path, cwd, home)` is inside one of `env.writableDirs`, else block, naming those folders. Plan-build adds the main checkout's `.pi/plans` (`<cwd>/.pi/plans` outside git); other modules add theirs (memory's folders) with `setWritable`. |
 | `bash` | Allow when `isReadOnlyCommand(input.command)`, else ask. |
 | `powershell` | Always ask. |
 | `read`, `grep`, `find`, `ls`, `tool_search` | Allow: known readers. Pi's built-in tools carry no annotations, so they're listed by name. |

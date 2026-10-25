@@ -19,7 +19,7 @@ import type { MemoryScope } from "./types";
 
 export class MemoryModule extends BaseModule {
   // Pi builds a new session and new modules on every session_start, so the cwd can't change under these.
-  private readonly projectDir = join(this.session.ctx.cwd, PROJECT_MEMORY_DIR);
+  private readonly projectDir = join(this.session.project?.main ?? this.session.ctx.cwd, PROJECT_MEMORY_DIR);
   private readonly globalDir = globalMemoryDir();
 
   // Built once: `info` lists their infos, and `info` is read on every footer, prompt, and state call.

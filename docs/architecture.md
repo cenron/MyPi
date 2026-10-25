@@ -23,7 +23,7 @@ Pi supplies the host packages (`@earendil-works/pi-coding-agent`, `@earendil-wor
 ```
 index.ts               default factory: new MyPi(pi), then pi.on("session_start" | "before_agent_start" | "tool_call" | "session_shutdown", …)
 └─ src/mypi.ts         MyPi.onSessionStart(ev, ctx)
-   ├─ await new Worktrees(ctx.cwd).project()     canonical main/commonDir/checkout; discovery errors warn and leave no project
+   ├─ await new Worktrees(ctx.cwd).project()     main checkout and git common folder; a git failure warns and leaves none
    ├─ new Session(ctx, pi, project)              src/core/session.ts: readonly project and per-session services
    ├─ registerRules(session)                    src/rule/index.ts: core rules, before module loading
    ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start() picks the running ones
@@ -60,10 +60,10 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`Session`** wraps the `ExtensionContext` from `session_start` and the `ExtensionAPI`. It's the handle passed to
   commands and modules. It logs through `log`, `logWarning`, and `logError`, keeps state in the session through `save`
   and `load`, and owns the session's `ModuleManager` as `moduleManager`, plus the shared `footer`, `editor`, and
-  `promptManager`, and `toolGuard`. `worktrees` is the cwd-bound shared Git worktree service (commands and future
-  subagents); `project` is its resolved canonical main checkout, common Git directory, and active checkout, or
-  undefined outside Git or after a discovery failure. It is readonly and passed to the constructor.
-  Discovery is awaited once before modules load; module `init()` remains synchronous.
+  `promptManager`, and `toolGuard`. `worktrees` is the git worktree service (`/worktree` and later subagents; see
+  [worktree](tools/worktree.md#the-service)). `project` is the repository's main checkout and git common folder, or
+  undefined outside git or when git fails: `MyPi` resolves it once before modules load and passes it in, so module
+  `init()` stays synchronous. Memory and plan-build keep their folders in the main checkout through it.
 - **Saved state.** `session.save(name, data)` writes a `mypi-<name>` custom entry with `pi.appendEntry`, which pi keeps
   out of the model's context. `session.load(name)` returns the data of the last `mypi-<name>` entry on the current
   branch (`ctx.sessionManager.getBranch()`), or `undefined`, typed `unknown` because the file can hold anything. This is
@@ -204,8 +204,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   `NodeJS.ErrnoException`).
 - **`util/guards.ts`** has `isRecord` (a plain object, before reading fields off JSON) and `isNonEmptyString`.
 - **`util/git.ts`** has `keepOutOfGit(dir)`: a `.gitignore` of `*` in a folder MyPi writes into, written with `wx`
-  so an edited one is kept. Used by plan-build's `.pi/plans/` and memory's `.pi/memories/`; the worktree tool's git
-  helpers go here too.
+  so an edited one is kept. Used by plan-build's `.pi/plans/`, memory's `.pi/memories/`, and worktree storage.
 
 ## Commands
 

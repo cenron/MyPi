@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { isNodeError } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
 
-/** Where plans are saved, relative to the session's cwd; plan-build registers it as writable in Plan. */
+/** Relative to the main checkout, or cwd outside Git; registered as writable in Plan. */
 export const PLANS_DIR = join(".pi", "plans");
 
 const MAX_SLUG = 50;
@@ -28,11 +28,10 @@ export function planFileName(title: string, now: Date): string {
 }
 
 /**
- * Writes the plan to `<cwd>/.pi/plans/` and returns its path, keeping the folder out of git with `keepOutOfGit`. The
+ * Writes to the resolved plans folder and returns its path, keeping the folder out of git with `keepOutOfGit`. The
  * plan file is never overwritten.
  */
-export async function savePlan(cwd: string, title: string, plan: string, now: Date): Promise<string> {
-  const dir = join(cwd, PLANS_DIR);
+export async function savePlan(dir: string, title: string, plan: string, now: Date): Promise<string> {
   await mkdir(dir, { recursive: true });
   await keepOutOfGit(dir);
 
@@ -42,11 +41,10 @@ export async function savePlan(cwd: string, title: string, plan: string, now: Da
 }
 
 /**
- * The newest plan in `<cwd>/.pi/plans/`, or undefined when there is none. Names start with a UTC timestamp, so the
+ * The newest plan in the resolved folder, or undefined when there is none. Names start with a UTC timestamp, so the
  * last by name is the newest.
  */
-export async function latestPlan(cwd: string): Promise<string | undefined> {
-  const dir = join(cwd, PLANS_DIR);
+export async function latestPlan(dir: string): Promise<string | undefined> {
   const names = await readdir(dir).catch((error: unknown) => {
     if (isNodeError(error) && error.code === "ENOENT") return [];
     throw error;

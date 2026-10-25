@@ -44,17 +44,18 @@ afterEach(async () => {
 describe("findPlan", () => {
   // resolveToolPath has the table; this checks findPlan goes through it.
   it("resolves the argument the way the file tools do", async () => {
-    await expect(findPlan(cwd, "~/p.md")).resolves.toBe(join(homedir(), "p.md"));
+    await expect(findPlan(join(cwd, ".pi", "plans"), cwd, "~/p.md")).resolves.toBe(join(homedir(), "p.md"));
   });
 
   it("is the latest plan without an argument", async () => {
-    await savePlan(cwd, "old", "x", new Date("2026-10-19T00:00:00Z"));
-    const newest = await savePlan(cwd, "new", "x", new Date("2026-10-20T00:00:00Z"));
-    await expect(findPlan(cwd, undefined)).resolves.toBe(newest);
+    const plansDir = join(cwd, "main", ".pi", "plans");
+    await savePlan(plansDir, "old", "x", new Date("2026-10-19T00:00:00Z"));
+    const newest = await savePlan(plansDir, "new", "x", new Date("2026-10-20T00:00:00Z"));
+    await expect(findPlan(plansDir, cwd, undefined)).resolves.toBe(newest);
   });
 
   it("throws when there's no plan to implement", async () => {
-    await expect(findPlan(cwd, undefined)).rejects.toThrow("No plans in .pi/plans/ to implement");
+    await expect(findPlan(cwd, cwd, undefined)).rejects.toThrow(`No plans in ${cwd}/ to implement`);
   });
 });
 

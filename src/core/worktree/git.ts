@@ -2,27 +2,23 @@ import { execFile } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { errorMessage } from "#core/util/errors";
 
 const execute = promisify(execFile);
 const MAX_GIT_OUTPUT = 16 * 1024 * 1024;
 const WORKTREE_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
-export const BRANCH_PREFIX = "refs/heads/mypi/worktree/";
+export const BRANCH_PREFIX = "mypi/worktree/";
+const HEADS = "refs/heads/";
 
-/** Git is authoritative; managedName is present only for an exact non-primary path/branch pair. */
+/** A checkout from `git worktree list`; `managedName` is set only for MyPi's own, at its exact path and branch. */
 export type Worktree = {
   readonly path: string;
   readonly head?: string;
   readonly branch?: string;
-  readonly detached: boolean;
-  readonly bare: boolean;
-  readonly locked?: string;
-  readonly prunable?: string;
   readonly primary: boolean;
   readonly managedName?: string;
 };
 
-/** Reject names before any filesystem mutation or option construction. */
+/** Checked before the name reaches a path or a git argument. */
 export function validateName(name: string): void {
   if (!WORKTREE_NAME.test(name)) {
     throw new Error(
@@ -31,102 +27,66 @@ export function validateName(name: string): void {
   }
 }
 
-/** NUL records preserve whitespace in paths and optional flag reasons, unlike line splitting. */
+/** Runs git without a shell; a failure throws with git's own message. `LC_ALL=C` keeps that message in English. */
+export async function git(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execute("git", args, {
+    cwd,
+    maxBuffer: MAX_GIT_OUTPUT,
+    encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
+  });
+  return stdout;
+}
+
+/** The main checkout (git lists it first) and every worktree of the repository `cwd` is in. */
+export async function mainAndWorktrees(cwd: string): Promise<{ main: string; entries: Worktree[] }> {
+  const entries = parseWorktrees(await git(cwd, ["worktree", "list", "--porcelain", "-z"]));
+  const main = await realpath(entries[0]?.path ?? cwd);
+
+  return { main, entries: entries.map((entry) => ({ ...entry, managedName: managedName(entry, main) })) };
+}
+
+/** `git worktree list --porcelain -z`: records end in two NULs and fields in one, so paths keep their spaces. */
 export function parseWorktrees(output: string): Worktree[] {
   return output
     .split("\0\0")
     .filter(Boolean)
     .map((record, index) => {
-      const fields = new Map(
-        record
-          .split("\0")
-          .filter(Boolean)
-          .map((field) => {
-            const space = field.indexOf(" ");
-            return space < 0 ? [field, ""] : [field.slice(0, space), field.slice(space + 1)];
-          }),
-      );
-      const path = fields.get("worktree");
-      if (!path) throw new Error("Invalid Git worktree record: missing path; inspect git worktree list.");
+      const fields = new Map(record.split("\0").map(splitField));
       return {
-        path,
+        path: fields.get("worktree") ?? "",
         head: fields.get("HEAD"),
         branch: fields.get("branch"),
-        detached: fields.has("detached"),
-        bare: fields.has("bare"),
-        locked: fields.get("locked"),
-        prunable: fields.get("prunable"),
         primary: index === 0,
       };
     });
 }
 
-/** A path alone never grants ownership of a checkout. */
-export function managedName(entry: Worktree, main: string): string | undefined {
-  if (entry.primary || entry.detached || entry.bare || !entry.branch?.startsWith(BRANCH_PREFIX)) return undefined;
-  const name = entry.branch.slice(BRANCH_PREFIX.length);
-  if (!WORKTREE_NAME.test(name)) return undefined;
-  return entry.path === join(main, ".pi", "worktrees", name) ? name : undefined;
-}
-
-/** Bounded output fails rather than silently truncating. Only explicitly expected exit codes are returned. */
-export async function git(cwd: string, args: string[], signal?: AbortSignal, expectedCode?: number) {
-  try {
-    const result = await execute("git", args, {
-      cwd,
-      signal,
-      maxBuffer: MAX_GIT_OUTPUT,
-      encoding: "utf8",
-      env: { ...process.env, LC_ALL: "C" },
-    });
-    return { stdout: result.stdout, stderr: result.stderr, code: 0 };
-  } catch (error) {
-    if (
-      expectedCode !== undefined &&
-      error instanceof Error &&
-      "code" in error &&
-      error.code === expectedCode &&
-      "stdout" in error &&
-      typeof error.stdout === "string" &&
-      "stderr" in error &&
-      typeof error.stderr === "string"
-    ) {
-      return { stdout: error.stdout, stderr: error.stderr, code: expectedCode };
-    }
-    throw new Error(
-      `Git ${args.join(" ")} failed in ${JSON.stringify(cwd)}: ${errorMessage(error)}. Inspect the repository.`,
-      { cause: error },
-    );
-  }
-}
-
-/** Discovery does no writes; bare-primary layouts are deliberately unsupported. */
-export async function mainAndWorktrees(
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<{ main: string; entries: Worktree[] }> {
-  const entries = parseWorktrees((await git(cwd, ["worktree", "list", "--porcelain", "-z"], signal)).stdout);
-  const primary = entries[0];
-  if (!primary || primary.bare) {
-    throw new Error("Worktrees require a non-bare primary checkout; use a regular Git checkout.");
-  }
-
-  const main = await realpath(primary.path);
-  return { main, entries: entries.map((entry) => ({ ...entry, managedName: managedName(entry, main) })) };
-}
-
-/** Status rename records have a second NUL-delimited path; show both, without unquoting filenames. */
+/** The paths in `git status --porcelain=v1 -z` output; a rename or copy also names its source. */
 export function changedPaths(output: string): string[] {
   const fields = output.split("\0");
   const paths: string[] = [];
+
   for (let index = 0; index < fields.length; index++) {
     const field = fields[index];
     if (!field) continue;
+
     paths.push(field.slice(3));
-    if (/[RC]/.test(field.slice(0, 2))) {
-      const source = fields[++index];
-      if (source) paths.push(source);
-    }
+    if (/[RC]/.test(field.slice(0, 2))) paths.push(fields[++index] ?? "");
   }
-  return paths;
+  return paths.filter(Boolean);
+}
+
+/** A path alone never makes a checkout MyPi's: the branch must match too. */
+function managedName(entry: Worktree, main: string): string | undefined {
+  const prefix = `${HEADS}${BRANCH_PREFIX}`;
+  if (entry.primary || !entry.branch?.startsWith(prefix)) return undefined;
+
+  const name = entry.branch.slice(prefix.length);
+  return entry.path === join(main, ".pi", "worktrees", name) ? name : undefined;
+}
+
+function splitField(field: string): [string, string] {
+  const space = field.indexOf(" ");
+  return space < 0 ? [field, ""] : [field.slice(0, space), field.slice(space + 1)];
 }

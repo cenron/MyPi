@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionContext, ToolCallEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ask } from "#core/events";
@@ -19,8 +20,8 @@ function promptSection(session: Session) {
 }
 
 /** A started module and a way to run `/plan <args>`; the command ignores its context. */
-function startPlanBuild(branch: unknown[] = []) {
-  const fake = fakeSession(branch);
+function startPlanBuild(branch: unknown[] = [], cwd = "/project", main?: string) {
+  const fake = fakeSession(branch, cwd, main ? { main, commonDir: join(main, ".git") } : undefined);
   const module = new PlanBuildModule(fake.session);
   for (const tool of module.tools()) fake.session.pi.registerTool(tool);
   module.init();
@@ -196,8 +197,8 @@ describe("PlanBuildModule", () => {
 
     /** A started module whose submit_plan ran in `cwd`, as during a run. */
     async function submitted(branch: unknown[] = []) {
-      const fake = startPlanBuild(branch);
-      const cwd = await mkdtemp(join(tmpdir(), "mypi-dialog-"));
+      const cwd = await mkdtemp(join(tmpdir(), "mypi-dialog space-"));
+      const fake = startPlanBuild(branch, cwd);
       cleanups.push(() => rm(cwd, { recursive: true, force: true }));
       await fake.emit("before_agent_start", {});
       await fake.tools
@@ -238,9 +239,12 @@ describe("PlanBuildModule", () => {
       select.mockResolvedValueOnce("Clear context and implement");
       await emit("agent_settled", settled(), ctx);
       expect(sendUserMessage).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/plan implement \.pi\/plans\/\d{4}-\d\d-\d\d-\d{6}-add-it\.md$/),
+        expect.stringMatching(/^\/plan implement file:\/\/.*\/\d{4}-\d\d-\d\d-\d{6}-add-it\.md$/),
         { expandPromptTemplates: true },
       );
+      const dispatch = sendUserMessage.mock.calls[0]?.[0] as string;
+      const file = dispatch.split(/\s+/)[2];
+      expect(fileURLToPath(file ?? "")).toContain(ctx.cwd);
       expect(setStatus).toHaveBeenLastCalledWith("mypi-plan-build", "<warning>PLAN");
     });
 

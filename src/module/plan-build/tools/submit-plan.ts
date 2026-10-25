@@ -16,7 +16,7 @@ const parameters = Type.Object({
  * The `submit_plan` tool: saves the plan to `.pi/plans/` and hands it to `onSubmit`. Registered inactive, since only
  * Plan turns it on.
  */
-export function submitPlanTool(onSubmit: (plan: SubmittedPlan) => void) {
+export function submitPlanTool(plansDir: string, onSubmit: (plan: SubmittedPlan) => void) {
   return defineTool({
     name: SUBMIT_PLAN,
     label: "Submit plan",
@@ -25,8 +25,8 @@ export function submitPlanTool(onSubmit: (plan: SubmittedPlan) => void) {
     promptSnippet: "Submit the finished plan in plan mode",
     parameters,
     defaultActive: false,
-    async execute(_toolCallId, { title, plan }, _signal, _onUpdate, ctx) {
-      const path = await savePlan(ctx.cwd, title, plan, new Date());
+    async execute(_toolCallId, { title, plan }) {
+      const path = await savePlan(plansDir, title, plan, new Date());
       onSubmit({ title, plan, path });
       return { content: [{ type: "text", text: `Plan saved to ${path}.` }], details: { path } };
     },

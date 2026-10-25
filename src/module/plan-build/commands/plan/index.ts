@@ -11,7 +11,7 @@ export type PlanCmdActions = {
 };
 
 /** `/plan`: toggles the mode, picks one, or implements a plan in a new session. */
-export function planCmd(actions: PlanCmdActions): Command {
+export function planCmd(plansDir: string, actions: PlanCmdActions): Command {
   return {
     info: {
       name: "plan",
@@ -22,7 +22,7 @@ export function planCmd(actions: PlanCmdActions): Command {
 
       switch (arg) {
         case "implement": {
-          const path = await findPlan(ctx.cwd, file);
+          const path = await findPlan(plansDir, ctx.cwd, file);
           return implementInNewSession(ctx, path, actions.saveBuildTo);
         }
 

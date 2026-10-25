@@ -50,7 +50,8 @@ Checked against the installed pi 1.2.0 (2026-10-22, 2026-10-23):
    refresh hook (slice 2) creates the file with `wx` when a write lands in the folder, never overwriting it: to share a
    project's memories, edit that `.gitignore`. `init()` doesn't create it, since that would create `.pi/memories/` in
    every folder pi opens. Committed (Serena) and outside the repo (Claude Code's per-project folder) were rejected.
-   For [worktree](../tools/worktree.md): ignored memories aren't in a new worktree, so it has to copy them in.
+   In a [worktree](../tools/worktree.md), the project folder is the main checkout's `.pi/memories/` (through
+   `session.project`), so every checkout of a repository shares one set; nothing is copied.
 3. **Free topics, not types.** A memory is `[<topic>/]<name>.md`; the topic folder is optional. Its name is its path
    in the scope folder without `.md` (`build/test-commands`), and `[[build/test-commands]]` links use it. The only
    frontmatter field is `description:`; a `name:` field would repeat the path and drift on a rename. Claude Code's

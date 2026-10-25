@@ -1,4 +1,5 @@
-import { join, relative } from "node:path";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { AgentSettledEvent, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { FooterColor, type FooterItem } from "#ui/footer";
@@ -28,12 +29,13 @@ const PROMPTS: Record<Mode, string> = {
 };
 
 export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
+  private readonly plansDir = join(this.session.project?.main ?? this.session.ctx.cwd, PLANS_DIR);
   private mode: Mode = Mode.PLAN;
   /** The plan `submit_plan` saved in this run, until the dialog takes it or the next run starts. In memory only. */
   private submittedPlan: SubmittedPlan | undefined;
 
   // Built once: `info` lists its command, and `info` is read on every footer, prompt, and state call.
-  private readonly planCommand = planCmd({
+  private readonly planCommand = planCmd(this.plansDir, {
     toggleMode: () => this.toggleMode(),
     setMode: (mode) => this.setMode(mode),
     saveBuildTo: (sessionManager) => this.saveStateTo(sessionManager, { mode: Mode.BUILD }),
@@ -56,7 +58,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
     this.applyPlanTools();
     // submit_plan writes only its own file in .pi/plans/.
-    this.setWritable({ dirs: [join(this.session.ctx.cwd, PLANS_DIR)], tools: [SUBMIT_PLAN] });
+    this.setWritable({ dirs: [this.plansDir], tools: [SUBMIT_PLAN] });
 
     // before_agent_start fires once per run; agent_start fires again on each retry or continuation within it.
     this.session.pi.on("before_agent_start", () => this.onRunStart());
@@ -76,7 +78,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
 
   /** `submit_plan` and `ask_user`, registered inactive; `applyPlanTools` turns them on in Plan only. */
   tools(): ToolDefinition[] {
-    return [submitPlanTool((plan) => (this.submittedPlan = plan)), askUserTool()];
+    return [submitPlanTool(this.plansDir, (plan) => (this.submittedPlan = plan)), askUserTool()];
   }
 
   /** A new run starts with no plan: one submitted in an earlier run belongs to that run. */
@@ -96,10 +98,9 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     const actions: PlanActions = {
       switchToBuild: () => this.setMode(Mode.BUILD),
       sendUserMessage: (text) => this.session.pi.sendUserMessage(text),
-      // Only a command's context can start a session, so go through /plan implement. The path is relative to the
-      // cwd, which may hold spaces; the plan's own name never does.
+      // Only commands can start sessions. A file URL preserves spaces through the command argument parser.
       implementInNewSession: (plan) =>
-        this.session.pi.sendUserMessage(`/plan implement ${relative(ctx.cwd, plan.path)}`, {
+        this.session.pi.sendUserMessage(`/plan implement ${pathToFileURL(plan.path).href}`, {
           expandPromptTemplates: true,
         }),
     };

@@ -1,69 +1,63 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { type ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { worktreeCmd } from "#command/worktree/index";
-import { findOrigin } from "#command/worktree/session";
 import { Session } from "#core/session";
 import { Worktrees } from "#core/worktree/index";
+import { MemoryModule } from "#module/memory/index";
 import { implementInNewSession } from "#module/plan-build/commands/plan/implement";
+import { PlanBuildModule } from "#module/plan-build/index";
+import { registerRules } from "#rule/index";
 import { fakeSession } from "../fakes";
 
-type SwitchOptions = NonNullable<Parameters<ExtensionCommandContext["switchSession"]>[1]>;
-type FreshContext = Parameters<NonNullable<SwitchOptions["withSession"]>>[0];
-
 const execute = promisify(execFile);
+
 let root: string;
 let main: string;
-let active: { session: Session; ctx: FreshContext; manager: SessionManager };
+let active: { session: Session; ctx: ExtensionCommandContext; manager: SessionManager };
 let cancel: boolean;
+
 async function git(cwd: string, ...args: string[]) {
   return (await execute("git", args, { cwd })).stdout.trim();
 }
-function conversation(cwd: string, text: string, parentSession?: string) {
-  const manager = SessionManager.create(cwd, undefined, { parentSession });
+
+function conversation(cwd: string, text: string) {
+  const manager = SessionManager.create(cwd);
   manager.appendMessage({ role: "user", content: text, timestamp: Date.now() });
   return manager;
 }
+
+/** Makes `manager` the live session, the way pi does after a switch: a new context and a new MyPi `Session`. */
 async function activate(manager: SessionManager) {
   const base = fakeSession([], manager.getCwd()).session;
+  vi.mocked(base.ctx.ui.select).mockResolvedValue("Keep");
   const ctx = {
     ...base.ctx,
     sessionManager: manager,
     waitForIdle: vi.fn(async () => {}),
-    sendMessage: async () => {},
-    sendUserMessage: async (content: string) => {
-      manager.appendMessage({ role: "user", content, timestamp: Date.now() });
-    },
+    sendUserMessage: async () => {},
     newSession: async (options: Parameters<ExtensionCommandContext["newSession"]>[0]) => {
       const next = SessionManager.create(manager.getCwd(), undefined, { parentSession: options?.parentSession });
       await options?.setup?.(next);
       await activate(next);
-      await options?.withSession?.(active.ctx);
       return { cancelled: false };
     },
     switchSession: vi.fn<ExtensionCommandContext["switchSession"]>(async (file, options) => {
       if (cancel) return { cancelled: true };
       await activate(SessionManager.open(file));
-      await options?.withSession?.(active.ctx);
+      await options?.withSession?.(active.ctx as never);
       return { cancelled: false };
     }),
-  } as unknown as FreshContext;
-  const session = new Session(
-    ctx,
-    {
-      ...base.pi,
-      appendEntry: (type, data) => {
-        manager.appendCustomEntry(type, data);
-      },
-    },
-    await new Worktrees(ctx.cwd).project(),
-  );
+  } as unknown as ExtensionCommandContext;
+  const pi = { ...base.pi, appendEntry: (type: string, data: unknown) => manager.appendCustomEntry(type, data) };
+  const session = new Session(ctx, pi, await new Worktrees(ctx.cwd).project());
   active = { session, ctx, manager };
 }
+
 async function command(...args: string[]) {
   return worktreeCmd(active.session).execute(active.ctx, args);
 }
@@ -80,224 +74,159 @@ beforeEach(async () => {
   cancel = false;
   await activate(conversation(main, "A"));
 });
+
 afterEach(async () => {
   vi.unstubAllEnvs();
   await rm(root, { recursive: true, force: true });
 });
 
 describe("/worktree", () => {
-  it("forks the selected branch", async () => {
+  it("enters with a fork of the selected branch, whose parent is the entering session", async () => {
     const a = active.manager;
-    const selected = a.appendCustomEntry("selected-A", {});
-    a.appendCustomEntry("other-branch", {});
+    const selected = a.appendCustomEntry("selected", {});
+    a.appendCustomEntry("abandoned", {});
     a.branch(selected);
+
     await command("enter", "task");
-    expect(active.manager.getSessionId()).not.toBe(a.getSessionId());
+
+    expect(active.ctx.cwd).toBe(join(main, ".pi/worktrees/task"));
     expect(active.manager.getHeader()?.parentSession).toBe(a.getSessionFile());
-    expect(
-      active.manager.getBranch().some((entry) => entry.type === "custom" && entry.customType === "other-branch"),
-    ).toBe(false);
+    expect(JSON.stringify(active.manager.getBranch())).not.toContain("abandoned");
   });
 
-  it("returns without merging worktree history", async () => {
+  it("exits to the entering session, without the worktree's messages", async () => {
     const a = active.manager;
-    const selected = a.appendCustomEntry("selected-A", {});
-    a.appendCustomEntry("other-branch", {});
-    a.branch(selected);
     await command("enter", "task");
-    const path = active.ctx.cwd;
     active.manager.appendMessage({ role: "user", content: "worktree-only", timestamp: Date.now() });
-    await writeFile(join(path, "file"), "dirty work retained");
+
     await command("exit");
+
     expect(active.manager.getSessionId()).toBe(a.getSessionId());
     expect(JSON.stringify(active.manager.getBranch())).not.toContain("worktree-only");
-    expect(JSON.stringify(active.manager.getBranch())).not.toContain("other-branch");
   });
 
-  it("re-enters its own history from B and returns to B", async () => {
+  it("re-enters the worktree's own session and exits to whoever re-entered", async () => {
     await command("enter", "task");
-    const path = active.ctx.cwd;
-    const targetId = active.manager.getSessionId();
-    active.manager.appendMessage({ role: "user", content: "worktree-only", timestamp: Date.now() });
-    await writeFile(join(path, "file"), "dirty work retained");
+    const worktreeId = active.manager.getSessionId();
     await command("exit");
-
     const b = conversation(main, "B");
     await activate(b);
+
     await command("enter", "task");
-    expect(active.manager.getSessionId()).toBe(targetId);
-    expect(JSON.stringify(active.manager.getBranch())).toContain("worktree-only");
-    expect(await readFile(join(path, "file"), "utf8")).toBe("dirty work retained");
-    await command("exit", "keep");
+    expect(active.manager.getSessionId()).toBe(worktreeId);
+    await command("exit");
     expect(active.manager.getSessionId()).toBe(b.getSessionId());
-    expect(active.ctx.cwd).toBe(main);
   });
 
-  it("walks same-worktree parents", async () => {
+  it("exits through a /plan implement session to the entering one", async () => {
     const origin = active.manager.getSessionFile();
     await command("enter", "task");
-    const parent = active.manager.getSessionFile();
     const plan = join(root, "plan.md");
-    await writeFile(plan, "# Test plan");
-    await implementInNewSession(active.ctx, plan, (manager) => {
-      manager.appendCustomEntry("mypi-module-plan-build", { mode: "build" });
-    });
-    expect(active.manager.getHeader()?.parentSession).toBe(parent);
+    await writeFile(plan, "# Plan");
+    await implementInNewSession(active.ctx, plan, () => {});
+
     await command("exit");
+
     expect(active.manager.getSessionFile()).toBe(origin);
   });
 
-  it("refuses a parentless /new until explicit re-entry seeds an origin", async () => {
+  it("refuses to exit a session with no parent, such as a bare /new", async () => {
     await command("enter", "task");
     await activate(conversation(active.ctx.cwd, "bare new"));
     await expect(command("exit")).rejects.toThrow("bare /new");
-    // No saved mapping is required: a deliberate re-entry gives this newest conversation a valid origin.
-    const b = conversation(main, "B");
-    await activate(b);
-    await command("enter", "task");
-    await command("exit");
-    expect(active.manager.getSessionId()).toBe(b.getSessionId());
   });
 
-  it("returns to an exact linked-checkout subdirectory origin", async () => {
-    const caller = join(root, "caller");
-    await git(main, "worktree", "add", "-b", "caller", caller);
-    await mkdir(join(caller, "subdir"));
-    const source = conversation(join(caller, "subdir"), "linked origin");
-    await activate(source);
-    await command("enter", "task");
-    await command("exit");
-    expect(active.ctx.cwd).toBe(join(caller, "subdir"));
-    expect(active.manager.getSessionId()).toBe(source.getSessionId());
-  });
-
-  it("lists without creation", async () => {
-    expect(await command("list")).toContain("primary, current");
-    expect(await command()).toContain("/worktree enter");
-  });
-
-  it("validates command syntax", async () => {
-    await expect(command("enter")).rejects.toThrow("Use /worktree");
-    await expect(command("exit", "remove")).rejects.toThrow("Use /worktree");
-  });
-
-  it("prevents nested entry", async () => {
-    await command("enter", "task");
-    expect(await command("enter", "task")).toContain("Already in");
-    await expect(command("enter", "nested")).rejects.toThrow("exit before entering");
-  });
-
-  it("removes a worktree through the command", async () => {
-    await active.session.worktrees.create("task");
-    expect(await command("remove", "task")).toContain("Deleted refs/heads/mypi/worktree/task");
-  });
-
-  it("refuses exit outside a managed worktree", async () => {
-    await expect(command("exit")).rejects.toThrow("not in a MyPi-managed");
-  });
-
-  it("refuses running jobs after waiting for idle", async () => {
-    let finish: (() => void) | undefined;
-    const job = active.session.jobs.start({
-      kind: "test",
-      label: "running",
-      run: () =>
-        new Promise<number>((resolve) => {
-          finish = () => resolve(0);
-        }),
-    });
-    await expect(command("enter", "task")).rejects.toThrow("stop running jobs");
-    expect(active.ctx.waitForIdle).toHaveBeenCalledOnce();
-    finish?.();
-    await job.done;
-    await rm(job.info.logPath);
-  });
-
-  it("keeps entry artifacts after cancellation", async () => {
-    cancel = true;
-    expect(await command("enter", "task")).toContain("Entry cancelled");
-    expect(active.ctx.cwd).toBe(main);
-    expect((await active.session.worktrees.list()).some((entry) => entry.managedName === "task")).toBe(true);
-  });
-
-  it("stays in the worktree after exit cancellation", async () => {
-    await command("enter", "task");
-    cancel = true;
-    expect(await command("exit")).toContain("Exit cancelled");
-    expect(active.ctx.cwd).not.toBe(main);
-  });
-
-  it("refuses overlapping commands while waiting to switch", async () => {
-    let finish: (() => void) | undefined;
-    const idle = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    vi.mocked(active.ctx.waitForIdle).mockReturnValueOnce(idle);
-    const cmd = worktreeCmd(active.session);
-    const pending = cmd.execute(active.ctx, ["enter", "task"]);
-    await expect(cmd.execute(active.ctx, ["list"])).rejects.toThrow("switch is already pending");
-    finish?.();
-    await pending;
-  });
-
-  it("does not adopt historical sessions when a removed worktree name is recreated", async () => {
+  it("forks again for a new checkout under a removed one's name", async () => {
     await command("enter", "task");
     const oldId = active.manager.getSessionId();
-    await command("exit");
-    await command("remove", "task");
+    await command("exit", "remove");
+
     await command("enter", "task");
+
     expect(active.manager.getSessionId()).not.toBe(oldId);
   });
 
-  it.each([
-    "missing",
-    "invalid",
-    "relative",
-    "invalid-header",
-    "missing-cwd",
-    "file-cwd",
-    "inside",
-    "cycle",
-    "broken-parent",
-  ])("refuses a %s origin instead of guessing", async (kind) => {
+  it("refuses to nest worktrees", async () => {
     await command("enter", "task");
-    const current = active.manager;
-    if (kind === "broken-parent") {
-      await activate(conversation(active.ctx.cwd, "broken", join(root, "missing")));
-    } else {
-      let file: unknown = join(root, "missing");
-      if (kind === "invalid") file = 42;
-      if (kind === "cycle") file = current.getSessionFile();
-      if (kind === "inside") file = conversation(active.ctx.cwd, "inside").getSessionFile();
-      if (kind === "relative") file = relative(process.cwd(), conversation(main, "outside").getSessionFile() ?? "");
-      if (kind === "invalid-header") {
-        const corrupt = join(root, "corrupt.jsonl");
-        await writeFile(corrupt, "{}\n");
-        file = corrupt;
-      }
-      if (kind === "missing-cwd") file = conversation(join(root, "missing-cwd"), "outside").getSessionFile();
-      if (kind === "file-cwd") file = conversation(join(main, "file"), "outside").getSessionFile();
-      current.appendCustomEntry("mypi-worktree-origin", { file });
-    }
-    await expect(command("exit")).rejects.toThrow(
-      /Cannot open session|Invalid worktree origin|outside the worktree|Cycle/,
-    );
-    expect(active.ctx.cwd).not.toBe(main);
+    expect(await command("enter", "task")).toBe("Already in worktree task.");
+    await expect(command("enter", "other")).rejects.toThrow("exit first");
   });
 
-  it.each([false, true])("uses the current branch's latest override (parent planning session: %s)", async (parent) => {
-    const a = active.manager.getSessionFile();
+  it("refuses to switch while a job runs", async () => {
+    let finish = () => {};
+    const job = active.session.jobs.start({
+      kind: "test",
+      label: "running",
+      run: () => new Promise<number>((resolve) => (finish = () => resolve(0))),
+    });
+
+    await expect(command("enter", "task")).rejects.toThrow("running jobs");
+
+    finish();
+    await job.done;
+  });
+
+  it("removes a clean worktree after returning", async () => {
     await command("enter", "task");
-    const b = conversation(main, "B");
-    active.manager.appendCustomEntry("mypi-worktree-origin", { file: a });
-    const valid = active.manager.appendCustomEntry("mypi-worktree-origin", { file: b.getSessionFile() });
-    active.manager.appendCustomEntry("mypi-worktree-origin", { file: "bad" });
-    active.manager.branch(valid);
-    if (parent) {
-      // Persist the selected branch, as the worktree commands do before replacement.
-      active.manager.appendCustomEntry("anchor", {});
-      await activate(conversation(active.ctx.cwd, "implementation", active.manager.getSessionFile()));
-    }
-    expect(await findOrigin(active.manager, active.ctx.cwd)).toBe(b.getSessionFile());
+    const path = active.ctx.cwd;
+
+    await command("exit", "remove");
+
+    expect(active.ctx.cwd).toBe(main);
+    await expect(readFile(join(path, "file"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("returns but keeps a worktree with changes, saying why", async () => {
+    await command("enter", "task");
+    const path = active.ctx.cwd;
+    await writeFile(join(path, "file"), "work");
+    vi.mocked(active.ctx.ui.select).mockResolvedValueOnce("Remove");
+
+    await command("exit");
+
+    expect(active.ctx.cwd).toBe(main);
+    expect(await readFile(join(path, "file"), "utf8")).toBe("work");
+    expect(active.ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("would be lost"), "warning");
+  });
+
+  it("stays when the exit dialog is cancelled", async () => {
+    await command("enter", "task");
+    vi.mocked(active.ctx.ui.select).mockResolvedValueOnce("Cancel");
+
+    expect(await command("exit")).toBe("Exit cancelled.");
+    expect(active.ctx.cwd).toBe(join(main, ".pi/worktrees/task"));
+  });
+
+  it("refuses a second command while a switch runs", async () => {
+    let idle = () => {};
+    vi.mocked(active.ctx.waitForIdle).mockReturnValueOnce(new Promise<void>((resolve) => (idle = resolve)));
+    const cmd = worktreeCmd(active.session);
+    const pending = cmd.execute(active.ctx, ["enter", "task"]);
+
+    await expect(cmd.execute(active.ctx, ["list"])).rejects.toThrow("still running");
+
+    idle();
+    await pending;
+  });
+
+  it.each([[["enter"]], [["exit", "discard"]], [["remove"]], [["rename"]]])("shows usage for %j", async (args) => {
+    await expect(command(...args)).rejects.toThrow("Use /worktree");
+  });
+
+  // Memories and plans belong to the project, not a branch, so every checkout uses the main checkout's folders.
+  it("lets a worktree session write only the main checkout's memories and plans", async () => {
+    const { session } = fakeSession([], "/repo/.pi/worktrees/task", { main: "/repo", commonDir: "/repo/.git" });
+    registerRules(session);
+    new MemoryModule(session).init();
+    new PlanBuildModule(session).init();
+    const write = (path: string) =>
+      session.toolGuard.check(
+        { type: "tool_call", toolCallId: path, toolName: "write", input: { path, content: "x" } },
+        { ...session.ctx, hasUI: false },
+      );
+
+    await expect(write("/repo/.pi/memories/a.md")).resolves.toBeUndefined();
+    await expect(write("/repo/.pi/plans/a.md")).resolves.toBeUndefined();
+    await expect(write("/repo/file")).resolves.toMatchObject({ block: true });
   });
 });

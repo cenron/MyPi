@@ -56,7 +56,7 @@ describe("approvals", () => {
       { cwd: project },
     );
     const service = new Worktrees(project);
-    const { worktree } = await service.create("task");
+    const worktree = await service.create("task");
     const primaryKey = await approvalKey(await service.project(), project);
     const linkedKey = await approvalKey(await new Worktrees(worktree.path).project(), worktree.path);
     expect(linkedKey).toBe(primaryKey);

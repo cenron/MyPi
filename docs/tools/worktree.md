@@ -1,6 +1,6 @@
 # worktree
 
-**Status:** building (slices 1–3 delivered 2026-10-25, on pi 1.2.0; commands and shared service delivered; slice 4 awaits review)
+**Status:** done (slices 1–4 done 2026-10-25, on pi 1.2.0)
 
 ## Goal
 
@@ -92,155 +92,81 @@ Forked conversation or module state can still refer to source-only files. The sl
 copying for memories/plans: sessions share the main checkout's folders directly. This spike implemented neither
 sharing nor ignored-file copying; an explicit include list for other ignored files is deferred until needed.
 
-## Shared service (slice 2)
+## How it works
 
-`Session.worktrees` is a lazy, cwd-bound `Worktrees` service in `src/core/worktree/`. Construction and listing do
-no filesystem writes; Git is authoritative, with no persistent registry. Future subagents call this service
-directly rather than driving tools. Methods accept an optional `AbortSignal` and return ordinary typed data:
+### Commands
 
-- `create(name, signal?)` returns `{ worktree, baseCommit }`. Names are required: 1–64 lowercase letters, digits,
-  or hyphens, beginning with a letter or digit. Storage is `<main-checkout>/.pi/worktrees/<name>`; the new branch
-  is `mypi/worktree/<name>`. The base is the **calling checkout's committed HEAD**, including linked-worktree
-  and subdirectory callers. Dirty callers are allowed, but no uncommitted or ignored files are copied. The
-  subagents writer-launch policy, not this service, will require a clean caller. No base/location options or reuse.
-- `list(signal?)` returns all Git worktree records: path, HEAD, branch, primary/detached/bare flags, lock/prune
-  reasons, and `managedName` where owned. NUL-delimited output preserves unusual paths. Managed means a non-primary
-  checkout at the exact direct-child storage path on the matching branch. Coincidental paths, renamed branches,
-  detached checkouts, and foreign worktrees are not adopted.
-- `project(signal?)` returns `{ main, commonDir, checkout }`, all canonical paths, or undefined only outside Git.
-  Other discovery failures propagate to callers. Startup catches them, warns once, and continues without a project.
-  It passes the result to `new Session(ctx, pi, project)` as readonly `project` before loading modules; their
-  `init()` stays synchronous. Done-check uses the common directory now; shared memory/plan paths use main in slice 4.
-- `inspect(name, signal?)` returns `Inspection` (`{ main, worktree, blockers }`) using the same ownership/storage/local-work checks as
-  removal, without requiring a clean checkout. Dirty managed worktrees can be entered or left without deleting them.
-- `remove(name, signal?)` returns `{ path, branch, branchDeleted, reason? }`. Only the exact managed pair can be
-  removed, never the calling cwd, primary checkout, locked/prunable registration, or symlinked storage. Tracked,
-  staged, renamed, untracked, and dirty-submodule changes block removal and their paths are listed. Ordinary
-  ignored files (`node_modules`, coverage, `.env`) do **not** block it and follow Git's normal cleanup semantics.
-  **Exception:** new files under `.pi/memories/` and `.pi/plans/` block removal even when ignored; tracked changes
-  there also block it. Git patches omit ignored local work, so deleting these files would lose real work.
-  Unchanged committed memories/plans do not block removal. Slice 4 will share the main checkout's memory/plan
-  folders rather than copy files; any real local work left in a target checkout still gets this protection.
+`/worktree` is a built-in command (`src/command/worktree/`), not a module and not a model tool: pi switches sessions
+only from a command (slice 1). Words after what a subcommand needs are ignored, as in `/plan` and `/modules`.
 
-`mainAndWorktrees` in `git.ts` returns the canonical main checkout and its worktree entries.
-Storage is resolved through Git's primary checkout, canonically, never nested under a linked caller. Mutations
-reject symlink components in `.pi/worktrees/<name>`. Creation retains `.pi/worktrees/.gitignore` with the shared
-`keepOutOfGit` helper's `*` rule (or preserves an existing file). This also keeps Biome and rg out of nested checkout
-copies, not just Git status clean. Non-Git directories and bare-primary layouts are unsupported; creation needs
-a committed HEAD.
+| Command | What it does |
+|---|---|
+| `/worktree` or `/worktree list` | Lists the repository's checkouts: main, MyPi's (`mypi: <name>`), other, and which one this session is in. |
+| `/worktree enter <name>` | Creates the worktree if it's new, then moves this conversation into it. |
+| `/worktree exit [keep\|remove]` | Returns to the conversation that entered, then keeps or removes the checkout. With no word it asks Keep, Remove, or Cancel; without a UI it keeps. |
+| `/worktree remove <name>` | Removes a worktree this session isn't in. |
 
-Removal uses ordinary `git worktree remove`, with no force/discard option. Git remains the final safety check
-(for example, it can refuse a clean checkout with initialized submodules). After checkout removal, the branch
-is deleted with ordinary `git branch -d` only if its tip is an ancestor of the **main checkout's current HEAD**.
-Otherwise it is preserved with an explicit reason. Branch-deletion refusal returns partial cleanup (checkout
-removed, branch kept, reason), not total failure. Creation errors report the intended path/branch and Git error;
-no automatic destructive rollback, retries, unlocks, or pruning. These are not cross-process transactions.
-Execution uses Node's bounded-output, promisified `execFile` with argument arrays, explicit cwd, and abort signals;
-no shell, runtime dependency, `process.chdir`, or session replacement.
+- **Enter:** waits for the agent to be idle and refuses while a job runs (a session switch would stop it). From
+  inside a worktree it refuses, so worktrees don't nest. A saved custom entry first makes the selected conversation
+  branch the session file's last one. A new worktree gets a fork of the conversation (`SessionManager.forkFrom`);
+  pi records the entering session as its `parentSession`. An existing one resumes its latest session, and a
+  `mypi-worktree-origin` entry saved in it names the conversation that just entered. A worktree created under a
+  removed one's name always forks: old transcripts at the same path aren't adopted.
+- **Exit:** finds where to return: the latest origin entry on the current branch, else the first session up the
+  `parentSession` chain whose cwd is outside the worktree. That walks through `/plan implement` sessions, which set
+  a parent. A bare `/new` has no parent, so exit says so and suggests `/resume`. It switches back first, then, for
+  Remove, removes through a fresh `Worktrees` rooted in the origin; a refusal keeps the checkout and says why.
+- Both report only through the new session's context: after `switchSession`, the old `ctx` and `Session` are stale.
 
-No model-facing tools, schemas, renderers, or Plan-rule changes. Slice 3 adds commands for navigation and management;
-subagents use the service directly. Model-initiated switching is deferred until there is a need for it.
+### The service
 
-### Slice 2 verification (2026-10-25)
+`Session.worktrees` (`src/core/worktree/`) is core: the commands use it, and subagents will. It does nothing until
+called and never moves a session. Git does the checking: an existing branch or path, or a locked worktree, fails with
+git's own message, and nothing runs with `--force`.
 
-52 focused tests cover parser/ownership rules and disposable real-Git repositories, including dirty submodules,
-collisions, symlinks, unsupported layouts, ignored/protected files, and partial cleanup. Temporary mutations of
-name validation, ownership matching, memory protection, and storage-ignore creation all caused their tests to
-fail, then were restored. An additional disposable service exercise used a real pi `SessionManager` and confirmed
-unchanged caller cwd/session ID, ordinary ignored-file cleanup, retained protected memory, retained unmerged
-branch, and untouched unrelated worktree. All spike data was removed; the user's conversation was not switched.
-`npm run check` passed (930 tests), as did `git diff --check`.
+- `project()`: the main checkout and git's common folder, or undefined outside git. `MyPi.onSessionStart` resolves
+  it once and passes it into `Session`; when git fails, MyPi warns and starts without a project, so the folder guard
+  still loads.
+- `create(name)`: `<main>/.pi/worktrees/<name>` on a new branch `mypi/worktree/<name>`, from the calling checkout's
+  committed HEAD. `.pi/worktrees/.gitignore` (`keepOutOfGit`) keeps git, Biome, and `rg` off the copies.
+- `list()`: every checkout; `managedName` only for MyPi's own, at its exact path *and* on its branch.
+- `inspect(name)`: a managed worktree and its blockers.
+- `remove(name)`: refuses the worktree the caller is in, and any blocker: changed or untracked files, and new files
+  in `.pi/memories/` or `.pi/plans/` even though they're ignored (a patch from `git diff` can't carry them; the two
+  ignore markers don't count). Other ignored files, such as `node_modules`, go with the checkout. Then
+  `git branch -d`, which keeps an unmerged branch and says why.
 
-## Decisions for slices 3–4 (2026-10-25)
+### Shared state
 
-- **Commands only:** `/worktree enter <name>`, `/worktree exit`, `/worktree list`, and `/worktree remove <name>`.
-  No model-facing worktree tools or after-run switching bridge now. Session replacement remains command-only;
-  add model initiation only if we find we need it. Worktree support is built in, not a module.
-- **Session continuity:** first entry forks the selected conversation; re-entry resumes the worktree's own session.
-  Exit returns to the exact originating session, which need not be rooted in the main checkout. Worktree-only
-  conversation is not merged back. Pi's per-cwd session discovery, native parent links, and branch-scoped custom
-  origin entries survive reload and restart; no association file, separate metadata, or shutdown hook.
-- **Calling checkout's HEAD:** retain slice 2's base behavior, including subagents launched from a worktree.
-  Storage still belongs to the main checkout; the subagents clean-caller policy remains in subagents.
-- **Shared project memories/plans, not copies:** resolve the main checkout through `Session.worktrees`. The memory
-  module uses `<main>/.pi/memories/`, and plan saving/default lookup uses `<main>/.pi/plans/`, across the repository's
-  worktrees. These are project state, not branch state. Modules declare those exact folders with `setWritable`, so
-  the existing folder guard and Plan rule allow them without allowing the main checkout as a whole. No filesystem
-  symlinks, copy baseline, copy-back, or conflict reconciliation. Non-Git folders keep their own cwd-local state.
-- **Repository-scoped done-check approvals:** key approvals by canonical Git common directory, not checkout path,
-  while still approving exactly the command list. Read configuration and run commands in the active checkout;
-  a changed list still asks. Include this in slice 3, so identical tracked configuration does not ask in each
-  new worktree. Non-Git projects retain folder-scoped approvals.
-- **Exit cleanup:** keep or request ordinary safe removal; never discard dirty work. New local memories/plans that
-  someone creates inside the worktree still block removal under slice 2's exception. Generated top-level ignore
-  markers alone do not block it. Sharing makes that exception uncommon, not unnecessary.
-- **Deferred:** an explicit include list for other ignored files (`.env`, etc.), never automatic copying. Build it
-  only when someone needs it. Subagents' patch-saved discard step stays with the subagents implementation.
+- **Memories and plans** belong to the project, not a branch: the memory module and plan-build use
+  `<main>/.pi/memories/` and `<main>/.pi/plans/` (the cwd's own folders outside git), and declare exactly those with
+  `setWritable`. Nothing is copied. The dialog hands `/plan implement` the plan's path as a `file://` URL, so spaces
+  in the main checkout's path survive.
+- **Done-check approval** is keyed by the git common folder, so a repository's worktrees share it; config is read
+  and commands run in the active checkout. Old folder approvals ask once more.
+- Not done: copying other ignored files (`.env`) into a worktree, with an explicit include list. Build it when
+  someone needs it.
 
-## Slice 3 checkpoint (2026-10-25)
+### Tried live (2026-10-25)
 
-Available commands: `/worktree` (status and usage), `/worktree list`, `/worktree enter <name>`,
-`/worktree exit [keep]`, and `/worktree remove <name>`. Exit always keeps for this checkpoint; `exit remove` and the
-cleanup dialog wait for slice 4. Navigation preserves Plan/Build mode, waits for foreground idle, refuses running
-MyPi jobs and nested entry, and never triggers a model turn. Same-target entry is a status/no-op.
-
-First entry anchors the outgoing selected branch and forks it into the target cwd. Existing checkouts resume their
-most recently modified persisted pi session, with a branch-scoped `mypi-worktree-origin` custom entry recording the
-new caller through `Session.saveTo`. Exit prefers the latest origin on the current branch, then walks native parent
-sessions; the first parent outside the managed worktree is the fallback. A clear-context `/plan implement` retains
-this chain. Pi's `SessionManager.open` loads session files; MyPi checks cwd directories, absolute origin paths,
-outside-worktree origins, and cycles;
-a parentless `/new` refuses unless deliberate re-entry supplies an origin. Removed-and-recreated names get a fresh
-fork rather than adopting old checkout histories. Return never merges worktree conversation back.
-
-Focused tests cover A → enter → exit to A, then B → re-enter the same history → exit to B; branch selection and
-ancestry; invalid origins; cancellation/jobs; no nested entry; and repository/folder approval isolation. Temporary
-mutations of the origin override, latest-entry selection, cwd-directory validation, and common-directory approval
-key each caused their regression tests to fail, then were restored. `npm run check` passed all 958 tests, typecheck,
-Biome, and coverage thresholds; `git diff --check` passed.
-
-An additional disposable **native SDK runtime** exercise loaded production MyPi with pi's exported local faux
-provider, separate agent/session storage, and real Git/LSP processes. It exercised the actual slash commands,
-bash/read tools and target prompt cwd, TypeScript diagnostics/rename without changing the source checkout,
-folder-guard rejection of an outside-scratch path, one done-check approval reused in the target with commands run
-there, cancellation, reload, native clear-context `/plan implement`, and A/B return IDs. The host's target-cwd trust
-callback correctly included/excluded
-protected project resources; this did not re-test the saved interactive trust-store flow from slice 1. MCP was
-intentionally disabled to avoid remote connections; only the expected missing-MCP-connector notices occurred.
-The user's conversation was not switched; all known spike data was removed. Memory and plan sharing were **not**
-exercised or implemented here.
-
-## Full-feature behavior (slice 4 completes this)
-
-- Create a worktree on a new branch and enter it through a command.
-- Leave it: return to the originating session, keeping or safely removing the checkout.
-- List and remove worktrees through commands; subagents use the shared service directly.
-- Share project memories/plans with the main checkout, without copying them.
-- Never discard changes as part of exit or removal.
-
-## Design in pi
-
-| Piece | pi hook | Notes |
-|---|---|---|
-| Commands | `src/command/worktree/`, listed in `createCommands` | Enter/exit/list/remove; no model-facing tools. |
-| Git | `git worktree add -b <branch> <path> <base>`, `git worktree list --porcelain`, `git worktree remove` | Run with `execFile`, never through a shell. |
-| Location | `<main-checkout>/.pi/worktrees/<name>/` | Fixed in slice 2; storage-level ignore also isolates tooling. |
-| Session state | Pi per-cwd discovery, native `parentSession`, and branch-scoped `mypi-worktree-origin` entries | First entry forks; re-entry resumes and records the new caller; exit returns to the exact origin. |
-| Shared state | Main checkout resolved through `Session.worktrees` | Memory and plans use shared main-checkout folders; done-check approvals use the Git common directory. |
-| Plan mode | Commands are explicit user actions, not model tool calls | Preserve the session's mode; no worktree-specific tool or Plan-rule additions. |
+pi on gpt-6.1-sol in a throwaway repo: `/worktree enter live` moved the session into `.pi/worktrees/live`; asked to
+save a project memory there, the agent wrote `<main>/.pi/memories/live-test.md` with no question, and the worktree
+had no `.pi` of its own; a plan submitted in Plan landed in `<main>/.pi/plans/`, and "Clear context and implement"
+opened it through its `file://` path in a Build session still in the worktree; `/worktree exit remove` walked back
+through that session to the main checkout, removed the worktree, and deleted its branch, while the memory and plan
+stayed. Separately, exit with Remove on a worktree with an untracked file returned and kept it: "Worktree dirty has
+work that would be lost; commit or move it first: new.txt".
 
 ## Slices
 
-1. **Done 2026-10-25:** verified native command-context session replacement in pi 1.2.0: cwd-bound services move,
-   anchored forks preserve the selected conversation branch, and return restores the original session without merging.
-2. **Done 2026-10-25:** shared `Session.worktrees` create/list/remove service and real-Git safety tests, callable by
-   subagents without moving the main session. No model-facing tools.
-3. **Delivered 2026-10-25, awaiting review:** commands-only enter/exit using native replacement, first-entry fork and
-   re-entry resume, exact-origin return, repository-keyed done-check approvals, and module-level exercises. Uses the
-   calling checkout's HEAD. Exit keeps; the cleanup choice and shared project folders remain slice 4.
-4. Share the main checkout's project memories and plans through `Session.worktrees`, and the keep-or-safe-remove
-   check on exit. No copying/baselines/copy-back. An explicit include list for other ignored files is deferred until
-   needed.
+1. **Done 2026-10-25:** proved pi's own session replacement moves everything cwd-bound (above).
+2. **Done 2026-10-25:** the shared `Session.worktrees` service, for subagents without moving the main session.
+3. **Done 2026-10-25:** `/worktree` enter, exit, list, and remove; done-check approval per repository.
+4. **Done 2026-10-25:** shared memories and plans; exit's Keep, Remove, or Cancel.
+5. **Review, 2026-10-25:** cut what git and pi already check (existing branch or path, locked worktrees, merged
+   branches, a session's cwd), the symlink and bare-repository checks, abort-signal plumbing nobody passed, an unused
+   `checkout` field, and argument-count checks; tests went from 993 to 934 for the whole suite, and the worktree files
+   from about 1,400 lines of code and tests to about 820. Each kept rule was broken on purpose to see its test fail.
 
 ## Open questions
 

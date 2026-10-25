@@ -168,7 +168,7 @@ describe("the project's commands", () => {
     await listCommands("pwd; exit 1");
     const commonDir = join(dir, "common-git");
     await approve(`git:${commonDir}`, ["pwd; exit 1"]);
-    const { runTurn, select } = start({ project: { main: "/not-the-active-checkout", commonDir, checkout: dir } });
+    const { runTurn, select } = start({ project: { main: "/not-the-active-checkout", commonDir } });
     expect(await runTurn(() => writeNew())).toMatchObject({
       entries: [{ content: expect.stringContaining(await realpath(dir)) }],
     });

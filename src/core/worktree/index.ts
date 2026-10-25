@@ -1,21 +1,17 @@
-import { lstat, mkdir, realpath } from "node:fs/promises";
+import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { errorMessage, isNodeError } from "#core/util/errors";
+import { errorMessage } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
 import { isInside } from "#core/util/paths";
 import { BRANCH_PREFIX, changedPaths, git, mainAndWorktrees, validateName, type Worktree } from "./git";
 
-/** Shared project identity; checkout is cwd-bound while main/commonDir are shared across linked checkouts. */
-export type Project = { readonly main: string; readonly commonDir: string; readonly checkout: string };
+/** The repository a session is in: its main checkout, and git's shared folder, which names the repository. */
+export type Project = { readonly main: string; readonly commonDir: string };
 
-/** Shared preflight result; ownership checks guarantee a branch before removal. */
-export type Inspection = {
-  readonly main: string;
-  readonly worktree: Worktree & { readonly branch: string };
-  readonly blockers: string[];
-};
+/** A managed worktree, and the files that would stop `remove`. */
+export type Inspection = { readonly worktree: Worktree; readonly blockers: string[] };
 
-/** Checkout removal can succeed while branch cleanup is refused; callers must show the reason. */
+/** What `remove` did. The checkout is gone; its branch only when it was merged. */
 export type Removal = {
   readonly path: string;
   readonly branch: string;
@@ -23,156 +19,91 @@ export type Removal = {
   readonly reason?: string;
 };
 
-/** Cwd-bound, lazy shared service. Never moves the session or copies uncommitted/ignored source files. */
+/** The ignore files `keepOutOfGit` writes: housekeeping, not work. */
+const IGNORE_MARKERS = new Set([".pi/memories/.gitignore", ".pi/plans/.gitignore"]);
+
+/**
+ * The git worktrees of the repository `cwd` is in, for the `/worktree` command and subagents. Does nothing until
+ * called, and never moves a session. Git does the checking: an existing branch or path, or a locked worktree, fails
+ * with git's own message.
+ */
 export class Worktrees {
   constructor(readonly cwd: string) {}
 
-  /** Undefined only outside Git; never turn repository discovery failures into a different project. */
-  async project(signal?: AbortSignal): Promise<Project | undefined> {
-    const common = await git(this.cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"], signal, 128);
-    if (common.code !== 0) {
-      if (common.stderr.startsWith("fatal: not a git repository")) return undefined;
-      throw new Error(`Cannot resolve Git project: ${common.stderr.trim()}. Inspect the repository.`);
+  /** The repository, or undefined outside git. Any other git failure throws. */
+  async project(): Promise<Project | undefined> {
+    let commonDir: string;
+    try {
+      commonDir = (await git(this.cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
+    } catch (error) {
+      if (errorMessage(error).includes("not a git repository")) return undefined;
+      throw error;
     }
-    const { main } = await mainAndWorktrees(this.cwd, signal);
-    const checkout = await git(this.cwd, ["rev-parse", "--show-toplevel"], signal);
-    return {
-      main,
-      commonDir: await realpath(common.stdout.replace(/\n$/, "")),
-      checkout: await realpath(checkout.stdout.replace(/\n$/, "")),
-    };
+
+    const { main } = await mainAndWorktrees(this.cwd);
+    return { main, commonDir: await realpath(commonDir) };
   }
 
-  async list(signal?: AbortSignal): Promise<Worktree[]> {
-    return (await mainAndWorktrees(this.cwd, signal)).entries;
+  async list(): Promise<Worktree[]> {
+    return (await mainAndWorktrees(this.cwd)).entries;
   }
 
-  /** Dirty callers are allowed: only their committed HEAD becomes the new checkout's base. */
-  async create(name: string, signal?: AbortSignal): Promise<{ worktree: Worktree; baseCommit: string }> {
+  /** A new checkout at `<main>/.pi/worktrees/<name>` on a new branch, from the calling checkout's committed HEAD. */
+  async create(name: string): Promise<Worktree> {
     validateName(name);
 
-    const { main, entries } = await mainAndWorktrees(this.cwd, signal);
-    const baseCommit = (await git(this.cwd, ["rev-parse", "--verify", "HEAD^{commit}"], signal)).stdout.trim();
-    const path = join(main, ".pi", "worktrees", name);
-    const branch = `${BRANCH_PREFIX}${name}`;
-    await checkStorage(main, name);
-    if ((await statIfPresent(path)) || entries.some((entry) => entry.path === path || entry.branch === branch)) {
-      throw new Error(
-        `Worktree ${JSON.stringify(path)} already exists or is registered; choose another name or inspect it.`,
-      );
-    }
-    if ((await git(this.cwd, ["show-ref", "--verify", "--quiet", branch], signal, 1)).code === 0) {
-      throw new Error(`Branch ${branch} already exists; choose another name or inspect the branch.`);
-    }
-
+    const { main } = await mainAndWorktrees(this.cwd);
     const storage = join(main, ".pi", "worktrees");
     await mkdir(storage, { recursive: true });
-    await checkStorage(main, name);
+    // Keeps git, Biome, and rg off the checkouts inside the main one.
     await keepOutOfGit(storage);
-    try {
-      await git(
-        this.cwd,
-        ["worktree", "add", "--no-track", "-b", branch.slice("refs/heads/".length), path, baseCommit],
-        signal,
-      );
-    } catch (error) {
-      throw new Error(
-        `Worktree creation failed: ${errorMessage(error)} Inspect path ${JSON.stringify(path)} and branch ${branch} for partial state. No automatic rollback was attempted.`,
-        { cause: error },
-      );
-    }
 
-    const worktree = (await this.list(signal)).find((entry) => entry.managedName === name);
-    if (!worktree) {
-      throw new Error(`Created ${JSON.stringify(path)} but could not rediscover it; inspect Git worktrees.`);
-    }
-
-    return { worktree, baseCommit };
+    const branch = `${BRANCH_PREFIX}${name}`;
+    await git(this.cwd, ["worktree", "add", "--no-track", "-b", branch, join(storage, name), "HEAD"]);
+    return (await this.inspect(name)).worktree;
   }
 
-  /** Shared preflight for command summaries and removal; dirty checkouts may still be entered or inspected. */
-  async inspect(name: string, signal?: AbortSignal): Promise<Inspection> {
+  /** Worktree `name`, which must be MyPi's, with its blockers. Changes don't stop entering or keeping it. */
+  async inspect(name: string): Promise<Inspection> {
     validateName(name);
 
-    const { main, entries } = await mainAndWorktrees(this.cwd, signal);
-    await checkStorage(main, name);
-    const entry = entries.find(
-      (entry): entry is Inspection["worktree"] => entry.managedName === name && !!entry.branch,
-    );
-    if (!entry) {
-      throw new Error(`No MyPi-managed worktree named ${name}; inspect the worktree list. Nothing was removed.`);
-    }
-    if (entry.locked !== undefined || entry.prunable !== undefined) {
-      throw new Error(`Worktree ${name} is locked or prunable; inspect its Git registration.`);
-    }
+    const worktree = (await this.list()).find((entry) => entry.managedName === name);
+    if (!worktree) throw new Error(`No MyPi worktree named ${name}; /worktree list shows them.`);
 
-    return { main, worktree: entry, blockers: await changedFiles(entry.path, signal) };
+    return { worktree, blockers: await blockers(worktree.path) };
   }
 
-  async remove(name: string, signal?: AbortSignal): Promise<Removal> {
-    const { main, worktree: entry, blockers } = await this.inspect(name, signal);
-    if (isInside(await realpath(entry.path), await realpath(this.cwd))) {
-      throw new Error(
-        `Cannot remove the worktree containing the calling cwd; leave ${JSON.stringify(entry.path)} first.`,
-      );
+  /** Removes a clean managed worktree, and its branch when merged into the main checkout's HEAD. Never forces. */
+  async remove(name: string): Promise<Removal> {
+    const { worktree, blockers } = await this.inspect(name);
+    if (isInside(worktree.path, await realpath(this.cwd))) {
+      throw new Error(`Leave worktree ${name} before removing it.`);
     }
     if (blockers.length) {
-      throw new Error(
-        `Worktree has changes or protected local work:\n${blockers.map((file) => JSON.stringify(file)).join("\n")}\nCommit, integrate, or copy this work to safety before removal. Nothing was removed.`,
-      );
+      throw new Error(`Worktree ${name} has work that would be lost; commit or move it first:\n${blockers.join("\n")}`);
     }
-    await git(main, ["worktree", "remove", entry.path], signal);
-    const result = { path: entry.path, branch: entry.branch, branchDeleted: false };
+
+    const { main } = await mainAndWorktrees(this.cwd);
+    await git(main, ["worktree", "remove", worktree.path]);
+
+    const branch = `${BRANCH_PREFIX}${name}`;
     try {
-      const ancestry = await git(main, ["merge-base", "--is-ancestor", entry.branch, "HEAD"], signal, 1);
-      if (ancestry.code !== 0) {
-        return {
-          ...result,
-          reason:
-            "Branch kept: its tip is not an ancestor of the main checkout's HEAD; integrate or inspect its commits.",
-        };
-      }
-      await git(main, ["branch", "-d", entry.branch.slice("refs/heads/".length)], signal);
-      return { ...result, branchDeleted: true };
+      await git(main, ["branch", "-d", branch]);
+      return { path: worktree.path, branch, branchDeleted: true };
     } catch (error) {
-      return {
-        ...result,
-        reason: `Checkout removed, branch kept: ${errorMessage(error)}`,
-      };
+      return { path: worktree.path, branch, branchDeleted: false, reason: `Branch kept: ${errorMessage(error)}` };
     }
   }
 }
 
-async function statIfPresent(path: string) {
-  try {
-    return await lstat(path);
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") return undefined;
-    throw error;
-  }
-}
+/**
+ * Changed and untracked files, plus new files in `.pi/memories/` and `.pi/plans/` even though they're ignored: a patch
+ * from `git diff` can't carry them, so removing the checkout would lose them. Other ignored files don't count.
+ */
+async function blockers(path: string): Promise<string[]> {
+  const status = await git(path, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  const local = await git(path, ["ls-files", "--others", "-z", "--", ".pi/memories/", ".pi/plans/"]);
+  const localWork = local.split("\0").filter((file) => file && !IGNORE_MARKERS.has(file));
 
-// Refuse links rather than resolving managed storage into an unrelated directory.
-async function checkStorage(main: string, name: string): Promise<void> {
-  for (const path of [join(main, ".pi"), join(main, ".pi", "worktrees"), join(main, ".pi", "worktrees", name)]) {
-    if ((await statIfPresent(path))?.isSymbolicLink()) {
-      throw new Error(
-        `Symlinked worktree storage at ${JSON.stringify(path)}; replace it with a real directory before mutating worktrees.`,
-      );
-    }
-  }
-}
-
-async function changedFiles(path: string, signal?: AbortSignal): Promise<string[]> {
-  const status = await git(
-    path,
-    ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none"],
-    signal,
-  );
-  // No ignore exclusions: Git patches omit these local memories/plans, so deleting them loses work.
-  const localWork = await git(path, ["ls-files", "--others", "-z", "--", ".pi/memories/", ".pi/plans/"], signal);
-  const protectedPaths = localWork.stdout
-    .split("\0")
-    .filter((file) => file && file !== ".pi/memories/.gitignore" && file !== ".pi/plans/.gitignore");
-  return [...new Set([...changedPaths(status.stdout), ...protectedPaths])];
+  return [...new Set([...changedPaths(status), ...localWork])];
 }

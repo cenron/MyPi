@@ -20,11 +20,17 @@ describe("submitPlanTool", () => {
   });
 
   const run = (onSubmit = vi.fn()) =>
-    submitPlanTool(onSubmit).execute("call-1", { title: "Add it", plan: "Steps." }, undefined, undefined, {
-      cwd,
-    } as ExtensionToolContext);
+    submitPlanTool(join(cwd, ".pi", "plans"), onSubmit).execute(
+      "call-1",
+      { title: "Add it", plan: "Steps." },
+      undefined,
+      undefined,
+      {
+        cwd,
+      } as ExtensionToolContext,
+    );
 
-  it("saves the plan in the session's cwd and tells the model where", async () => {
+  it("saves in the resolved folder and tells the model where", async () => {
     const path = join(cwd, ".pi", "plans", "2026-10-20-143205-add-it.md");
     await expect(run()).resolves.toEqual({
       content: [{ type: "text", text: `Plan saved to ${path}.` }],

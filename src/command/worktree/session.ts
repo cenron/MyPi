@@ -1,170 +1,163 @@
-import { realpath, stat } from "node:fs/promises";
-import { isAbsolute } from "node:path";
-import { type ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
+import { realpath } from "node:fs/promises";
+import { type ExtensionCommandContext, type ExtensionContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
 import { errorMessage } from "#core/util/errors";
 import { isRecord } from "#core/util/guards";
 import { isInside } from "#core/util/paths";
-import { validateName, type Worktree } from "#core/worktree/git";
+import type { Worktree } from "#core/worktree/git";
+import { type Inspection, Worktrees } from "#core/worktree/index";
 
+/** Saved in the worktree's session on re-entry, naming the conversation exit returns to. */
 const ORIGIN = "worktree-origin";
 
-/** Commands alone replace sessions. Capture plain paths before switching; never use the old Session afterward. */
+/** What `/worktree exit` does with the checkout once it's back in the origin. */
+export type ExitChoice = "keep" | "remove";
+
+const EXIT_LABELS = new Map<string, ExitChoice>([
+  ["Keep", "keep"],
+  ["Remove", "remove"],
+]);
+
+type ReadableSession = ExtensionCommandContext["sessionManager"];
+
+/**
+ * Moves this conversation into worktree `name`, creating it if needed: a fork of the conversation on first entry, the
+ * worktree's own latest session after that. Only a command can switch sessions, and after the switch `ctx` and
+ * `session` belong to the old one, so nothing uses them then.
+ */
 export async function enterWorktree(session: Session, ctx: ExtensionCommandContext, name: string) {
-  validateName(name);
   await ctx.waitForIdle();
   requireNoJobs(session);
 
   const entries = await session.worktrees.list();
-  const cwd = await realpath(ctx.cwd);
-  const current = entries.find((entry) => entry.managedName && isInside(entry.path, cwd));
+  const current = await currentWorktree(entries, ctx.cwd);
   if (current) {
     if (current.managedName === name) return `Already in worktree ${name}.`;
-    throw new Error(`Already in worktree ${current.managedName}; use /worktree exit before entering another.`);
+    throw new Error(`Already in worktree ${current.managedName}; use /worktree exit first.`);
   }
 
-  const sourceFile = ctx.sessionManager.getSessionFile();
-  if (!sourceFile) throw new Error("Entering requires a saved conversation; send a prompt first, then retry.");
-  const source = await openSession(sourceFile);
-  if ((await realpath(source.getCwd())) !== cwd) {
-    throw new Error("Source session changed; resume the intended conversation before entering.");
-  }
+  const source = ctx.sessionManager.getSessionFile();
+  if (!source) throw new Error("Send a prompt first: entering needs a saved conversation.");
 
-  const existing = entries.find((entry) => entry.managedName === name);
-  const target = await targetWorktree(session, name, existing);
-
+  // A saved entry makes the selected branch the session file's last one, which a fork and a return both pick up.
   session.save("worktree-anchor", {});
-  const targetFile = await targetSession(session, sourceFile, target, existing);
+  const existing = entries.find((entry) => entry.managedName === name);
+  const target = existing
+    ? await resumeSession(session, source, existing.path)
+    : forkSession(source, (await session.worktrees.create(name)).path);
 
-  const result = await ctx.switchSession(targetFile, {
-    withSession: async (fresh) => {
-      if (fresh.hasUI) fresh.ui.notify(`Entered worktree ${name}: ${fresh.cwd}`, "info");
-    },
+  const result = await ctx.switchSession(target, {
+    withSession: async (fresh) => notify(fresh, `Entered worktree ${name}.`),
   });
-  return result.cancelled
-    ? `Entry cancelled; checkout ${target.path} and session ${targetFile} were retained.`
-    : undefined;
+  return result.cancelled ? "Entry cancelled." : undefined;
 }
 
-export async function exitWorktree(session: Session, ctx: ExtensionCommandContext) {
+/** Returns to the conversation that entered this worktree, then keeps the checkout or safely removes it. */
+export async function exitWorktree(session: Session, ctx: ExtensionCommandContext, choice?: ExitChoice) {
   await ctx.waitForIdle();
   requireNoJobs(session);
 
-  const cwd = await realpath(ctx.cwd);
-  const entry = (await session.worktrees.list()).find((entry) => entry.managedName && isInside(entry.path, cwd));
-  if (!entry) throw new Error("This session is not in a MyPi-managed worktree; nothing to exit.");
+  const current = await currentWorktree(await session.worktrees.list(), ctx.cwd);
+  if (!current?.managedName) throw new Error("Not in a MyPi worktree; nothing to exit.");
+  const name = current.managedName;
 
-  // Ownership/storage checks still apply to a dirty target, but changes never block returning and keeping it.
-  await session.worktrees.inspect(entry.managedName ?? "");
-  const origin = await findOrigin(ctx.sessionManager, entry.path);
+  const action = choice ?? (await askExit(ctx, await session.worktrees.inspect(name)));
+  if (!action) return "Exit cancelled.";
 
+  const origin = await findOrigin(ctx.sessionManager, current.path);
   session.save("worktree-anchor", {});
-  const result = await ctx.switchSession(origin, {
-    withSession: async (fresh) => {
-      if (fresh.hasUI) {
-        fresh.ui.notify(`Returned to ${fresh.cwd}; worktree ${entry.managedName} kept at ${entry.path}.`, "info");
-      }
-    },
-  });
-  return result.cancelled ? "Exit cancelled; still in the worktree. Nothing was removed." : undefined;
+  const result = await ctx.switchSession(origin, { withSession: (fresh) => finishExit(fresh, name, action) });
+  return result.cancelled ? "Exit cancelled." : undefined;
 }
 
-/** Latest branch-scoped override wins; native parent links carry clear-context planning sessions back to it. */
-export async function findOrigin(
-  current: ExtensionCommandContext["sessionManager"],
-  worktree: string,
-): Promise<string> {
-  const seen = new Set<string>();
-  let manager = current;
-
+/** The session to return to: the latest origin entry, else the first session up the parent chain outside `worktree`. */
+export async function findOrigin(start: ReadableSession, worktree: string): Promise<string> {
+  let current = start;
   while (true) {
-    const { file: target, override } = nextSessionFile(manager);
-    const file = manager.getSessionFile();
-    if (file) seen.add(await realpath(file));
+    const file = nextSessionFile(current);
+    const next = SessionManager.open(file);
+    if (!isInside(worktree, await realpath(next.getCwd()))) return file;
 
-    if (typeof target !== "string" || !isAbsolute(target)) {
-      throw new Error("Invalid worktree origin or parent entry; inspect this session's history.");
-    }
-
-    const next = await openSession(target);
-    const nextFile = next.getSessionFile();
-    if (!nextFile || seen.has(nextFile)) {
-      throw new Error("Cycle in worktree session origins; inspect the session history.");
-    }
-
-    if (!isInside(worktree, await realpath(next.getCwd()))) return nextFile;
-    if (override) {
-      throw new Error("Worktree origin must be outside the worktree; inspect the origin entry.");
-    }
-
-    manager = next;
+    current = next;
   }
 }
 
-async function targetWorktree(session: Session, name: string, existing: Worktree | undefined): Promise<Worktree> {
-  if (existing) return (await session.worktrees.inspect(name)).worktree;
-  return (await session.worktrees.create(name)).worktree;
+/**
+ * The worktree's latest session, with this conversation saved as where to return. A fork when it has none. A new
+ * checkout always forks, even under a name an old, removed one used.
+ */
+async function resumeSession(session: Session, source: string, path: string): Promise<string> {
+  const [latest] = (await SessionManager.list(path)).sort((a, b) => b.modified.getTime() - a.modified.getTime());
+  if (!latest) return forkSession(source, path);
+
+  session.saveTo(SessionManager.open(latest.path), ORIGIN, { file: source });
+  return latest.path;
 }
 
-async function targetSession(
-  session: Session,
-  source: string,
-  target: Worktree,
-  existing: Worktree | undefined,
-): Promise<string> {
-  const recent = existing
-    ? (await SessionManager.list(target.path)).sort((a, b) => b.modified.getTime() - a.modified.getTime())[0]
-    : undefined;
-  const manager = recent ? await openSession(recent.path) : SessionManager.forkFrom(source, target.path);
-  if ((await realpath(manager.getCwd())) !== (await realpath(target.path))) {
-    throw new Error(`Session cwd does not match worktree ${target.managedName}; inspect ${manager.getSessionFile()}.`);
-  }
-
-  if (recent) session.saveTo(manager, ORIGIN, { file: source });
-  const file = manager.getSessionFile();
-  if (!file) throw new Error(`No session file for ${target.path}; inspect the checkout.`);
+/** A copy of the conversation in `source`, rooted in `path`; pi records `source` as its parent. */
+function forkSession(source: string, path: string): string {
+  const file = SessionManager.forkFrom(source, path).getSessionFile();
+  if (!file) throw new Error(`pi made no session file for ${path}.`);
   return file;
 }
 
-function nextSessionFile(manager: ExtensionCommandContext["sessionManager"]) {
-  const override = [...manager.getBranch()]
+function nextSessionFile(manager: ReadableSession): string {
+  const origin = [...manager.getBranch()]
     .reverse()
     .find((entry) => entry.type === "custom" && entry.customType === `mypi-${ORIGIN}`);
-  if (override?.type === "custom") {
-    return { file: isRecord(override.data) ? override.data.file : undefined, override: true };
+  if (origin?.type === "custom" && isRecord(origin.data) && typeof origin.data.file === "string") {
+    return origin.data.file;
   }
 
   const parent = manager.getHeader()?.parentSession;
   if (!parent) {
-    throw new Error(
-      "No worktree origin: this session has no parent or origin entry (a bare /new breaks the chain). Resume the originating conversation explicitly; nothing was switched.",
-    );
+    throw new Error("No conversation to return to: this session has no parent (a bare /new starts over). Use /resume.");
   }
-  return { file: parent, override: false };
+  return parent;
 }
 
-async function openSession(file: string): Promise<SessionManager> {
-  try {
-    const path = await realpath(file);
-    const manager = SessionManager.open(path);
-    const cwd = manager.getHeader()?.cwd;
-    if (typeof cwd !== "string" || !isAbsolute(cwd)) throw new Error("session cwd must be absolute");
-    if (!(await stat(cwd)).isDirectory()) throw new Error("session cwd is not a directory");
+async function askExit(ctx: ExtensionCommandContext, { worktree, blockers }: Inspection) {
+  if (!ctx.hasUI) return "keep";
 
-    return manager;
-  } catch (error) {
-    throw new Error(
-      `Cannot open session ${JSON.stringify(file)}: ${errorMessage(error)}. Resume or repair the intended session explicitly.`,
-      { cause: error },
+  const removal = blockers.length
+    ? `Remove would refuse, for:\n${blockers.join("\n")}`
+    : "No changes, so Remove is safe.";
+  const answer = await ctx.ui.select(`Leave worktree ${worktree.managedName}?\n${removal}`, [
+    "Keep",
+    "Remove",
+    "Cancel",
+  ]);
+  return EXIT_LABELS.get(answer ?? "");
+}
+
+async function finishExit(ctx: ExtensionContext, name: string, action: ExitChoice) {
+  if (action === "keep") return notify(ctx, `Back; worktree ${name} kept.`);
+
+  try {
+    const removed = await new Worktrees(ctx.cwd).remove(name);
+    notify(
+      ctx,
+      `Back; worktree ${name} removed. ${removed.branchDeleted ? `Deleted ${removed.branch}.` : removed.reason}`,
     );
+  } catch (error) {
+    notify(ctx, `Back; worktree ${name} kept: ${errorMessage(error)}`, "warning");
   }
+}
+
+async function currentWorktree(entries: Worktree[], cwd: string): Promise<Worktree | undefined> {
+  const path = await realpath(cwd);
+  return entries.find((entry) => entry.managedName && isInside(entry.path, path));
+}
+
+function notify(ctx: ExtensionContext, message: string, type: "info" | "warning" = "info") {
+  if (ctx.hasUI) ctx.ui.notify(message, type);
 }
 
 function requireNoJobs(session: Session): void {
-  const jobs = session.jobs.list().filter((job) => job.status === "running");
-  if (jobs.length) {
+  const running = session.jobs.list().filter((job) => job.status === "running");
+  if (running.length) {
     throw new Error(
-      `Wait for or stop running jobs before switching: ${jobs.map((job) => `${job.id} (${job.label})`).join(", ")}.`,
+      `Stop or wait for running jobs first: ${running.map((job) => `${job.id} (${job.label})`).join(", ")}.`,
     );
   }
 }
