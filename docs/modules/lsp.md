@@ -1,6 +1,6 @@
 # LSP
 
-**Status:** done 2026-10-24 (slices 1–5). Diagnostics after a turn are the [done check](done-check.md)'s slice 5; symbol edits (slice 6) wait for a need.
+**Status:** done 2026-10-24 (slices 1–5). Diagnostics after each Build run come through the [done check](done-check.md), which asks this module on the event bus; symbol edits (slice 6) wait for a need.
 
 ## Goal
 
@@ -149,8 +149,8 @@ severity in the header, or "No problems in <file>". Two ways, by what the server
   client keeps the last push per file with the text version it was for (`versionSupport` is declared) and waits up to
   10 s for one that matches the text it last sent, so a push for old text never answers for new. A push without a
   version counts for the text sent last.
-- On request only, never after each edit (see [What to take from Serena](#what-to-take-from-serena)). The done
-  check's diagnostics after a turn wait for the [done check](done-check.md) module, which calls the same path.
+- On request, and once at the end of each Build run through the [done check](done-check.md), never after each edit
+  (see [What to take from Serena](#what-to-take-from-serena)). Both go through the same path (`fileProblems`).
 
 **Underneath.**
 
@@ -304,8 +304,9 @@ export const SERVERS = [
    of the agent's file changes, and the answer cap. Servers start through `ServerManager.clientFor`, which reports
    the cases in [When a server can't answer](#when-a-server-cant-answer).
 3. **Done 2026-10-24.** References, implementations, definition.
-4. **Done 2026-10-24.** Diagnostics on request (`diagnostics`). The done check calls the same path for the files a
-   turn changed; that's its own slice 5 (see [done check](done-check.md)).
+4. **Done 2026-10-24.** Diagnostics on request (`diagnostics`), and for the files a Build run changed: the
+   [done check](done-check.md) asks for them on the event bus, and the module answers through the same path
+   (`problems.ts`).
 5. **Done 2026-10-24.** Rename, as the first action of `lsp_edit`.
 6. Later: symbol edits in `lsp_edit` (replace a body, insert before or after, safe delete), if
    [analytics](analytics.md) or a live test shows the agent needs them. In the live tests, `edit` did the job.
