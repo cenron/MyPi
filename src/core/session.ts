@@ -7,6 +7,7 @@ import { ModuleManager } from "./module-manager";
 import { Notifier } from "./notifier";
 import { PromptManager } from "./prompt-manager";
 import { ToolGuard } from "./tool-guard";
+import { Worktrees } from "./worktree";
 
 /** Per-session handle passed to commands and modules: pi's context and API, logging, saved state, and the modules. */
 export class Session {
@@ -22,6 +23,8 @@ export class Session {
   readonly toolGuard: ToolGuard;
   /** The session's background jobs; every one still running is stopped on `session_shutdown`. */
   readonly jobs: JobManager;
+  /** Lazy Git worktree operations rooted in this session's cwd; never switch the session. */
+  readonly worktrees: Worktrees;
   private readonly notifier: Notifier;
 
   constructor(
@@ -35,6 +38,7 @@ export class Session {
     this.promptManager = new PromptManager();
     this.toolGuard = new ToolGuard(pi);
     this.jobs = new JobManager(pi.events);
+    this.worktrees = new Worktrees(ctx.cwd);
     // How many jobs are running, of any kind, shown only while there are some.
     subscribe(pi.events, "jobs", (running) =>
       this.footer.set(

@@ -1,6 +1,6 @@
 # worktree
 
-**Status:** building (slice 1 done 2026-10-25, on pi 1.2.0; no production worktree tools yet)
+**Status:** building (slices 1–2 done 2026-10-25, on pi 1.2.0; shared service delivered, no model-facing worktree tools yet)
 
 ## Goal
 
@@ -24,8 +24,8 @@ what enter/exit should use:
 1. **Override the built-in tools.** Rejected for this design. Tool factories and same-name replacement exist, but
    rebinding tools alone leaves the prompt, resource discovery, and MyPi services to patch separately. Native
    replacement already moves them together; no worktree-specific tool overrides or cwd-prompt spoofing are needed.
-2. **Tools only manage worktrees.** Still useful for subagents: create, list, and remove without moving the main
-   session. This is slice 2, not an alternative enter/exit implementation.
+2. **Shared service manages worktrees.** Subagents call `Session.worktrees` to create, list, and remove without
+   moving the main session. This is slice 2, not an alternative enter/exit implementation or a model-facing tool.
 3. **Switch to a session rooted in the worktree.** Prepare a target session file, then call command-context
    `ctx.switchSession(path, { withSession })`. Inspect and use the replacement only through the fresh callback
    context. Save the original session path as plain data outside the replaced runtime; exit switches back to it.
@@ -91,7 +91,59 @@ Target-rooted memory and plan paths therefore do **not** preserve existing local
 Forked conversation or module state can still refer to source-only files. Slice 4 must decide what to copy, analogous
 to `.worktreeinclude`; this spike implemented no ignored-file copying.
 
-## Behavior
+## Shared service (slice 2)
+
+`Session.worktrees` is a lazy, cwd-bound `Worktrees` service in `src/core/worktree/`. Construction and listing do
+no filesystem writes; Git is authoritative, with no persistent registry. Future subagents call this service
+directly rather than driving tools. Methods accept an optional `AbortSignal` and return ordinary typed data:
+
+- `create(name, signal?)` returns `{ worktree, baseCommit }`. Names are required: 1–64 lowercase letters, digits,
+  or hyphens, beginning with a letter or digit. Storage is `<main-checkout>/.pi/worktrees/<name>`; the new branch
+  is `mypi/worktree/<name>`. The base is the **calling checkout's committed HEAD**, including linked-worktree
+  and subdirectory callers. Dirty callers are allowed, but no uncommitted or ignored files are copied. The
+  subagents writer-launch policy, not this service, will require a clean caller. No base/location options or reuse.
+- `list(signal?)` returns all Git worktree records: path, HEAD, branch, primary/detached/bare flags, lock/prune
+  reasons, and `managedName` where owned. NUL-delimited output preserves unusual paths. Managed means a non-primary
+  checkout at the exact direct-child storage path on the matching branch. Coincidental paths, renamed branches,
+  detached checkouts, and foreign worktrees are not adopted.
+- `remove(name, signal?)` returns `{ path, branch, branchDeleted, reason? }`. Only the exact managed pair can be
+  removed, never the calling cwd, primary checkout, locked/prunable registration, or symlinked storage. Tracked,
+  staged, renamed, untracked, and dirty-submodule changes block removal and their paths are listed. Ordinary
+  ignored files (`node_modules`, coverage, `.env`) do **not** block it and follow Git's normal cleanup semantics.
+  **Exception:** new files under `.pi/memories/` and `.pi/plans/` block removal even when ignored; tracked changes
+  there also block it. Git patches omit ignored local work, so deleting these files would lose real work.
+  Unchanged committed memories/plans do not block removal. Copying local work back belongs to slice 4.
+
+Storage is resolved through Git's primary checkout, canonically, never nested under a linked caller. Mutations
+reject symlink components in `.pi/worktrees/<name>`. Creation retains `.pi/worktrees/.gitignore` with the shared
+`keepOutOfGit` helper's `*` rule (or preserves an existing file). This also keeps Biome and rg out of nested checkout
+copies, not just Git status clean. Non-Git directories and bare-primary layouts are unsupported; creation needs
+a committed HEAD.
+
+Removal uses ordinary `git worktree remove`, with no force/discard option. Git remains the final safety check
+(for example, it can refuse a clean checkout with initialized submodules). After checkout removal, the branch
+is deleted with ordinary `git branch -d` only if its tip is an ancestor of the **main checkout's current HEAD**.
+Otherwise it is preserved with an explicit reason. Branch-deletion refusal returns partial cleanup (checkout
+removed, branch kept, reason), not total failure. Creation errors report the intended path/branch and Git error;
+no automatic destructive rollback, retries, unlocks, or pruning. These are not cross-process transactions.
+Execution uses Node's bounded-output, promisified `execFile` with argument arrays, explicit cwd, and abort signals;
+no shell, runtime dependency, `process.chdir`, or session replacement.
+
+No model-facing tools, schemas, renderers, or Plan-rule changes are delivered here. Without enter/exit, management
+tools would encourage absolute-path work outside the session checkout. The model-facing interface (enter/exit,
+create/list/remove, or both) remains a slice 3 decision.
+
+### Slice 2 verification (2026-10-25)
+
+52 focused tests cover parser/ownership rules and disposable real-Git repositories, including dirty submodules,
+collisions, symlinks, unsupported layouts, ignored/protected files, and partial cleanup. Temporary mutations of
+name validation, ownership matching, memory protection, and storage-ignore creation all caused their tests to
+fail, then were restored. An additional disposable service exercise used a real pi `SessionManager` and confirmed
+unchanged caller cwd/session ID, ordinary ignored-file cleanup, retained protected memory, retained unmerged
+branch, and untouched unrelated worktree. All spike data was removed; the user's conversation was not switched.
+`npm run check` passed (930 tests), as did `git diff --check`.
+
+## Full-feature behavior (later slices)
 
 - Create a worktree on a new branch, and optionally move the session into it.
 - Leave it: back to the main checkout, keeping or removing the worktree.
@@ -105,7 +157,7 @@ to `.worktreeinclude`; this spike implemented no ignored-file copying.
 |---|---|---|
 | Tools | A folder, `src/tool/worktree/`, listed in `createTools` | `worktree_enter` / `worktree_exit` (Claude Code) or `worktree_create` / `worktree_list` / `worktree_remove` (OpenCode). Open question. |
 | Git | `git worktree add -b <branch> <path> <base>`, `git worktree list --porcelain`, `git worktree remove` | Run with `execFile`, never through a shell. |
-| Location | `.pi/worktrees/<name>/` in the repo, git-ignored like `.pi/plans/` | Or a global dir per project, like OpenCode. |
+| Location | `<main-checkout>/.pi/worktrees/<name>/` | Fixed in slice 2; storage-level ignore also isolates tooling. |
 | Session state | Which worktree the session is in, saved with `Session.save` | Restored on `/reload` and resume. |
 | Plan mode | Creating, entering, and removing are not read-only | Ask or block in Plan, like other writes. |
 
@@ -113,17 +165,27 @@ to `.worktreeinclude`; this spike implemented no ignored-file copying.
 
 1. **Done 2026-10-25:** verified native command-context session replacement in pi 1.2.0: cwd-bound services move,
    anchored forks preserve the selected conversation branch, and return restores the original session without merging.
-2. Create, list, and remove, callable by subagents without moving the main session.
-3. Production enter/exit using native replacement, including the command-only boundary and module-level exercises.
+2. **Done 2026-10-25:** shared `Session.worktrees` create/list/remove service and real-Git safety tests, callable by
+   subagents without moving the main session. No model-facing tools.
+3. Production enter/exit using native replacement, the model-facing interface decision (enter/exit versus
+   create/list/remove, or both), the command-only boundary, and module-level exercises.
 4. Copying ignored files (including project memories/plans), and the keep-or-remove check on exit.
 
 ## Open questions
 
 - Re-entering an existing worktree should reopen its own session rather than fork the original conversation again;
   how should that session be associated with the worktree?
-- Tool shape: enter/exit, create/list/remove, or both?
-- Where do worktrees live?
-- Base branch: the default branch, or the current `HEAD`?
+- Tool shape: enter/exit, create/list/remove, or both? Whatever it is, it's **built in, not a module** (decided
+  2026-10-25): worktree support is core (`Session.worktrees`), and its user-facing layer is a built-in command in
+  `src/command/` (enter/exit must be a command: pi switches sessions only from one) plus any built-in tools in
+  `src/tool/`, always registered like `web_fetch` and `web_search`, not listed in `/modules`.
+- **Subagents need a discard step** (found 2026-10-25 reviewing slice 2): a writer's patch is built by staging
+  everything in its worktree (`git diff --cached --binary`), and `remove` then refuses those staged changes, with no
+  force. After the patch is saved, the subagents work needs something like `worktrees.discard(name)`: managed
+  worktrees only, still refusing changed `.pi/memories/` or `.pi/plans/` files, deleting the branch as `remove` does.
+- **Which HEAD:** the [subagents](../modules/subagents.md) doc says a writer's worktree branches from the main
+  checkout's `HEAD`; slice 2 uses the calling checkout's `HEAD`. They're the same while the main agent works in the
+  main checkout; settle it in slice 3, once a session can work from inside a worktree.
 - [Subagents](../modules/subagents.md) depend on this (decided 2026-10-23): each sub-agent writer gets its own
   worktree so writers can run in parallel. Design the create and remove steps so the subagents module can call them
   without moving the main session. A writer's work comes back as a patch (decided 2026-10-23, see its doc), so

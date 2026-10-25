@@ -42,7 +42,7 @@ The must-haves:
 | [todo](todo.md) | idea | A checklist the agent keeps while it works, shown to the user |
 | [background process](background-process.md) | done | Start long-running commands, read their output, stop them, and get told when they exit; monitor output |
 | [apply_patch](apply-patch.md) | idea | Multi-file edits in Codex's patch format |
-| [worktree](worktree.md) | idea | Optionally work in a git worktree: create, enter, exit, remove. Sub-agent writers need it to run in parallel |
+| [worktree](worktree.md) | building | Slices 1–2 delivered: replacement spike and shared `Session.worktrees` service for subagents. No model-facing tools yet; enter/exit and the tool interface are slice 3 |
 
 Tools that are modules instead, so they can be turned off, are documented in `docs/modules/`: `subagent`
 ([subagents](../modules/subagents.md)), [LSP](../modules/lsp.md), and desktop

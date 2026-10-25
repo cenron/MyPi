@@ -127,11 +127,18 @@ access:
 - **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
   Without one, only one `write` run works in the main checkout at a time, and the main agent leaves its files alone.
 - **Children don't commit. A writer's work comes back as a patch:**
-  1. The worktree branches from the main checkout's `HEAD`.
+  1. The worktree branches from the main checkout's `HEAD`. (`Session.worktrees.create` uses the calling checkout's
+     `HEAD`; the same thing while the main agent is in the main checkout. Settled in worktree slice 3.)
   2. When the run ends, MyPi stages everything in the worktree (new files too) and writes `git diff --cached --binary`
      to a patch file, plus a handoff file: the agent, the task, the base commit, the files changed, the patch's path,
      and the child's summary.
   3. The worktree and its branch are removed. The patch and handoff stay until the patch is applied or dropped.
+     **Gap (found 2026-10-25, worktree slice 2):** `Session.worktrees.remove` refuses any staged change, with no
+     force, and step 2 stages everything on purpose. So this step needs a discard on the worktree service, something
+     like `worktrees.discard(name)`, called only after the patch and handoff are saved: managed worktrees only, still
+     refusing new or changed `.pi/memories/` and `.pi/plans/` files (the patch can't carry ignored files, so the run
+     reports them instead of losing them), and deleting the branch as `remove` does. Build it with this module, not
+     as a model-facing tool. See [worktree](../tools/worktree.md#open-questions).
   4. The run's result names the patch and the files. The main agent reviews it and calls `subagent_apply`, which
      asks me first: a dialog with the agent, the task, the files and their diff stat, and the child's summary, and
      Apply, Drop, or Cancel (Cancel is the default, as in Radian's merge dialog). Apply runs `git apply --3way` (Build
