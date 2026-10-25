@@ -175,7 +175,8 @@ checks only the first word plus a denylist, so `ls; node …` and the 3a test ca
   log show diff blame ls-files ls-tree rev-parse describe shortlog`, and `grep` without `-O`. `--output` asks
   anywhere. `branch` and `tag` allow list flags only, and operands only with `-l`/`--list` (so `branch --contains abc`
   asks; `--contains=abc` doesn't). `remote` bare, `-v`, `show`, `get-url`. `stash list`/`show` (a bare `git stash`
-  pushes). `config` with `--get*`, `--list`/`-l`, `get` or `list`, and no write flag.
+  pushes). `config` with `--get*`, `--list`/`-l`, `get` or `list`, and no write flag. `worktree list` with flags
+  only, and `--version`/`version` (added 2026-10-25, after the worktree work asked for both in Plan).
 - Flags are checked in every word, since GNU tools take options after operands (`sed -n 1p f -i`). A short-flag
   cluster counts (`sort -ro out`, `fd -HX`), and so does an abbreviated long flag (`sort --out=f`; GNU getopt and git
   accept unambiguous prefixes). `uniq -f 1 f` asks, since `1` looks like a second operand.

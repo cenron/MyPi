@@ -76,6 +76,11 @@ const GIT_SUBCOMMANDS = new Map<string, ArgCheck>([
   ],
   // A bare `git stash` pushes.
   ["stash", (args) => args[0] === "list" || args[0] === "show"],
+  // Every `worktree list` flag only shapes the output; `--expire <time>` with a separate operand asks.
+  ["worktree", ([sub, ...flags]) => sub === "list" && flags.every((w) => w.startsWith("-"))],
+  // `--version` sits where the subcommand goes; `--build-options` is the only flag either takes.
+  ["--version", (args) => args.every((w) => w.startsWith("-"))],
+  ["version", (args) => args.every((w) => w.startsWith("-"))],
   [
     "config",
     (args) =>

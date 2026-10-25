@@ -86,6 +86,16 @@ Two lessons from the [inspiration](../inspiration/README.md) projects:
   memory followed. A temporary end-of-run nudge tested on 2026-10-23 got a model that saved nothing on its own to save
   at once (see [memory](memory.md#saving-without-being-asked)); build that nudge only if these numbers show memories
   being missed.
+- **LSP use, a first data point (2026-10-25).** In one pi session planning and spiking worktree in the MyPi folder
+  (gpt-6.1-sol, medium), with the TypeScript server installed and `lsp` active in both modes, the agent made 0 `lsp`
+  calls out of 87: 55 `read`, 20 `bash`, 5 `write`, 3 `edit`, 3 `ask_user`, 1 `job_list`. Most `rg` calls searched
+  pi's compiled `node_modules/…/dist/*.js` for text, where `rg` fits; a few searched MyPi's own `src/` for names
+  (`rg -n 'folderGuard|input.path|writableDirs' src/rule`, `rg -n 'execFile|promisify' src`), where `find_symbol`
+  or `references` could have answered, and many whole-file reads could have started with an `outline`. One session
+  is an anecdote, not a rate.
+  - **Next, before any nudge** (deferred 2026-10-25, to do later): the cheap check above for `lsp` on MyPi, about 20
+    tasks with `lsp` and with only `rg`/`read`, counting calls, output size, and the edits' correctness. Then decide
+    whether a prompt guideline is worth it, and measure it if one is added.
 
 ## Benchmarks (later)
 
