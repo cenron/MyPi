@@ -1,9 +1,11 @@
 # Sub-agents
 
-**Status:** planned (design agreed 2026-10-23; #6 on the [roadmap](../roadmap.md), after worktree; milestone 1 first)
+**Status:** planned (design agreed 2026-10-23; foundational since 2026-10-25; on the [roadmap](../roadmap.md) after
+plan-build slice 9 and context B–D; milestone 1 first)
 
-**Load type:** `ON_LOAD`. On by default, so the agent can use the `subagent` tool whenever the module is loaded; the user
-can turn it off in `/modules`.
+**Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
+memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
+checks can count on it.
 
 ## Goal
 
@@ -14,6 +16,24 @@ model that suits it.
 Agents are set up once per responsibility (an architect, a developer, a reviewer), each with its own model and effort,
 and reused. I add more by asking ("create me a tester sub-agent that writes tests from the spec, using luna 6") or in
 the fleet view, which also shows what's running.
+
+## Foundational: background research and checks (decided 2026-10-25)
+
+Claude Code starts small background agents freely: to look something up, to check work, to read a lot and report a
+little. Only the summary reaches the main conversation, so its context stays small. Building worktree in one pi
+session showed the cost of not having that: whole files of pi's compiled code and long command output filled the
+main context to 253k, and the code drifted as it did ([context](../core/context.md)).
+
+- **The main agent hands off reads and checks,** not only writing: "find where pi resolves session cwd", "check this
+  diff against `docs/principles.md`". A read-only run, in the background when it can be, returning a short answer
+  with evidence (file and line).
+- **A builtin `explorer`** next to `architect`, `developer`, and `reviewer`: read-only tools, a small fast model by
+  default, told to answer in a few lines with file references and never paste whole files.
+- **Other parts may build on it:** a check after a slice (the reviewer against the principles), research during
+  planning. That's why it's `ALWAYS`. Each still works without a subagent run in flight; they use it, they don't
+  wait on it to start.
+- Earlier (2026-10-25) the user preferred not to depend on subagents, since they might not always be around; making
+  them foundational is what settles that.
 
 ## Where the ideas come from
 
@@ -30,8 +50,8 @@ the fleet view, which also shows what's running.
    managed through herdr. Pi is always internal. No headless `claude -p` or `codex exec`. **External agents are
    deferred:** internal first.
 2. **Definitions, not one-off agents.** An agent is a reusable definition for a responsibility; a run is that agent
-   doing one task. MyPi ships `architect`, `developer`, and `reviewer`. I add agents by asking the model or in the
-   fleet view.
+   doing one task. MyPi ships `architect`, `developer`, `reviewer`, and (since 2026-10-25) `explorer`. I add agents by
+   asking the model or in the fleet view.
 3. **Creating, editing and deleting always ask me**, with the whole definition shown. Saved globally by default.
    Allowed in Plan mode; running a `write` agent isn't. Builtins can't be deleted, only overridden by my own copy.
 4. **Models and effort:** a loose name ("luna 6") is resolved once, at creation, to an exact `provider/id`; if it

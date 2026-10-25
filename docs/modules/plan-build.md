@@ -264,8 +264,11 @@ built it in a sub-folder.
      in `onSessionStart` did.
    - **No new session while jobs run.** `/plan implement` refuses while background jobs are running and lists them,
      as `/worktree enter` does: a session switch stops them.
-   - Not taking: resetting the context with no choice (small plans gain nothing), and a reviewer subagent on every
-     `submit_plan` (it would depend on subagents, which may be turned off).
+   - Not taking: resetting the context with no choice (small plans gain nothing). A reviewer subagent on every
+     `submit_plan` was left out because subagents might be off; they're foundational since 2026-10-25, so it's
+     worth revisiting once they exist.
+   - Goes with [context](../core/context.md) pieces B and D: the Build section names the plan being implemented, and
+     asks for a principles check before "done".
    - **Tests:** the dialog's first choice is Clear context; `PLAN_PROMPT` holds both new lines (one test, key phrases);
      `/plan implement` with a running job refuses and names it. Live: submit a plan, press Enter, land in a fresh
      Build session seeded with the plan.

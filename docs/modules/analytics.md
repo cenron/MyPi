@@ -97,6 +97,11 @@ Two lessons from the [inspiration](../inspiration/README.md) projects:
     tasks with `lsp` and with only `rg`/`read`, counting calls, output size, and the edits' correctness. Then decide
     whether a prompt guideline is worth it, and measure it if one is added.
 
+- **Context use** (added 2026-10-25, for [context](../core/context.md) piece E): per request, the share taken by
+  tool results from more than a few turns back, and their size by tool; per session, the peak context, compactions,
+  and turns after the first compaction; how often the agent reads a file again that an earlier result already held.
+  Decides whether clearing old tool results is worth building, and its threshold.
+
 ## Benchmarks (later)
 
 When a new model comes out, run it through a fixed set of tasks and compare it with the others on the same metrics:

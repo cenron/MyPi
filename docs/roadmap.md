@@ -6,7 +6,7 @@ here; when the order changes, say why in the row.
 
 ## Next up
 
-Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23; folder-guard added after lsp 2026-10-24; folder-guard slice 4 and identity added before worktree 2026-10-25; plan-build slice 9 added after worktree 2026-10-25. Change it freely.
+Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23; folder-guard added after lsp 2026-10-24; folder-guard slice 4 and identity added before worktree 2026-10-25; plan-build slice 9 added after worktree 2026-10-25; context B–D added and subagents made foundational 2026-10-25. Change it freely.
 
 | # | What | Kind | Why at this point | Needs first |
 |---|---|---|---|---|
@@ -18,12 +18,13 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 | 6 | [identity](core/identity.md) | core | **Done 2026-10-25.** pi's prompt says only "inside pi", nothing about MyPi or the model; a few prompt lines fix it and give it the paths to its own roadmap and docs, so "improve yourself, what's next?" works from any folder without searching. One small slice. | 5 (one "Allow for this session" covers MyPi's folder); `PromptManager` |
 | 7 | [worktree](tools/worktree.md) | commands/core | **Done 2026-10-25.** `/worktree` enter, exit, list, and remove move a conversation into a git worktree and back; memories and plans stay shared with the main checkout; `Session.worktrees` is ready for subagents (which still need a discard step, see its doc). | — |
 | 8 | [plan-build slice 9](modules/plan-build.md#slices) | module | **Planned 2026-10-25.** Plans that hand over cleanly: Clear context is the default implement choice, the plan file carries every decision from the chat, plans name the existing API they checked before adding machinery, and no new session while jobs run. Found building worktree in one long session. Small, and every later slice benefits. | Nothing |
-| 9 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 7 (worktree) for parallel writers |
-| 10 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (9) |
-| 11 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
-| 12 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
-| 13 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
-| 14 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
+| 9 | [context B–D](core/context.md#pieces) | core and plan-build | **Planned 2026-10-25.** Long sessions drift: keep the plan file named in Build's section, steer compaction summaries, re-check the principles before "done". A (compact earlier) is already a setting. E (clear old tool results) waits for analytics' numbers. | Nothing |
+| 10 | [subagents](modules/subagents.md) | module | **Foundational (2026-10-25):** research and checks in their own context, like Claude Code's small background agents, as well as delegated work. The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 7 (worktree) for parallel writers |
+| 11 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (10) |
+| 12 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
+| 13 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
+| 14 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
+| 15 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
 
 ## Nice to have
 
