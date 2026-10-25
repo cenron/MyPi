@@ -44,7 +44,6 @@ describe("FolderRule", () => {
   it.each([
     ["the parent folder", "find", { path: ".." }, "/home/me/work"],
     ["a sibling project", "read", { path: "../other/a.ts" }, "/home/me/work/other/a.ts"],
-    ["the home folder", "find", { path: "~" }, "/home/me"],
     ["an absolute path elsewhere", "grep", { path: "/home/me/Documents" }, "/home/me/Documents"],
     ["a folder that only starts like the session's", "ls", { path: "/home/me/work/app-old" }, "/home/me/work/app-old"],
     ["a folder that only starts like /tmp", "ls", { path: "/tmpfoo" }, "/tmpfoo"],
@@ -59,6 +58,19 @@ describe("FolderRule", () => {
     expect(verdict(tool, input)).toEqual(asks(path));
   });
 
+  // Home and the folders above it, up to `/`: a tree there would allow nearly everything, so the question says so.
+  it.each([
+    ["the home folder", "~", "/home/me"],
+    ["a folder above home", "/home", "/home"],
+    ["the root", "/", "/"],
+  ])("asks about %s for that path only", (_case, path, resolved) => {
+    expect(verdict("ls", { path })).toEqual({
+      kind: "ask",
+      questions: [`Reaches outside /home/me/work/app: ${resolved} (this path only)`],
+      onAllowSession: expect.any(Function),
+    });
+  });
+
   it.each([
     ["the same path", "/elsewhere/tree", "/elsewhere/tree", true],
     ["a descendant two levels down", "/elsewhere/tree", "/elsewhere/tree/sub/file.md", true],
@@ -67,6 +79,10 @@ describe("FolderRule", () => {
     ["a prefix lookalike", "/elsewhere/tree", "/elsewhere/tree-old", false],
     ["a file's sibling", "/elsewhere/file.md", "/elsewhere/other.md", false],
     ["a file's parent", "/elsewhere/file.md", "/elsewhere", false],
+    ["the root itself", "/", "/", true],
+    ["anything under the root", "/", "/etc/hosts", false],
+    ["anything under home", "/home/me", "/home/me/notes", false],
+    ["anything under a folder above home", "/home", "/home/other", false],
   ])("session approval covers only the named tree: %s", (_case, path, laterPath, allowed) => {
     const fresh = new FolderRule({ paths: [] });
     const call = { toolName: "read", input: { path } };

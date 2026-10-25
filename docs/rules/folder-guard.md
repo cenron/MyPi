@@ -1,6 +1,6 @@
 # Folder guard
 
-**Status:** done (slices 1–3 done 2026-10-24, slices 4–5 done 2026-10-25)
+**Status:** done (slices 1–3 done 2026-10-24, slices 4–6 done 2026-10-25)
 
 A built-in rule, not a module: it's always on, in every session (decided 2026-10-24). The code is
 `src/rule/folder.ts`.
@@ -22,7 +22,9 @@ user's other projects and personal files are none of the agent's business unless
 - **The question names the place, not the command:** `Reaches outside <cwd>: <path> (and anything under it)`, one
   question per outside path (an ask carries a list of `questions`). "Allow for this session" allows that path and
   everything under it until `/reload`, across commands and tools: a tree allowed through `bash` is allowed for `read`
-  too. Allowing a child does not allow its parent or siblings. Yes allows only the current call. Containment is
+  too. Allowing a child does not allow its parent or siblings. Yes allows only the current call. **Home and the
+  folders above it, up to `/`, are the exception** ([slice 6](#slices)): their question ends "(this path only)" and
+  allowing one covers that path alone, since a tree there would allow nearly everything. Containment is
   lexical, with no disk lookup: allowing a file does not grant its parent directory.
 - **Always allowed**, so pi's own work doesn't prompt:
   - the folders modules already declare as theirs (`BaseModule.setWritable`), such as memory's global folder;
@@ -161,6 +163,15 @@ finding a `tsconfig.json` above, say) are theirs and unchanged. See [lsp](../mod
      `grep -E '/Users/|/private/' || test "$?" -eq 1`, and a heredoc regex with `</cwd>` all ran without a question;
      `head -1 /etc/shells` still asked. (`echo /Users/x | grep …` asks about `/Users/x`, which is a real path word.)
 
+
+6. **Done 2026-10-25: no tree for home or above.** pi ran a heredoc with `split('/')`; the quoted `'/'` read as the
+   path `/`, and "Allow for this session" on it would have allowed every path for the rest of the session. Now, for
+   the home folder and every folder above it (`isInside(path, home)`), the question ends "(this path only)" and the
+   allow is remembered as that exact path (`allowedPaths`); other places keep their tree (`allowedTrees`).
+   - **Tests:** `~`, `/home`, and `/` ask "(this path only)"; after allowing `/`, `/` runs unasked and `/etc/hosts`
+     still asks; the same under home and under a folder above home. Removing either half of the change fails them.
+   - **Tried live:** pi in `pi-workspace`, Build: `test -d ~` asked "(this path only)"; after "Allow for this session"
+     a second `test -d ~` ran unasked; `test -e ~/.zshrc` still asked, "(and anything under it)".
 ## Other harnesses
 
 Checked 2026-10-25, for slice 4.
@@ -197,3 +208,4 @@ Checked 2026-10-25, for slice 4.
 - A file allowed covers only itself; its folder isn't widened.
 - `/tmp` is always allowed, like `os.tmpdir()` (slice 5), reversing 2026-10-24's "`/tmp` asks".
 - Patterns and markup that only look like paths stop asking (slice 5); the gap was found twice in one spike.
+- Home and the folders above it, up to `/`, are allowed for the session as that path only (slice 6).

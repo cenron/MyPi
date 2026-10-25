@@ -17,14 +17,22 @@ const SCRATCH_DIRS = ["/tmp", "/private/tmp"];
 
 const ALLOW: Verdict = { kind: "allow" };
 
+/** What "Allow for this session" will cover, at the end of each question. */
+const TREE = "(and anything under it)";
+const PATH_ONLY = "(this path only)";
+
 /**
  * Asks before a call that reaches outside the session's folder: a `path` input, or the places a `bash` command names
  * (`commandPaths`). Allowed without asking: the modules' own folders, the temp folder (background jobs and web_fetch
- * write there) and `/tmp`, the `/dev` streams, and the skills and context files pi put in the prompt. Each question names one
- * place, not the call, so "Allow for this session" covers that path and its whole tree across tools.
+ * write there) and `/tmp`, the `/dev` streams, and the skills and context files pi put in the prompt. Each question
+ * names one place, not the call, so "Allow for this session" covers that path and its whole tree across tools; for the
+ * home folder and the folders above it, only the path itself.
  */
 export class FolderRule extends BaseRule {
-  private readonly sessionAllowed = new Set<string>();
+  /** Places allowed for the session with everything under them. */
+  private readonly allowedTrees = new Set<string>();
+  /** Places allowed for the session on their own: home and above, where a tree would allow nearly everything. */
+  private readonly allowedPaths = new Set<string>();
 
   get info(): RuleInfo {
     return {
@@ -41,20 +49,35 @@ export class FolderRule extends BaseRule {
       ...SCRATCH_DIRS,
       ...DEVICE_FILES,
       ...this.prompt.paths,
-      ...this.sessionAllowed,
+      ...this.allowedTrees,
     ];
-    const outside = pathsOf(toolName, input, cwd, home).filter((path) => !allowed.some((dir) => isInside(dir, path)));
+    const outside = pathsOf(toolName, input, cwd, home).filter(
+      (path) => !this.allowedPaths.has(path) && !allowed.some((dir) => isInside(dir, path)),
+    );
     if (outside.length === 0) return ALLOW;
 
     const paths = [...new Set(outside)];
     return {
       kind: "ask",
-      questions: paths.map((path) => `Reaches outside ${cwd}: ${path} (and anything under it)`),
+      questions: paths.map((path) => `Reaches outside ${cwd}: ${path} ${isHomeOrAbove(path, home) ? PATH_ONLY : TREE}`),
       onAllowSession: () => {
-        for (const path of paths) this.sessionAllowed.add(path);
+        for (const path of paths) this.allowForSession(path, home);
       },
     };
   }
+
+  private allowForSession(path: string, home: string) {
+    if (isHomeOrAbove(path, home)) {
+      this.allowedPaths.add(path);
+      return;
+    }
+    this.allowedTrees.add(path);
+  }
+}
+
+/** True for the home folder and every folder above it, up to `/`: allowing one of those as a tree allows too much. */
+function isHomeOrAbove(path: string, home: string): boolean {
+  return isInside(path, home);
 }
 
 /** The places a call names, as absolute paths: a `bash` command's, or a `path` input's. MCP tools name none. */
