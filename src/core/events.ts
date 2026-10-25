@@ -1,36 +1,6 @@
 import type { EventBus } from "@earendil-works/pi-coding-agent";
+import type { MyPiNotices, MyPiQuestions } from "./channels";
 import { errorMessage } from "./util/errors";
-
-/** A problem a diagnostics source found in a file, 1-based, such as a type error. */
-export type Problem = {
-  file: string;
-  line: number;
-  column: number;
-  severity: "error" | "warning" | "info" | "hint";
-  message: string;
-  /** Where it came from, such as `ts 2322`. */
-  origin?: string;
-};
-
-/**
- * Every notice MyPi publishes, by channel, with what it carries. One place to see what parts tell each other; each
- * says who publishes and who listens.
- */
-export type MyPiNotices = {
-  /** How many jobs are running. `JobManager` publishes; `Session`'s footer item listens (later the fleet view). */
-  jobs: number;
-};
-
-/**
- * Every question MyPi asks, by channel: what the asker sends and what each listener answers. Each says who asks and
- * who answers.
- */
-export type MyPiQuestions = {
-  /** Plan or Build. The done check asks; plan-build answers. */
-  mode: { request: undefined; answer: "plan" | "build" };
-  /** The problems in `files`. The done check asks; the LSP module answers. */
-  diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
-};
 
 /** One listener's answer to a question, or why it failed, with the module it came from. */
 export type Answer<T> = { from: string; kind: "answer"; value: T } | { from: string; kind: "failed"; error: string };

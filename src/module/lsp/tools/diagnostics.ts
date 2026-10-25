@@ -1,5 +1,5 @@
 import { type Diagnostic, DiagnosticSeverity } from "vscode-languageserver-protocol/node";
-import type { Problem } from "#core/events";
+import type { Problem } from "#core/channels";
 import type { LspClient } from "../client";
 import type { ServerManager } from "../manager";
 import type { ServerSpec } from "../servers";

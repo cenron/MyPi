@@ -18,9 +18,11 @@ that: every line has to earn its place.
 MyPi is built from parts with clear edges, and lean never means fewer edges.
 
 - **Every feature is a module or a tool,** unless more than one part needs it; then it's core.
-- **A part can be turned off or deleted** without touching the others.
-- **Parts talk through the seams:** `Session`, `BaseModule`, and the core services (`ToolGuard`, `PromptManager`,
-  `JobManager`, the footer, the tool and MCP lists), never into each other's files.
+- **A part can be turned off without touching the others,** and deleted by removing its folder and the
+  [event bus](architecture.md) channels only it uses (`src/core/channels.ts`); the typecheck then lists the code
+  those channels leave behind in the other parts.
+- **Parts talk through the seams:** `Session`, `BaseModule`, the core services (`ToolGuard`, `PromptManager`,
+  `JobManager`, the footer, the tool and MCP lists), and the event bus, never into each other's files.
 - **New features plug into the existing seams.** A new seam (a hook, a list, a registry) is added when a design on the
   [roadmap](roadmap.md) needs it, even if it has one user today, and its doc says who comes next. The `PlanChoice`
   list and the module system were built that way.
@@ -53,6 +55,10 @@ asked for. It never argues against the structure above.
 ## Design
 
 - **Small files with clear boundaries.** One concept per file, one folder per module or tool.
+- **A module's `init()` is its wiring:** one line per hook, in this order: restore saved state; what the session shows
+  (footer, prompt, tools, writable folders); pi events; keys and tool rules; bus answers and subscriptions. A handler
+  that does more than one thing is a named private method (`onRunStart`, `onAgentSettled`). No `init<Thing>()`
+  helpers: when `init()` grows, move logic into the handlers, so one list shows everything a module hooks into.
 - **Composition at the entry point.** `index.ts` creates `MyPi` and routes pi events to it. Dependencies such as the
   `Session` come in as arguments, never as globals.
 - **Modules own their stuff.** A module's state, commands, tools, prompt section, and rules live with the module and go

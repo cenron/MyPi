@@ -95,9 +95,10 @@ with another extension").
   no registry. A test pins that `emit` calls listeners at once, so a pi upgrade that changes it fails loudly.
 - `ask` gives back each answer, and each failure with its source's name (`Answer`: `answer` or `failed`), for the
   asker to report.
-- Two channel maps type them all, next to the helpers in `events.ts`: `MyPiNotices` and `MyPiQuestions`, each channel
-  with what it carries and a comment naming who publishes or asks and who listens or answers. Publishing and listening
-  are type-checked, and every channel is listed in one place.
+- Two channel maps type them all, in `src/core/channels.ts` (the contracts, apart from the mechanism in `events.ts`):
+  `MyPiNotices` and `MyPiQuestions`, each channel with what it carries and a comment naming who publishes or asks and
+  who listens or answers. Publishing and listening are type-checked, every channel is listed in one place, and
+  removing one makes the typecheck list the code it leaves behind.
 
   ```ts
   export type MyPiNotices = {

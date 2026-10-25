@@ -53,15 +53,19 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     this.mode = isMode(savedMode) ? savedMode : Mode.PLAN;
     this.setFooter(FOOTER_ITEMS[this.mode]);
     this.setPrompt(PROMPTS[this.mode]);
-    this.initEventHandlers();
-
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
     this.applyPlanTools();
+    // submit_plan writes only its own file in .pi/plans/.
+    this.setWritable({ dirs: [join(this.session.ctx.cwd, PLANS_DIR)], tools: [SUBMIT_PLAN] });
+
+    // before_agent_start fires once per run; agent_start fires again on each retry or continuation within it.
+    this.session.pi.on("before_agent_start", () => this.onRunStart());
+    this.session.pi.on("agent_settled", (ev, ctx) => this.onAgentSettled(ev, ctx));
+
     this.onKey("shift+tab", () => this.toggleMode());
     // Reads this.mode on every call, so a switch applies to the very next tool call, even mid-run.
     this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
-    // submit_plan writes only its own file in .pi/plans/.
-    this.setWritable({ dirs: [join(this.session.ctx.cwd, PLANS_DIR)], tools: [SUBMIT_PLAN] });
+
     // Other modules, such as the done check, ask which mode is on.
     this.answer("mode", () => this.mode);
   }
@@ -75,12 +79,9 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode }> {
     return [submitPlanTool((plan) => (this.submittedPlan = plan)), askUserTool()];
   }
 
-  private initEventHandlers() {
-    // before_agent_start fires once per run; agent_start fires again on each retry or continuation within it.
-    this.session.pi.on("before_agent_start", () => {
-      this.submittedPlan = undefined;
-    });
-    this.session.pi.on("agent_settled", (ev, ctx) => this.onAgentSettled(ev, ctx));
+  /** A new run starts with no plan: one submitted in an earlier run belongs to that run. */
+  private onRunStart() {
+    this.submittedPlan = undefined;
   }
 
   /**

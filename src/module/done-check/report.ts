@@ -1,5 +1,5 @@
 import { isAbsolute, relative } from "node:path";
-import type { Problem } from "#core/events";
+import type { Problem } from "#core/channels";
 import { type FileChange, FileChangeKind } from "#core/util/walk";
 
 /** Most changed files one check asks about; a large `git checkout` shouldn't open hundreds of files in a server. */

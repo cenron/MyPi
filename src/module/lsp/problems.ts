@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import type { Problem } from "#core/events";
+import type { Problem } from "#core/channels";
 import { isNodeError } from "#core/util/errors";
 import type { LspClient } from "./client";
 import type { Lookup, ReadyLookup, ServerManager } from "./manager";

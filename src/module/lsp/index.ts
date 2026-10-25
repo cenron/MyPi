@@ -42,9 +42,8 @@ export class LspModule extends BaseModule<LspState> {
 
     this.session.pi.on("tool_result", (ev, ctx) => this.onToolResult(ev, ctx));
     this.session.pi.on("session_shutdown", () => this.servers.stopAll());
-    this.answer("diagnostics", ({ files, signal }) =>
-      problemsIn(this.servers, files, (lookup, extension) => this.warnUnavailable(lookup, extension), signal),
-    );
+
+    this.answer("diagnostics", ({ files, signal }) => this.diagnosticsFor(files, signal));
   }
 
   commands(): Command[] {
@@ -65,6 +64,11 @@ export class LspModule extends BaseModule<LspState> {
     const path = ev.input.path;
     if (typeof path !== "string") return;
     await this.servers.fileChanged(resolveToolPath(path, ctx.cwd, homedir()), isWriteToolResult(ev));
+  }
+
+  /** The problems the servers find in `files`, for whoever asks on the bus (the done check). */
+  private diagnosticsFor(files: readonly string[], signal?: AbortSignal) {
+    return problemsIn(this.servers, files, (lookup, extension) => this.warnUnavailable(lookup, extension), signal);
   }
 
   /**

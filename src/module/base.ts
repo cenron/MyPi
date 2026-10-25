@@ -1,5 +1,6 @@
 import type { SessionManager, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
+import type { MyPiNotices, MyPiQuestions } from "#core/channels";
 import * as bus from "#core/events";
 import type { Session } from "#core/session";
 import type { ToolRule, Writable } from "#core/tool-guard";
@@ -71,26 +72,24 @@ export abstract class BaseModule<State = never> implements Module {
   }
 
   /** Tells every listener on `channel` (`MyPiNotices`). */
-  protected publish<K extends keyof bus.MyPiNotices>(channel: K, notice: bus.MyPiNotices[K]) {
+  protected publish<K extends keyof MyPiNotices>(channel: K, notice: MyPiNotices[K]) {
     bus.publish(this.session.pi.events, channel, notice);
   }
 
   /** Calls `handler` with each notice on `channel` (`MyPiNotices`) until `/reload`. */
-  protected subscribe<K extends keyof bus.MyPiNotices>(channel: K, handler: (notice: bus.MyPiNotices[K]) => void) {
+  protected subscribe<K extends keyof MyPiNotices>(channel: K, handler: (notice: MyPiNotices[K]) => void) {
     bus.subscribe(this.session.pi.events, channel, handler);
   }
 
   /** Asks every module that answers on `channel` (`MyPiQuestions`); empty when none does. */
-  protected ask<K extends keyof bus.MyPiQuestions>(channel: K, request: bus.MyPiQuestions[K]["request"]) {
+  protected ask<K extends keyof MyPiQuestions>(channel: K, request: MyPiQuestions[K]["request"]) {
     return bus.ask(this.session.pi.events, channel, request);
   }
 
   /** Answers every question on `channel` (`MyPiQuestions`) as this module, until `/reload`. */
-  protected answer<K extends keyof bus.MyPiQuestions>(
+  protected answer<K extends keyof MyPiQuestions>(
     channel: K,
-    handler: (
-      request: bus.MyPiQuestions[K]["request"],
-    ) => Promise<bus.MyPiQuestions[K]["answer"]> | bus.MyPiQuestions[K]["answer"],
+    handler: (request: MyPiQuestions[K]["request"]) => Promise<MyPiQuestions[K]["answer"]> | MyPiQuestions[K]["answer"],
   ) {
     bus.answer(this.session.pi.events, channel, this.info.name, handler);
   }

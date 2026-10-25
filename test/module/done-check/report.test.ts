@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Problem } from "#core/events";
+import type { Problem } from "#core/channels";
 import { FileChangeKind } from "#core/util/walk";
 import { errorsReport, filesToCheck, MAX_CHECKED_FILES } from "#module/done-check/report";
 
