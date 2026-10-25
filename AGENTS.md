@@ -90,5 +90,7 @@ Test each behavior once, at the lowest level that shows it:
 - Display code (`renderCall`, `renderResult`, footers) gets a few tests, not one per line of output.
 - Check exact wording in one place; elsewhere match a key phrase, so rewording a message breaks one test.
 - Check a new test catches something: break the code it covers and watch it fail.
+- A surviving mutant isn't a reason for a test by itself. Add one only when the mutant changes behavior a user or a
+  caller would notice; tests of internals (spies on private calls, how often something runs) stay out.
 - Coverage only has to stay at 85% (`vitest.config.ts`). Don't add a test just to cover a line; leave out tests for
   plain glue and for paths a higher-level test already runs through.

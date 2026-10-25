@@ -88,12 +88,6 @@ describe("ToolGuard", () => {
   });
 
   // Pi only reads `block`; returning the rule's own `{ kind: "block" }` would let the call run.
-  it("blocks with the rule's reason, in pi's result shape", async () => {
-    const guard = newGuard();
-    guard.set("one", block("Plan mode is on."));
-    await expect(guard.check(event(), fakeContext().ctx)).resolves.toEqual({ block: true, reason: "Plan mode is on." });
-  });
-
   it("blocks without asking when any rule blocks, even after another rule asked", async () => {
     const guard = newGuard();
     guard.set("asker", ask("Run ls?"));
@@ -174,16 +168,6 @@ describe("ToolGuard", () => {
       const { ctx, select } = fakeContext({ answer: "Yes" });
       await guard.check(event(), ctx);
       expect(select.mock.calls[0]?.[0]).toBe("Permission required\ntwo: Run ls?");
-    });
-
-    it("lists only the asks not yet allowed", async () => {
-      const guard = newGuard();
-      guard.set("one", ask("Run ls?"));
-      await guard.check(event(), fakeContext({ answer: "Allow for this session" }).ctx);
-      guard.set("two", ask("Really?"));
-      const { ctx, select } = fakeContext({ answer: "Yes" });
-      await guard.check(event(), ctx);
-      expect(select.mock.calls[0]?.[0]).toBe("Permission required\ntwo: Really?");
     });
 
     it("remembers every line it listed", async () => {

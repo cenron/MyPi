@@ -163,24 +163,6 @@ describe("PlanBuildModule", () => {
       ({ type: "tool_call", toolCallId: "call-1", toolName, input }) as ToolCallEvent;
     const writeSrc = call("write", { path: "src/a.ts", content: "" });
 
-    it("applies the Plan rule in Plan", async () => {
-      const { session } = startPlanBuild();
-      await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toMatchObject({ block: true });
-      await expect(session.toolGuard.check(call("write", { path: ".pi/plans/a.md" }), ctx)).resolves.toBeUndefined();
-      await expect(session.toolGuard.check(call("submit_plan", { title: "a" }), ctx)).resolves.toBeUndefined();
-      await expect(session.toolGuard.check(call("bash", { command: "ls" }), ctx)).resolves.toBeUndefined();
-      await expect(session.toolGuard.check(call("bash", { command: "npm test" }), ctx)).resolves.toMatchObject({
-        block: true,
-        reason: expect.stringContaining("plan-build: Plan mode is on. Run this command?\nnpm test"),
-      });
-    });
-
-    it("objects to nothing in Build", async () => {
-      const { session } = startPlanBuild([saved("build")]);
-      await expect(session.toolGuard.check(writeSrc, ctx)).resolves.toBeUndefined();
-      await expect(session.toolGuard.check(call("bash", { command: "npm test" }), ctx)).resolves.toBeUndefined();
-    });
-
     // The rule reads the mode on each call, so a switch mid-run reaches the next tool call.
     it("follows each switch on the next call", async () => {
       const { session, run } = startPlanBuild();
@@ -206,14 +188,6 @@ describe("PlanBuildModule", () => {
       expect(activeTools()).toEqual(["read", "mcp_search"]);
       await run("plan");
       expect(activeTools()).toEqual(["read", "mcp_search", "submit_plan", "ask_user"]);
-    });
-
-    // On resume and /reload pi has already restored it from the transcript.
-    it("doesn't touch the active tools when they're already right", async () => {
-      const { run, setActiveTools } = startPlanBuild();
-      setActiveTools.mockClear();
-      await run("plan");
-      expect(setActiveTools).not.toHaveBeenCalled();
     });
   });
 

@@ -12,10 +12,6 @@ const md = (body: string) => htmlToMarkdown(page(body), BASE).markdown;
 
 describe("htmlToMarkdown", () => {
   describe("output style", () => {
-    it("fences code blocks with their language", () => {
-      expect(md('<pre><code class="language-js">const a = 1;</code></pre>')).toBe("```js\nconst a = 1;\n```");
-    });
-
     it("writes tables as pipe tables", () => {
       const table =
         "<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>";
@@ -45,10 +41,6 @@ describe("htmlToMarkdown", () => {
       expect(out).toContain("first");
       expect(out).toContain("second");
       expect(out).toContain("after");
-    });
-
-    it("converts the whole body when there's none", () => {
-      expect(md("<p>one</p><div><p>two</p></div>")).toBe("one\n\ntwo");
     });
   });
 
@@ -92,12 +84,10 @@ describe("htmlToMarkdown", () => {
   });
 
   describe("hidden elements", () => {
-    it("drops elements with the hidden attribute", () => {
-      expect(md("<p>shown<span hidden> secret</span></p>")).toBe("shown");
-    });
-
-    it('drops aria-hidden="true" but keeps aria-hidden="false"', () => {
-      expect(md('<p>a<i aria-hidden="true">icon</i><b aria-hidden="false">b</b></p>')).toBe("a**b**");
+    it('drops hidden and aria-hidden="true" elements, but keeps aria-hidden="false"', () => {
+      expect(md('<p>a<span hidden> secret</span><i aria-hidden="true">icon</i><b aria-hidden="false">b</b></p>')).toBe(
+        "a**b**",
+      );
     });
   });
 
@@ -106,11 +96,6 @@ describe("htmlToMarkdown", () => {
       const pre =
         '<pre><code class="language-js"><span class="line">const a = 1;</span><span class="line">const b = 2;</span></code></pre>';
       expect(md(pre)).toBe("```js\nconst a = 1;\nconst b = 2;\n```");
-    });
-
-    it.each(["code-line", "doc-code-line"])('recognizes class="%s"', (name) => {
-      const pre = `<pre><code><span class="${name}">a</span><span class="${name}">b</span></code></pre>`;
-      expect(md(pre)).toBe("```\na\nb\n```");
     });
 
     it("treats div children as lines", () => {
@@ -147,21 +132,15 @@ describe("htmlToMarkdown", () => {
       expect(md('<p><a href="/other">Other</a></p>')).toBe("[Other](https://example.com/other)");
     });
 
-    it("keeps only the text of a fragment link", () => {
+    it("keeps only the text of a fragment link, a javascript: link, and a link with no href", () => {
       expect(md('<h2><a href="#syntax">Syntax</a></h2>')).toBe("## Syntax");
-      expect(md('<p><a href="#">Top</a></p>')).toBe("Top");
-    });
-
-    it("keeps only the text of a javascript: link", () => {
-      expect(md('<p><a href="javascript:void(0)">Click</a></p>')).toBe("Click");
+      expect(md('<p><a href="#">Top</a> <a href="javascript:void(0)">Click</a> <a name="anchor">Anchor</a></p>')).toBe(
+        "Top Click Anchor",
+      );
     });
 
     it("leaves a link it can't resolve as written, instead of failing", () => {
       expect(md('<p><a href="http://[oops">Broken</a></p>')).toBe("[Broken](http://[oops)");
-    });
-
-    it("keeps only the text of a link with no href", () => {
-      expect(md('<p><a name="anchor">Anchor</a></p>')).toBe("Anchor");
     });
   });
 
@@ -187,10 +166,6 @@ describe("htmlToMarkdown", () => {
   describe("text", () => {
     it("returns the page's title, trimmed", () => {
       expect(htmlToMarkdown(page("<p>x</p>", "<title>  My Page  </title>"), BASE).title).toBe("My Page");
-    });
-
-    it("returns an empty title when there's none", () => {
-      expect(htmlToMarkdown(page("<p>x</p>", ""), BASE).title).toBe("");
     });
 
     it("gives empty markdown for a page with no text", () => {

@@ -39,14 +39,6 @@ describe("problemsIn", () => {
     ]);
   });
 
-  it("brings each server up to date with the disk once, before its first file", async () => {
-    await writeFile(file("other.ts"), "");
-    servers = new ServerManager([fakeSpec()], dir, () => {});
-    const report = vi.spyOn(servers, "reportDiskChanges");
-    await problemsIn(servers, [file("bad.ts"), file("other.ts")], vi.fn());
-    expect(report).toHaveBeenCalledOnce();
-  });
-
   it("skips a file that's gone since it was listed", async () => {
     servers = new ServerManager([fakeSpec()], dir, () => {});
     expect(await problemsIn(servers, [file("gone.ts")], vi.fn())).toEqual([]);

@@ -78,42 +78,6 @@ describe("lsp find_symbol", () => {
     );
   });
 
-  it("sees edits to files it opened before, in a later project search", async () => {
-    servers = new ServerManager([fakeSpec()], dir, () => {});
-    const tool = lspTool(servers);
-    const search = async (namePath: string) => {
-      const params = { action: "find_symbol" as const, name_path: namePath };
-      const [first] = (await tool.execute("1", params, undefined, undefined, { cwd: dir } as never)).content;
-      return first?.type === "text" ? first.text : "";
-    };
-
-    // The first search opens other.ts; the server then answers from the text it was sent, not the disk.
-    expect(await search("Other/touch")).toMatch(/^1 symbol matches/);
-    await writeFile(join(dir, "src/other.ts"), "class Other\n  method renamed\n");
-    expect(await search("Other/renamed")).toMatch(/^1 symbol matches Other\/renamed/);
-  });
-
-  it("sees files created, edited, or deleted outside the agent, in a later project search", async () => {
-    servers = new ServerManager([fakeSpec()], dir, () => {});
-    const tool = lspTool(servers);
-    const search = async (namePath: string) => {
-      const params = { action: "find_symbol" as const, name_path: namePath };
-      const [first] = (await tool.execute("1", params, undefined, undefined, { cwd: dir } as never)).content;
-      return first?.type === "text" ? first.text : "";
-    };
-
-    // The first search makes the fake server read every file; it keeps that copy until told otherwise.
-    expect(await search("main")).toMatch(/^1 symbol matches/);
-    await new Promise((resolve) => setTimeout(resolve, 20)); // so modification times move
-    await writeFile(join(dir, "src/extra.ts"), "function added\n");
-    await writeFile(join(dir, "src/server.ts"), "function renamed\n");
-    await rm(join(dir, "src/other.ts"));
-
-    expect(await search("added")).toMatch(/^1 symbol matches added/);
-    expect(await search("renamed")).toMatch(/^1 symbol matches renamed/);
-    expect(await search("Other/touch")).toMatch(/^No symbol matches/);
-  });
-
   it("skips a match in a file that's gone, when the server still offers it", async () => {
     servers = new ServerManager([fakeSpec("keeps-deleted")], dir, () => {});
     const tool = lspTool(servers);

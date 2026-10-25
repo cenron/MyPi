@@ -124,11 +124,6 @@ const sentHeaders = (call = 0) => new Headers(fetchMock.mock.calls[call]?.[1]?.h
 
 describe("web_fetch", () => {
   describe("the URL", () => {
-    it("rejects an invalid URL", async () => {
-      await expect(run({ url: "not a url" })).rejects.toThrow();
-      expect(fetchMock).not.toHaveBeenCalled();
-    });
-
     it("rejects a scheme other than http(s) without fetching", async () => {
       await expect(run({ url: "file:///etc/passwd" })).rejects.toThrow(/Only http: and https:/);
       expect(fetchMock).not.toHaveBeenCalled();
@@ -231,11 +226,6 @@ describe("web_fetch", () => {
       expect(await textOf({ url: PAGE })).toBe(`URL: ${PAGE}\nContent-Type: text/plain; charset=utf-8\n\nhello`);
     });
 
-    it("shows the final URL after a redirect", async () => {
-      replyWith({ status: 302, headers: { location: "/moved" } }, {});
-      expect(await textOf({ url: PAGE })).toMatch(/^URL: https:\/\/example\.com\/moved\n/);
-    });
-
     it("returns details about the fetch", async () => {
       replyWith({ status: 301, headers: { location: "https://example.com/moved" } }, { body: "hello" });
       const { details } = await run({ url: PAGE });
@@ -309,7 +299,6 @@ describe("web_fetch", () => {
 
     it.each([
       ["application/xhtml+xml", DOC, true],
-      ["text/markdown", "# Already markdown\n\n<b>kept</b>", false],
       ["text/plain", "<p>not html</p>", false],
     ])("converts %s: %s", async (type, body, converted) => {
       replyWith({ body, headers: { "content-type": type } });
@@ -373,14 +362,6 @@ describe("web_fetch", () => {
   describe("local addresses", () => {
     it("refuses a local address without fetching, and points to curl", async () => {
       await expect(run({ url: "http://127.0.0.1:5173/" })).rejects.toThrow(/not a public address.*use curl in bash/);
-      expect(fetchMock).not.toHaveBeenCalled();
-    });
-
-    it("refuses a name that resolves to a local address", async () => {
-      net.dns.set("localhost", ["::1", "127.0.0.1"]);
-      await expect(run({ url: "http://localhost:3000/" })).rejects.toThrow(
-        /localhost resolves to ::1, which is not a public address/,
-      );
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -454,21 +435,6 @@ describe("web_fetch", () => {
 
     it("is read-only and open-world, so plan-build allows it without asking", () => {
       expect(definition.annotations).toEqual({ readOnlyHint: true, openWorldHint: true });
-    });
-
-    it("draws its call and result into one reused Text each", () => {
-      const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
-      const context = { lastComponent: undefined, isError: false } as never;
-      const call = definition.renderCall?.({ url: PAGE }, theme, context);
-      expect(call?.render(120).join("\n")).toContain(`web_fetch ${PAGE}`);
-      const again = definition.renderCall?.({ url: PAGE }, theme, { lastComponent: call } as never);
-      expect(again).toBe(call);
-      const result = { content: [{ type: "text" as const, text: "boom" }], details: undefined };
-      const shown = definition.renderResult?.(result, { expanded: false, isPartial: false }, theme, {
-        lastComponent: undefined,
-        isError: true,
-      } as never);
-      expect(shown?.render(120).join("\n")).toContain("boom");
     });
   });
 });

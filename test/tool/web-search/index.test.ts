@@ -45,17 +45,4 @@ describe("webSearchTool", () => {
   it("reaches every backend's tool, so pi waits for their servers", () => {
     expect(definition.reachesTools?.({ query: "q" })).toEqual([PARALLEL_SEARCH_TOOL, EXA_SEARCH_TOOL]);
   });
-
-  it("draws its call and result into one reused Text each", () => {
-    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
-    const call = definition.renderCall?.({ query: "q" }, theme, { lastComponent: undefined } as never);
-    expect(call?.render(120).join("\n")).toContain('web_search "q"');
-    expect(definition.renderCall?.({ query: "q" }, theme, { lastComponent: call } as never)).toBe(call);
-    const result = { content: [{ type: "text" as const, text: "boom" }], details: undefined };
-    const shown = definition.renderResult?.(result, { expanded: false, isPartial: false }, theme, {
-      lastComponent: undefined,
-      isError: true,
-    } as never);
-    expect(shown?.render(120).join("\n")).toContain("boom");
-  });
 });

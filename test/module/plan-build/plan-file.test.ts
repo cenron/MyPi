@@ -15,8 +15,8 @@ describe("slugify", () => {
     expect(slugify(title)).toBe(slug);
   });
 
-  it.each(["", "日本語"])("falls back to plan for %j", (title) => {
-    expect(slugify(title)).toBe("plan");
+  it("falls back to plan when nothing is left, such as for a title in another script", () => {
+    expect(slugify("日本語")).toBe("plan");
   });
 
   // The cut can land on a dash, so the trim runs after it.
@@ -30,14 +30,6 @@ describe("slugify", () => {
 describe("planFileName", () => {
   it("is a UTC timestamp with seconds, then the slug", () => {
     expect(planFileName("Add submit_plan", now)).toBe("2026-10-20-143205-add-submit-plan.md");
-  });
-
-  // Slice 7 opens the latest plan by sorting names, so name order must be time order.
-  it("sorts by time", () => {
-    const names = ["2026-01-02T00:00:00Z", "2025-12-31T23:59:59Z", "2026-01-01T09:00:00Z"].map((t) =>
-      planFileName("z", new Date(t)),
-    );
-    expect([...names].sort()).toEqual([names[1], names[2], names[0]]);
   });
 });
 

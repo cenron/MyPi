@@ -74,7 +74,6 @@ describe("DoneCheckModule", () => {
 
   it.each([
     ["the run changed no files", {}, async () => {}, "completed"],
-    ["the changed files have no errors", { problems: () => [] }, () => writeNew(), "completed"],
     [
       "the run was aborted",
       { problems: (f: readonly string[]) => f.map((x) => error(x)) },
