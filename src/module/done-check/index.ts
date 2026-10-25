@@ -3,11 +3,14 @@ import type {
   AgentBeforeSettleEventResult,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { errorMessage } from "#core/util/errors";
 import { fileChanges, fileTimes } from "#core/util/walk";
 import { FooterColor } from "#ui/footer";
 import { BaseModule } from "../base";
-import { errorsReport, filesToCheck } from "./report";
+import { doneCheckCmd } from "./commands/done-check";
+import { approve, COMMANDS_FILE, type CommandFailure, isApproved, readCommands, runCommand } from "./project-commands";
+import { doneCheckReport, filesToCheck } from "./report";
 
 /** Most times one run is sent back; after that the agent may stop with whatever is left. */
 const MAX_ROUNDS = 3;
@@ -15,23 +18,33 @@ const MAX_ROUNDS = 3;
 /** The report's entry type in the session. */
 const REPORT_TYPE = "mypi-done-check";
 
+const YES = "Yes";
+
 /** A Build run's file times at its start, how many times it was sent back, and the last report it got. */
 type Run = { before: Map<string, number>; rounds: number; lastReport?: string };
 
 /**
- * When the agent is about to stop in Build, checks the files the run changed and, when they have errors, sends it
- * back to fix them or say why they're fine. The errors come from whoever answers `diagnostics` on the bus (the LSP
- * module); the mode from whoever answers `mode` (plan-build).
+ * When the agent is about to stop in Build, checks what the run changed and, when something is broken, sends it back
+ * to fix it or say why it's fine: the errors in the changed files, from whoever answers `diagnostics` on the bus (the
+ * LSP module), and the project's own check commands from `.pi/done-check.json`, once the user approved them. The mode
+ * comes from whoever answers `mode` (plan-build).
  */
 export class DoneCheckModule extends BaseModule {
   /** The current run; undefined before the first. */
   private run: Run | undefined;
+  /** Command lists the user said No to this session, so they're not asked again until the next one. */
+  private readonly declined = new Set<string>();
+  /** Warnings already shown this session, each shown once. */
+  private readonly warned = new Set<string>();
+  // Built once: `info` lists its info.
+  private readonly doneCheckCommand = doneCheckCmd();
 
   get info(): ModuleInfo {
     return {
       name: "done-check",
-      description: "When the agent is about to stop in Build, checks the files it changed and sends it back on errors.",
-      commands: [],
+      description:
+        "When the agent is about to stop in Build, checks what it changed and sends it back when it's broken.",
+      commands: [this.doneCheckCommand.info],
       loadType: ModuleLoadMode.ON_LOAD,
     };
   }
@@ -40,6 +53,10 @@ export class DoneCheckModule extends BaseModule {
     // before_agent_start fires once per run; the check's own continuation stays in the same run, keeping its count.
     this.session.pi.on("before_agent_start", (_ev, ctx) => this.onRunStart(ctx));
     this.session.pi.on("agent_before_settle", (ev, ctx) => this.onBeforeSettle(ev, ctx));
+  }
+
+  commands(): Command[] {
+    return [this.doneCheckCommand];
   }
 
   /** Records the files' times when a run starts, to find what it changed. */
@@ -74,21 +91,78 @@ export class DoneCheckModule extends BaseModule {
     };
   }
 
-  /** The report for `files`, or undefined when they have no errors. A source that fails is told to the user. */
+  /** The report for `files` and the project's commands, or undefined when nothing is broken. */
   private async check(files: string[], skipped: number, ctx: ExtensionContext): Promise<string | undefined> {
     this.setFooter({ text: "checking…", color: FooterColor.MUTED });
     try {
-      const answers = await this.ask("diagnostics", { files, signal: ctx.signal });
-      for (const answer of answers) {
-        if (answer.kind === "failed")
-          this.session.logWarning(`Done check: ${answer.from} couldn't check: ${answer.error}`);
-      }
-
-      const problems = answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
-      return errorsReport(problems, ctx.cwd, skipped);
+      const problems = await this.problemsIn(files, ctx);
+      const failures = await this.runCommands(ctx);
+      return doneCheckReport({ problems, failures, skipped }, ctx.cwd);
     } finally {
       this.setFooter(undefined);
     }
+  }
+
+  /** Every source's problems in `files`. A source that fails is told to the user, who can fix it; the agent can't. */
+  private async problemsIn(files: string[], ctx: ExtensionContext) {
+    const answers = await this.ask("diagnostics", { files, signal: ctx.signal });
+    for (const answer of answers) {
+      if (answer.kind === "failed")
+        this.session.logWarning(`Done check: ${answer.from} couldn't check: ${answer.error}`);
+    }
+    return answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
+  }
+
+  /** Runs the project's approved commands one after another, in its folder; the ones that failed. */
+  private async runCommands(ctx: ExtensionContext): Promise<CommandFailure[]> {
+    const failures: CommandFailure[] = [];
+    for (const command of await this.approvedCommands(ctx)) {
+      const failure = await runCommand(command, ctx.cwd, ctx.signal);
+      if (failure) failures.push(failure);
+    }
+    return failures;
+  }
+
+  /**
+   * The project's commands, once the user approved exactly this list on this machine: asked the first time it's seen
+   * and whenever it changes. A No holds for the session; without a UI, nothing runs and the user is told once. A file
+   * that isn't a list of commands is told once too.
+   */
+  private async approvedCommands(ctx: ExtensionContext): Promise<string[]> {
+    let commands: string[] | undefined;
+    try {
+      commands = await readCommands(ctx.cwd);
+    } catch (error) {
+      this.warnOnce(`Done check: ${errorMessage(error)}`);
+      return [];
+    }
+
+    if (commands === undefined || commands.length === 0) return [];
+    if (await isApproved(ctx.cwd, commands)) return commands;
+    if (this.declined.has(commands.join("\n"))) return [];
+    if (!ctx.hasUI) {
+      this.warnOnce(
+        `Done check: the commands in ${COMMANDS_FILE} aren't approved, so they don't run. Approve them in pi.`,
+      );
+      return [];
+    }
+
+    const question = [`Done check: run these after each Build run in ${ctx.cwd}?`, ...commands.map((c) => `  ${c}`)];
+    const choice = await ctx.ui.select(question.join("\n"), [YES, "No"], { signal: ctx.signal });
+    if (choice !== YES) {
+      this.declined.add(commands.join("\n"));
+      return [];
+    }
+
+    await approve(ctx.cwd, commands);
+    return commands;
+  }
+
+  private warnOnce(message: string) {
+    if (this.warned.has(message)) return;
+
+    this.warned.add(message);
+    this.session.logWarning(message);
   }
 
   /** True unless a module answers `mode` with Plan; with no plan-build, every run counts as Build. */

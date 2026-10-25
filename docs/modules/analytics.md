@@ -77,6 +77,10 @@ Two lessons from the [inspiration](../inspiration/README.md) projects:
   with the tool and with its built-ins, counts calls and output size, checks the edits with `git diff`, and reports
   where the tool helped and where it didn't. Use the same kind of prompt for each new MyPi tool or module until the
   benchmarks below exist.
+- **Done-check catches** (moved from [done-check](done-check.md) slice 3, 2026-10-24): how often a Build run is sent
+  back, for LSP errors or failed commands, and whether the next round fixed them or the agent explained them away,
+  per model. The done check publishes a notice on the [event bus](done-check.md#the-event-bus) for each report;
+  analytics listens, so neither imports the other.
 - **Memory saves.** Count, per model, runs that changed files (a successful `write`/`edit` outside `.pi/`) and how
   many of those also wrote a memory, plus what a session's prompts said (a stated preference or correction) when no
   memory followed. A temporary end-of-run nudge tested on 2026-10-23 got a model that saved nothing on its own to save

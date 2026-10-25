@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -140,5 +140,76 @@ describe("DoneCheckModule", () => {
     await runTurn(() => writeNew());
     expect(footerDuring).toEqual(["mypi-done-check", "<muted>checking…"]);
     expect(setStatus).toHaveBeenLastCalledWith("mypi-done-check", undefined);
+  });
+});
+
+describe("the project's commands", () => {
+  let agentDir: string;
+  beforeEach(async () => {
+    agentDir = await mkdtemp(join(tmpdir(), "mypi-done-agent-"));
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+  });
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await rm(agentDir, { recursive: true, force: true });
+  });
+
+  const listCommands = async (...commands: string[]) => {
+    await mkdir(join(dir, ".pi"), { recursive: true });
+    await writeFile(join(dir, ".pi/done-check.json"), JSON.stringify({ commands }));
+  };
+  const FAILING = "echo boom; exit 1";
+
+  it("asks before running a new list, then runs it unasked and sends its failures back", async () => {
+    await listCommands(FAILING);
+    const { runTurn, select } = start();
+    select.mockResolvedValueOnce("Yes");
+
+    expect(await runTurn(() => writeNew())).toMatchObject({ continue: true });
+    expect(select.mock.calls[0]?.[0]).toBe(`Done check: run these after each Build run in ${dir}?\n  ${FAILING}`);
+    const report = await runTurn(() => writeNew("other.ts"));
+    expect(report).toMatchObject({
+      entries: [{ content: expect.stringContaining(`\`${FAILING}\` failed (exit 1):\n    boom`) }],
+    });
+    expect(select).toHaveBeenCalledOnce();
+  });
+
+  it("asks again when the list changes", async () => {
+    await listCommands("true");
+    const { runTurn, select } = start();
+    select.mockResolvedValue("Yes");
+    await runTurn(() => writeNew());
+
+    await listCommands("true", FAILING);
+    expect(await runTurn(() => writeNew("other.ts"))).toMatchObject({ continue: true });
+    expect(select).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs nothing after No, and doesn't ask again this session", async () => {
+    await listCommands(FAILING);
+    const { runTurn, select } = start();
+    select.mockResolvedValue("No");
+
+    expect(await runTurn(() => writeNew())).toBeUndefined();
+    expect(await runTurn(() => writeNew("other.ts"))).toBeUndefined();
+    expect(select).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["the list isn't approved and there's no UI to ask", () => listCommands(FAILING), false, "aren't approved"],
+    ["the file isn't a list of commands", () => writeFile(join(dir, ".pi/done-check.json"), "{}"), true, "must hold"],
+  ])("runs nothing, and warns once, when %s", async (_case, setUp, hasUI, warning) => {
+    await mkdir(join(dir, ".pi"), { recursive: true });
+    await setUp();
+    const { emit, notify, session } = start();
+    const ctx = { ...session.ctx, hasUI };
+    for (const name of ["a.ts", "b.ts"]) {
+      await emit("before_agent_start", { type: "before_agent_start" }, ctx);
+      await writeNew(name);
+      expect(
+        await emit("agent_before_settle", { type: "agent_before_settle", outcome: "completed" }, ctx),
+      ).toBeUndefined();
+    }
+    expect(notify.mock.calls).toEqual([[expect.stringContaining(warning), "warning"]]);
   });
 });

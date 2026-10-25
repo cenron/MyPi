@@ -1,6 +1,6 @@
 # Done check
 
-**Status:** building (slice 1 done 2026-10-24)
+**Status:** done 2026-10-24 (slices 1 and 2). Counting how often it catches something moved to [analytics](analytics.md#measuring-what-mypi-adds).
 
 ## Goal
 
@@ -29,8 +29,21 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
   2,768-file tree (measured for lsp, 2026-10-24).
 - **What it checks:** errors (not warnings or hints) in the changed files, at most 50 of them (`MAX_CHECKED_FILES`, so
   a big `git checkout` doesn't open hundreds of files in a server; the report counts the rest), from everything that
-  answers `diagnostics` on the [event bus](#the-event-bus). Today that's the [LSP](lsp.md) module; slice 2 adds the
-  project's own commands.
+  answers `diagnostics` on the [event bus](#the-event-bus). Today that's the [LSP](lsp.md) module.
+- **The project's own commands** (slice 2), such as the typecheck and the tests, listed in `.pi/done-check.json` as
+  `{ "commands": ["npm run typecheck", "npm test"] }`. They run one after another in the project's folder, through
+  pi's own shell (`createLocalBashOperations().exec`, as `bash` and background jobs do), at most 2 minutes each
+  (`COMMAND_TIMEOUT_SECONDS`); a time-out counts as a failure. One that fails adds its exit code and the end of its
+  output (2,000 characters, escape codes stripped) to the same report as the errors. Esc stops them.
+- **Approved once per list, per machine:** before running a list it hasn't seen, the check asks ("Done check: run
+  these after each Build run in <folder>?") and lists them. Yes is remembered in
+  `~/.pi/agent/done-check/approved.json`, by project folder, as the exact list; a list that changes in any way asks
+  again, so a `git pull`, a cloned repo, or the agent editing the file can't run anything unseen. No holds for the
+  session. Without a UI, nothing runs and the user is warned once. A file that isn't a list of commands is a warning
+  too, once per session.
+- **`.pi/done-check.json` is the project's file:** MyPi doesn't touch git for it (unlike `.pi/plans/` and
+  `.pi/memories/`, which `keepOutOfGit` hides), so it can be committed and shared; each machine still approves it.
+- **`/done-check`** shows the list and whether it's approved on this machine.
 - **A source that can't check** is told to the user, not the agent, which couldn't fix it: a source that fails is a
   warning ("Done check: lsp couldn't check: …"), and the LSP module warns once per session about a server that isn't
   installed or failed to start ("LSP: the done check skips .ts files: …"). A server turned off in `/lsp` is skipped
@@ -43,9 +56,12 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
   most 20 errors are listed ("… and N more"); the next round shows the rest.
 
   ```
-  Done check: 2 errors in files changed during this run.
+  Done check: 2 errors in files changed during this run, and 1 check command failed.
   src/store.ts:12:7  Type 'string' is not assignable to type 'number'. (ts 2322)
   src/main.ts:4:1  Cannot find name 'makeStore'. (ts 2304)
+  `npm test` failed (exit 1):
+      FAIL src/store.test.ts
+        expected 2, got "2"
   Fix these, or say why they're fine.
   ```
 
@@ -68,6 +84,9 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 | Changed files | `fileTimes` and `fileChanges`, moved from `lsp/util/walk.ts` to `src/core/util/walk.ts` | Two parts need them now, so they went to core, as [principles](../principles.md) say. `fileTimes` takes every file, or the extensions lsp asks for; core has its own change kinds (`FileChangeKind`), which lsp's client maps to the protocol's. |
 | Mode | `ask("mode")` on the [event bus](#the-event-bus) | plan-build answers with `"plan"` or `"build"`. |
 | Diagnostics | `ask("diagnostics", { files, signal })` on the event bus | The LSP module answers in `init()` (`problems.ts`), for each file a server serves, through the same `fileProblems` as its `diagnostics` action; each server is brought up to date with the disk once first. Files no server serves are skipped; a server not yet running starts then, as on any first use. See [lsp](lsp.md#design-in-pi). |
+| Commands | `project-commands.ts`: `readCommands`, `isApproved`, `approve`, `runCommand` | The list is validated at the boundary (`{ "commands": string[] }`, else an error saying so); approvals in pi's agent dir (`getAgentDir()`), never the project. |
+| Approval | `ctx.ui.select` with Yes and No, in `approvedCommands` (`index.ts`) | Like the tool guard's dialog. |
+| `/done-check` | `commands/done-check.ts` | Shows the list and its approval. |
 | Footer | `BaseModule.setFooter` | `checking…` while it runs. |
 
 ### The event bus
@@ -143,7 +162,7 @@ with another extension").
    them and the next check was quiet; told to keep them, pi said why and the repeat stopped the loop; an error already
    in an edited file was reported and pi called it pre-existing; a file written from outside during a Build run was
    caught, and during a Plan run wasn't; the footer's job count still shows over the bus.
-2. The project's own commands, such as the typecheck and the tests:
+2. **Done 2026-10-24.** The project's own commands, such as the typecheck and the tests:
    - Listed in `.pi/done-check.json` (`{ "commands": ["npm run typecheck"] }`), written by the user or by the agent
      when asked.
    - **Approved once:** the first time a project's list is seen, and whenever it changes, the done check asks before
@@ -152,7 +171,15 @@ with another extension").
      `node_modules/.bin` question.
    - Each command runs with a time limit; a failure sends the end of its output, cut to fit.
    - A `/done-check` command shows the list and whether it's approved.
-3. Later: [analytics](analytics.md) counts how often the check caught something, to show whether it pays.
+
+   Tried live in pi with a `node --test` list: `/done-check` said not approved; the first check asked, Yes ran the
+   test and sent back its failure with the end of the output; a changed list asked again; with a fixed function the
+   passing test kept the check quiet; a function broken from outside during a run came back as a failed assertion;
+   after No, nothing ran and the next run didn't ask. With the LSP module turned off in `/modules`, the report held
+   only the failed command, a TypeScript error went unchecked, and no language server started.
+3. Moved to [analytics](analytics.md#measuring-what-mypi-adds) (2026-10-24): counting how often the check caught
+   something, to show whether it pays. The done check would publish a notice on the bus for each report, and
+   analytics would listen; the channel comes with analytics, its first listener.
 
 ## Decided 2026-10-24
 
@@ -168,6 +195,10 @@ with another extension").
   `Session` per need (the user's call, so `Session` stops growing). Notices and asks; the existing services stay.
 - The report says "files changed during this run", not "files you changed": a file changed by something else during
   the run (an editor, a build) is checked too, and in the live test pi rightly said it hadn't touched it.
+- Slice 2 (the user took all five suggestions): approvals in `~/.pi/agent/done-check/approved.json` by project
+  folder; one report for errors and failed commands; 2 minutes per command, fixed; without a UI, nothing runs and the
+  user is warned once; commands run one at a time through pi's own shell. `.pi/done-check.json` is left to git like
+  any project file.
 - Built with slice 1 (my calls, easy to change): a source that can't check is a warning to the user, not a line in
   the agent's report, since the agent can't fix a crashed or missing server; at most 50 files checked and 20 errors
   listed per round; the mode is checked only at the end of the run.
