@@ -6,7 +6,7 @@ here; when the order changes, say why in the row.
 
 ## Next up
 
-Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23; folder-guard added after lsp 2026-10-24. Change it freely.
+Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree above subagents 2026-10-23; folder-guard added after lsp 2026-10-24; folder-guard slice 4 and identity added before worktree 2026-10-25. Change it freely.
 
 | # | What | Kind | Why at this point | Needs first |
 |---|---|---|---|---|
@@ -14,13 +14,15 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 | 2 | [lsp](modules/lsp.md) | module | **Done 2026-10-24** (servers and `/lsp` menu; `lsp`: outline, find_symbol, references, implementations, definition, diagnostics; `lsp_edit`: rename). Symbol edits wait for a need; diagnostics after a turn come with the done check. | Microsoft's `vscode-languageserver-protocol` (passed the dependency check 2026-10-23) |
 | 3 | [folder-guard](rules/folder-guard.md) | core rule | **Done 2026-10-24** (tools with a `path`, `bash`, and lsp roots). Added 2026-10-24 after a live test where pi ran `find` over the home folder unasked. Small, and every session is safer with it. | Nothing; reuses `ToolGuard` and Plan's `tokenize` |
 | 4 | [done-check](modules/done-check.md) | module | **Done 2026-10-24** (the event bus; after each Build run, LSP errors in the changed files and the project's approved commands, sent back to the agent). Counting its catches moved to analytics. | 2 (lsp); slice 1 builds MyPi's event bus over `pi.events`, which LSP and plan-build answer on |
-| 5 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
-| 6 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 5 (worktree) for parallel writers |
-| 7 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (6) |
-| 8 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
-| 9 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
-| 10 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
-| 11 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
+| 5 | [folder-guard slice 4](rules/folder-guard.md#slices) | core rule | **Planned 2026-10-25.** "Allow for this session" on a folder allows everything under it, as every other harness does. A live test working on MyPi from another folder asked again for each file. Small, and the worktree work reaches outside its folder all the time. | Nothing; a small seam on `ToolGuard` |
+| 6 | [identity](core/identity.md) | core | **Done 2026-10-25.** pi's prompt says only "inside pi", nothing about MyPi or the model; a few prompt lines fix it and give it the paths to its own roadmap and docs, so "improve yourself, what's next?" works from any folder without searching. One small slice. | 5 (one "Allow for this session" covers MyPi's folder); `PromptManager` |
+| 7 | [worktree](tools/worktree.md) | tool | Optional for me, but sub-agent writers need it to work in parallel: each gets its own worktree (moved above subagents 2026-10-23). | Slice 1: prove which route changes the cwd in pi |
+| 8 | [subagents](modules/subagents.md) | module | The main window orchestrates: specialists (architect, developer, reviewer, and ones I create) run in the background with their own model and effort, and their answers wake it. A fleet view. Internal (pi's SDK) first, milestone 1 before the rest; external harnesses in herdr panes later. Before analytics so analytics tracks runs per agent, model and effort from the start. | Slice 1, a spike that proves models and logins work in process; 7 (worktree) for parallel writers |
+| 9 | [analytics](modules/analytics.md) | module | Evidence before any nudges or benchmarks: whether memory, LSP, sub-agents and ripwire actually get used, and what to build after. | `node:sqlite` (built in); sub-agent runs (8) |
+| 10 | [todo](tools/todo.md) | tool | Must-have built-in: a checklist the user can follow. | Nothing |
+| 11 | [apply_patch](tools/apply-patch.md) | tool | Must-have built-in: multi-file edits for GPT models, with edit receipts. | Nothing |
+| 12 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
+| 13 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
 
 ## Deferred
 
@@ -34,6 +36,8 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 
 - Core: module loading (`/modules`), `PromptManager`, `ToolGuard` with "Allow for this session" and the writable list
   (`setWritable`), the shared footer and editor, `JobManager`, `keepOutOfGit`. See [architecture](architecture.md).
+- [identity](core/identity.md): every run tells the agent it's MyPi on pi, its model and running modules, and the
+  paths to its own map, roadmap, and principles, so "improve yourself" works from any folder without searching.
 - [plan-build](modules/plan-build.md), with Plan's shell check.
 - [memory](modules/memory.md): project and global memories in the prompt, `/onboard`, `/memory-check`. Whether the
   agent saves on its own depends on the model; [analytics](modules/analytics.md) measures it before any nudge.

@@ -7,6 +7,7 @@ import type {
   ToolCallEvent,
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
+import { identityPrompt, MYPI_ROOT } from "#core/identity";
 import { Session } from "#core/session";
 import { registerMcpServers } from "#mcp/index";
 import { loadModules } from "#module/index";
@@ -42,7 +43,9 @@ export class MyPi {
     registerMcpServers(this.pi, this.session);
   }
 
-  onBeforeAgentStart(ev: BeforeAgentStartEvent, _ctx: ExtensionContext) {
+  onBeforeAgentStart(ev: BeforeAgentStartEvent, ctx: ExtensionContext) {
+    const running = this.session.moduleManager.moduleInfos.filter((info) => info.isLoaded).map((info) => info.name);
+    this.session.promptManager.set("identity", identityPrompt(ctx.model, running, MYPI_ROOT));
     this.session.promptManager.apply(ev.systemPromptOptions.sections);
     updatePromptPaths(this.prompt, ev.systemPromptOptions);
   }

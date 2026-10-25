@@ -51,6 +51,7 @@ MyPi/
 | Module code | `src/module/<name>/index.ts`, a class extending `BaseModule` (its state type is its own) | Add it to the list in `src/module/index.ts`; tests in `test/module/<name>/` |
 | A module's tool | `src/module/<name>/tools/<tool>.ts`, returning a `ToolDefinition` | Return it from the module's `tools()`, wrapped in `defineTool`; tests in `test/module/<name>/tools/` |
 | A module's command | `src/module/<name>/commands/<command>/index.ts`, returning a `Command`, with files only it uses beside it | Return it from the module's `commands()`; tests in `test/module/<name>/commands/<command>/` |
+| A core feature (always on, not a module: MyPi's own behavior, such as identity) | `src/core/<name>.ts`, wired from `MyPi` (`src/mypi.ts`) | Tests in `test/core/`; a doc in `docs/core/` |
 | A built-in tool rule (always on, not a module's) | `src/rule/<name>.ts`, a class extending `BaseRule` (`info`, `check`) | Add it to `createRules` in `src/rule/index.ts`; tests in `test/rule/`; a doc in `docs/rules/` |
 | A shared service or helper | `src/core/` (helpers in `src/core/util/`) | Only once more than one place needs it; tests in `test/core/` |
 | A skill | `resources/skills/<name>/SKILL.md` | |

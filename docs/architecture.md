@@ -78,7 +78,8 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`Notifier`** sends those messages to `ctx.ui.notify` and skips them when `ctx.hasUI` is false (print and JSON
   modes).
 - **`PromptManager`** (`prompt-manager.ts`) holds one system prompt section per module, keyed by `info.name`, and is
-  `session.promptManager`. Modules set theirs with `BaseModule.setPrompt(text)`; `undefined` clears it. `apply(sections)`
+  `session.promptManager`. Modules set theirs with `BaseModule.setPrompt(text)`; `undefined` clears it. Core sets one
+  of its own, `identity` ([identity](core/identity.md)), from `MyPi` on every run. `apply(sections)`
   writes each as `mypi-<name>` into `event.systemPromptOptions.sections`, and `MyPi` calls it on every
   `before_agent_start`, user and custom runs alike. How pi uses the sections:
   - Each run's sections start empty (pi copies its base options per run), so they're written every run, not on change.

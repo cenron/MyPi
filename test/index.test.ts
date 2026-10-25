@@ -135,6 +135,19 @@ describe("mypi extension", () => {
     expect(Object.keys(event.systemPromptOptions.sections)).toContain("mypi-plan-build");
   });
 
+  // Identity is core: every run says who the agent is, with the model of that run.
+  it("writes the identity section on every run, with that run's model and the running modules", () => {
+    const { handlers } = loadExtension();
+    startSession(handlers);
+    const event = { type: "before_agent_start", messageType: "user", systemPromptOptions: promptOptions() };
+    const ctx = { ...fakeContext(), model: { provider: "openai", id: "gpt-6.1-sol" } };
+    handlers.get("before_agent_start")?.(event, ctx as unknown as ExtensionContext);
+
+    const identity = (event.systemPromptOptions.sections as Record<string, string>)["mypi-identity"];
+    expect(identity).toContain("You are MyPi");
+    expect(identity).toContain("Model: openai/gpt-6.1-sol. Modules running: plan-build, memory");
+  });
+
   // The folder rule is core: it guards every session, and allows what the prompt points the agent at.
   it("asks before a call reaches outside the folder, except where the last prompt pointed", async () => {
     const { handlers } = loadExtension();
