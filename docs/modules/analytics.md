@@ -113,6 +113,11 @@ Dated, with the window and model; newest last. Each says what was decided.
   finished its list). Decided: the duplicate check (row 14) next; live checks read the screen with colors and phrase
   prompts as a user would.
 
+- **2026-10-26, the duplicate check's first catch** (row 14, gpt-6-luna, high): in a live check phrased as a user
+  would, the model wrote its own `formatPrice` next to an existing one; the done check named both and the model
+  imported the existing one. The first time a done-check report changed what a model did. Measure from here: the
+  "rebuilt instead of reused" count in milestone 3 (with ripwire's skills on) against milestone 2's 4.
+
 ## What pi offers
 
 Checked against the installed pi 1.2.0 (2026-10-22):
