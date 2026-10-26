@@ -419,6 +419,9 @@ errors drawn as starts, other tools wrapped, and no registration.
 - Override pi's `bash`, rather than a separate tool.
 - The exit notice starts a turn when the agent is idle (OpenCode, Claude Code), rather than pi-unified-exec's opt-in.
 - No time limit on background jobs; jobs end with the pi session, with no recovery after a restart.
+- One notice path for every kind of job (2026-10-26, for subagents): `noticeOnEnd` and the notice moved to
+  `src/tool/jobs/notice.ts`; a kind can pass its own text (a subagent's carries its whole answer). Whether the
+  session has closed is `JobManager.closed`, set by `stopAll()`, not a flag in each tool.
 
 ## References
 

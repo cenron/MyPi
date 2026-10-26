@@ -1,7 +1,7 @@
 # Sub-agents
 
-**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–2 done
-2026-10-26: the spike, and agent definitions with the five builtins and the agent list)
+**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–3 done
+2026-10-26: the spike, agent definitions with the five builtins and the agent list, and the `subagent` tool)
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -136,12 +136,19 @@ delegating pays off (decision 7), and says how to create or change one ("load `a
 `tool_search`"). It goes through MyPi's `PromptManager`, which
 updates it when an agent is added or changed.
 
+**Wording the delegation (live, 2026-10-26).** With one abstract line ("delegate wide searches…") and a one-line tool
+description, gpt-6-luna searched pi's package itself, even though `explore`'s description says "use proactively".
+After the section and the tool description were worded like Claude Code's, it chose `explore` on its own for the
+same question and still answered a one-file question itself. What worked: a concrete trigger ("more than about
+three queries, or spans many files or another package"), "without being asked", what it saves ("only its answer
+comes back to yours"), and naming what to do yourself.
+
 ## Running an agent
 
 - **`subagent({ agent, task, model?, thinking?, background? })`**, `background` true by default. `model` and
   `thinking` override the definition for this one run. An unknown agent is an error that lists the agents.
 - **The child** is `createAgentSession({ cwd, modelRuntime, model, thinkingLevel, tools, resourceLoader, sessionManager })`
-  with one `ModelRuntime.create()` per pi session. That reads pi's own `auth.json` and `models.json`, so children use
+  with one `ModelRuntime.create()` per run. That reads pi's own `auth.json` and `models.json`, so children use
   the models and logins pi has (checked in pi 1.2.0). `SessionManager.create(cwd, dir, { parentSession })` makes
   each child an ordinary pi session file that points to its parent.
 - **Fresh context:** the child gets its agent prompt and the task, not my conversation, plus the project's
@@ -159,8 +166,10 @@ updates it when an agent is added or changed.
   `job_wait` tool in core, which would work for shell jobs too.
 - **Foreground** (`background: false`): the call waits, shows the child's progress under it, and returns the answer
   as its result.
-- **The result:** the child's final answer, its usage, the path of its session file (the full transcript), and the
-  files it changed (from its own tool results). A `developer` that changed nothing says so.
+- **The result:** the child's final answer, its usage (tokens and cost over the run), the path of its session file
+  (the full transcript), and the files it changed (from its own tool results). A `developer` that changed nothing
+  says so; a run stopped at the time limit says so. A background run's notice carries the whole result, not the
+  job's last lines; its steps go to the job's log. The job's label is the agent and the start of the task.
 - **No nesting:** children don't get `subagent` or `agent_manage`, and their prompt says they aren't the orchestrator.
 - **No questions mid-run** at first: the child puts open questions in its answer. Asking the parent is a later slice.
 - **Limits:** a 30-minute default timeout, a few background runs at once, and a cap on runs per prompt.

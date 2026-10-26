@@ -1,0 +1,160 @@
+import { join } from "node:path";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import {
+  createAgentSession,
+  DefaultResourceLoader,
+  type ExtensionContext,
+  getAgentDir,
+  ModelRuntime,
+  resolveCliModel,
+  SessionManager,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
+import type { AgentDefinition } from "./agents";
+
+/** How long one run may take before it's stopped. */
+export const RUN_TIMEOUT_MINUTES = 30;
+
+/** The tools a `read-only` agent gets when its file names none. */
+const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
+
+export type ThinkingLevel = NonNullable<ExtensionContext["thinkingLevel"]>;
+
+/** A run's model and thinking level, each undefined to inherit the parent's. */
+export type RunSettings = { model?: string; thinking?: ThinkingLevel };
+
+/** What a run used over all its model calls: tokens, and cost in dollars. */
+export type RunUsage = { tokens: number; cost: number };
+
+export type ChildResult = {
+  answer: string;
+  usage: RunUsage;
+  sessionFile: string | undefined;
+  changedFiles: string[];
+  timedOut: boolean;
+};
+
+/**
+ * Runs `task` in a new child session of `parent`: the agent's prompt and the task, not the conversation. Calls
+ * `onStep` as each tool call starts. Stops when `signal` aborts or after `RUN_TIMEOUT_MINUTES`.
+ */
+export async function runChild(
+  parent: ExtensionContext,
+  agent: AgentDefinition,
+  task: string,
+  settings: RunSettings,
+  signal: AbortSignal,
+  onStep: (step: string) => void,
+): Promise<ChildResult> {
+  if (!settings.model && !parent.model) {
+    throw new Error("No model is selected. Select one with /model, or pass `model`.");
+  }
+
+  const runtime = await ModelRuntime.create();
+  const { model, thinking } = childModel(parent, settings, runtime);
+  const manager = SessionManager.create(parent.cwd, join(getAgentDir(), "subagents", "sessions"), {
+    parentSession: parent.sessionManager.getSessionFile(),
+  });
+  const { session } = await createAgentSession({
+    cwd: parent.cwd,
+    agentDir: getAgentDir(),
+    modelRuntime: runtime,
+    model,
+    thinkingLevel: thinking,
+    tools: agent.tools ?? (agent.access === "read-only" ? READ_ONLY_TOOLS : undefined),
+    resourceLoader: await childResources(parent.cwd, agent),
+    sessionManager: manager,
+  });
+
+  // Reports each step, and records each file a write or edit changed once the call succeeds. The end event has no
+  // arguments, so the start keeps the path by call id.
+  const pending = new Map<string, string>();
+  const changedFiles = new Set<string>();
+  const unsubscribe = session.subscribe((event) => {
+    if (event.type === "tool_execution_start") {
+      onStep(`${event.toolName}: ${JSON.stringify(event.args)}`);
+      const path = changedPath(event.toolName, event.args);
+      if (path) pending.set(event.toolCallId, path);
+    }
+    if (event.type === "tool_execution_end" && !event.isError) {
+      const path = pending.get(event.toolCallId);
+      if (path) changedFiles.add(path);
+    }
+  });
+
+  let timedOut = false;
+  const abort = () => void session.abort();
+  const timeout = setTimeout(
+    () => {
+      timedOut = true;
+      abort();
+    },
+    RUN_TIMEOUT_MINUTES * 60 * 1000,
+  );
+  signal.addEventListener("abort", abort, { once: true });
+
+  try {
+    await session.prompt(task);
+    return {
+      answer: session.getLastAssistantText() ?? "The agent gave no answer.",
+      usage: runUsage(session.messages),
+      sessionFile: manager.getSessionFile(),
+      changedFiles: [...changedFiles],
+      timedOut,
+    };
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", abort);
+    unsubscribe();
+    await session.dispose();
+  }
+}
+
+/**
+ * The child's model and thinking level: the parent's unless `settings` names them. pi must be given the model: left
+ * to choose, it takes the first available one, which a subscription login may reject.
+ */
+function childModel(parent: ExtensionContext, settings: RunSettings, runtime: ModelRuntime) {
+  if (!settings.model) {
+    return { model: parent.model, thinking: settings.thinking ?? parent.thinkingLevel };
+  }
+
+  // `provider/id:level` names a thinking level too; an explicit `thinking` wins over it.
+  const resolved = resolveCliModel({ modelRuntime: runtime, cliModel: settings.model });
+  if (resolved.error || !resolved.model) {
+    throw new Error(`${resolved.error ?? `No model ${settings.model}`}. Choose a model pi can use, or log in.`);
+  }
+  return { model: resolved.model, thinking: settings.thinking ?? resolved.thinkingLevel ?? parent.thinkingLevel };
+}
+
+/**
+ * The child's prompt and context: the agent's prompt, and the project's AGENTS.md except for `explore`. No
+ * extensions: MyPi loaded in a child would look for the parent's session.
+ */
+async function childResources(cwd: string, agent: AgentDefinition): Promise<DefaultResourceLoader> {
+  const loader = new DefaultResourceLoader({
+    cwd,
+    agentDir: getAgentDir(),
+    settingsManager: SettingsManager.create(cwd, getAgentDir()),
+    noExtensions: true,
+    noContextFiles: agent.name === "explore",
+    systemPrompt: agent.prompt,
+  });
+  await loader.reload();
+  return loader;
+}
+
+/** The file a tool call changes: the `path` of a `write` or `edit`. */
+export function changedPath(toolName: string, args: Record<string, unknown>): string | undefined {
+  if (toolName !== "write" && toolName !== "edit") return undefined;
+  return typeof args.path === "string" ? args.path : undefined;
+}
+
+/** The tokens and cost of every assistant message in `messages`. */
+export function runUsage(messages: readonly { role: string }[]): RunUsage {
+  const replies = messages.filter((message): message is AssistantMessage => message.role === "assistant");
+  return {
+    tokens: replies.reduce((sum, reply) => sum + reply.usage.totalTokens, 0),
+    cost: replies.reduce((sum, reply) => sum + reply.usage.cost.total, 0),
+  };
+}

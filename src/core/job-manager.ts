@@ -20,7 +20,7 @@ export class JobManager {
   private nextId = 1;
   private readonly jobs = new Map<string, Entry>();
   /** Set by `stopAll()`: the jobs end after the session has, when nothing should reach its UI. */
-  private closed = false;
+  private stoppedAll = false;
 
   constructor(readonly events: EventBus) {}
 
@@ -52,6 +52,11 @@ export class JobManager {
     this.jobs.set(info.id, entry);
     this.notify();
     return entry;
+  }
+
+  /** True once the session has ended: a job that ends now must send nothing to it. */
+  get closed(): boolean {
+    return this.stoppedAll;
   }
 
   get(id: string): Job | undefined {
@@ -87,7 +92,7 @@ export class JobManager {
    * publishing first: the jobs end after the session has, when nothing should reach its UI.
    */
   stopAll(): void {
-    this.closed = true;
+    this.stoppedAll = true;
     for (const job of this.jobs.values()) job.controller.abort();
   }
 
@@ -114,7 +119,7 @@ export class JobManager {
   }
 
   private notify() {
-    if (this.closed) return;
+    if (this.stoppedAll) return;
 
     const running = [...this.jobs.values()].filter((job) => job.info.status === "running").length;
     publish(this.events, "jobs", running);

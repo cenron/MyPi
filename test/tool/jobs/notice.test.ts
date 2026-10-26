@@ -1,7 +1,8 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import type { JobInfo } from "#core/types";
-import { formatNotice, jobNotice } from "#tool/bash/notice";
+import { formatNotice, jobNotice, noticeOnEnd } from "#tool/jobs/notice";
+import { fakeSession } from "../../fakes";
 
 /** A job that completed after 3 seconds; rows change what they test. */
 const job = (over: Partial<JobInfo> = {}): JobInfo => ({
@@ -61,5 +62,19 @@ describe("formatNotice", () => {
       "<error>job 1 failed</error><muted> · exit 3 · 3.0s · npm run build</muted>\n" +
         "<toolOutput>one</toolOutput>\n<toolOutput>two</toolOutput>",
     );
+  });
+});
+
+describe("noticeOnEnd", () => {
+  // A job can finish on its own as the session closes: its exit code wins over the stop, but the session is gone.
+  it("sends nothing for a job that completes after the session closed", async () => {
+    const { session, sendMessage } = fakeSession();
+    const ended = session.jobs.start({ kind: "shell", label: "true", run: async () => 0 });
+    noticeOnEnd(session, ended);
+    session.jobs.stopAll();
+
+    expect(await ended.done).toMatchObject({ status: "completed" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });

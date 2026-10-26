@@ -69,6 +69,7 @@ describe("built-in tool hooks", () => {
       "register ask_user",
       "register lsp",
       "register lsp_edit",
+      "register subagent",
       "init",
       "module init",
       "module init",

@@ -10,9 +10,9 @@ export function jobListTool(session: Session): Tool {
     name: "job_list",
     label: "Job list",
     description:
-      "List this session's background jobs, running or ended, oldest first: id, status, how long it ran, the " +
-      "command, and its log file.",
-    promptSnippet: "List the background jobs bash started, with their status and log files",
+      "List this session's background jobs, running or ended, oldest first: id, status, how long it ran, what it is " +
+      "(the command, or the agent and task), and its log file.",
+    promptSnippet: "List background jobs (shell commands and subagents), with their status and log files",
     parameters: Type.Object({}),
     annotations: { readOnlyHint: true },
     async execute() {
@@ -34,9 +34,9 @@ export function jobStopTool(session: Session): Tool {
     name: "job_stop",
     label: "Job stop",
     description:
-      "Stop a running background job and its child processes, and wait for it to end. Its log file is kept. A " +
-      "stopped job sends no message when it ends.",
-    promptSnippet: "Stop a background job bash started",
+      "Stop a running background job (a shell command and its child processes, or a subagent), and wait for it to " +
+      "end. Its log file is kept. A stopped job sends no message when it ends.",
+    promptSnippet: "Stop a background job: a shell command or a subagent",
     parameters: Type.Object({
       id: Type.String({ description: "The job's id, from bash's start message or job_list." }),
     }),

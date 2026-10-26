@@ -6,10 +6,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Session } from "#core/session";
-import type { Job, JobSpec } from "#core/types";
-import { errorMessage } from "#core/util/errors";
+import type { JobSpec } from "#core/types";
+import { JOB_NOTICE, noticeOnEnd, renderNotice } from "#tool/jobs/notice";
 import type { Tool } from "#tool/types";
-import { JOB_NOTICE, jobNotice, NOTICE_LINES, renderNotice } from "./notice";
 
 /**
  * What a background start returns: the job's id and the file its output goes to. Built on pi's details, whose fields
@@ -23,22 +22,6 @@ export type BackgroundDetails = BashToolDetails & { jobId: string; logPath: stri
  */
 export function bashTool(session: Session): Tool {
   const piBash = createBashToolDefinition(session.ctx.cwd);
-  // Set on session_shutdown, so a job that ends while the session closes sends nothing to it.
-  let closed = false;
-
-  /** Tells the model when `job` ends, starting a turn if the agent is idle. */
-  const noticeOnEnd = (job: Job) =>
-    job.done
-      .then((ended) => {
-        // A stop comes from job_stop or the session ending, which already say so.
-        if (closed || ended.status === "stopped") return;
-        session.pi.sendMessage(
-          { customType: JOB_NOTICE, display: true, ...jobNotice(ended, job.tail(NOTICE_LINES)) },
-          { deliverAs: "followUp", triggerTurn: true },
-        );
-      })
-      .catch((error) => session.logError(`Job ${job.info.id} notice: ${errorMessage(error)}`));
-
   // Built on pi's own parameters, so they match the `piBash` that runs the calls; pi doesn't export its schema.
   const parameters = Type.Object({
     ...piBash.parameters.properties,
@@ -65,7 +48,7 @@ export function bashTool(session: Session): Tool {
 
       // The turn's signal isn't passed on, so Escape doesn't stop the job; `job_stop` and session end do.
       const job = session.jobs.start(shellJob(command, ctx.cwd));
-      noticeOnEnd(job);
+      noticeOnEnd(session, job);
 
       const { info } = job;
       const text =
@@ -84,9 +67,6 @@ export function bashTool(session: Session): Tool {
   return {
     definition,
     init: () => session.pi.registerMessageRenderer(JOB_NOTICE, renderNotice),
-    shutdown: () => {
-      closed = true;
-    },
   };
 }
 

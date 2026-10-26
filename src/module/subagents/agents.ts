@@ -13,12 +13,14 @@ export type AgentDefinition = {
   access: AgentAccess;
   tools?: string[];
   model: string;
-  thinking: string;
+  thinking: ThinkingSetting;
   prompt: string;
 };
 
 /** pi's thinking levels, plus `inherit` (the parent's), the default. */
-const THINKING_LEVELS = ["inherit", "off", "minimal", "low", "medium", "high", "xhigh", "max"];
+export const THINKING_LEVELS = ["inherit", "off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+export type ThinkingSetting = (typeof THINKING_LEVELS)[number];
 
 /** Parses one agent file and reports invalid values with the source path. */
 export function parseAgentFile(file: string, source: string): AgentDefinition {
@@ -41,8 +43,8 @@ export function parseAgentFile(file: string, source: string): AgentDefinition {
   if (access !== "read-only" && access !== "write") throw new Error(`${file}: invalid field 'access'`);
 
   const model = optionalString(frontmatter, "model", "inherit", file);
-  const thinking = optionalString(frontmatter, "thinking", "inherit", file);
-  if (!THINKING_LEVELS.includes(thinking)) throw new Error(`${file}: invalid field 'thinking'`);
+  const thinking = THINKING_LEVELS.find((level) => level === optionalString(frontmatter, "thinking", "inherit", file));
+  if (!thinking) throw new Error(`${file}: invalid field 'thinking'`);
   const tools = frontmatter.tools;
   if (tools !== undefined && (!Array.isArray(tools) || tools.some((tool) => typeof tool !== "string"))) {
     throw new Error(`${file}: invalid field 'tools'`);

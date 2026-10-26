@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import { bashTool } from "#tool/bash/index";
-import { JOB_NOTICE, renderNotice } from "#tool/bash/notice";
+import { JOB_NOTICE, renderNotice } from "#tool/jobs/notice";
 import { fakeSession } from "../../fakes";
 
 // Real processes, through pi's own shell.
@@ -91,16 +91,12 @@ describe("bash", () => {
     );
   });
 
-  // A stop is reported by whatever stopped it, and a closed session can't take a message.
-  it("sends no notice for a stopped job, or for one that ends after the session closed", async () => {
-    const { session, tool, run, sendMessage } = newBash();
+  // A stop is reported by whatever stopped it.
+  it("sends no notice for a stopped job", async () => {
+    const { session, run, sendMessage } = newBash();
     await run({ command: "sleep 30", background: true });
     await session.jobs.stop("1");
     await ended(session, "1");
-
-    await run({ command: "true", background: true });
-    tool.shutdown?.();
-    await ended(session, "2");
     expect(sendMessage).not.toHaveBeenCalled();
   });
 });
