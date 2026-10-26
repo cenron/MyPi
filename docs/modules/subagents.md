@@ -223,9 +223,13 @@ it here (no UI). Tell the user what you needed and why: …").
      if that happens, the worktree stays and the refusal names the files. Patches and handoffs stay until applied or
      dropped. See [worktree](../tools/worktree.md#subagent-integration).
   4. The run's result names the patch and the files. The main agent reviews it and calls `subagent_apply`, which
-     asks me first: a dialog with the agent, the task, the files and their diff stat, and the child's summary, and
-     Apply, Drop, or Cancel (Cancel is the default, as in Radian's merge dialog). Apply runs `git apply --3way` (Build
-     only); a clash is reported, never forced. Patches are applied one at a time.
+     asks me first: a dialog with the agent, the task's first line, the diff stat, and the child's summary, and
+     Cancel, Apply, or Drop (Cancel is the default, including Escape). Apply preflights with a three-way check before
+     running `git apply --3way` (Build only), which leaves the change staged; a clash is reported with git's output without changing the checkout, and
+     both files are kept. On success, the patch and handoff are deleted and
+     the result lists the files. Drop deletes both files; Cancel changes nothing. Unknown names list the available
+     patches, and without a UI the tool refuses because my approval is required. The prompt says never to use
+     `git apply` through `bash`, which wouldn't ask me. Patches are applied one at a time.
 - **Uncommitted changes in the calling checkout refuse a worktree writer:** the worktree comes from its `HEAD`, so
   the child wouldn't see work I haven't committed, and its patch could clash with it. Before launch, `git status --porcelain` must be empty
   (MyPi's own state folders aside); otherwise the run is refused with the list of files. Nothing falls back to the

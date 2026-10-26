@@ -1,11 +1,11 @@
 import { defineTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
-import { ask } from "#core/events";
 import type { Session } from "#core/session";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
 import { expandKey, jobDuration, jobEnding, reuseText, textOf } from "#tool/utils";
 import { type AgentDefinition, THINKING_SETTINGS } from "../agents";
 import { type ChildResult, RUN_TIMEOUT_MINUTES, type RunSettings, runChild } from "../child";
+import { isPlanMode } from "../mode";
 
 /** Most background runs at once. */
 const MAX_BACKGROUND = 3;
@@ -123,12 +123,6 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
       return startJob(session, jobLabel(agent, args.task), start, noticeGroup);
     },
   });
-}
-
-/** Whether plan-build says Plan is on. With plan-build off, nobody answers, which counts as Build. */
-async function isPlanMode(session: Session): Promise<boolean> {
-  const answers = await ask(session.pi.events, "mode", undefined);
-  return answers.some((answer) => answer.kind === "answer" && answer.value === "plan");
 }
 
 function findAgent(agents: AgentDefinition[], name: string): AgentDefinition {

@@ -3,6 +3,7 @@ import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
 import { type AgentDefinition, loadAgents } from "./agents";
+import { subagentApplyTool } from "./tools/apply";
 import { subagentTool } from "./tools/subagent";
 
 /** Subagents: agents the main session hands work to. Loads their definitions and lists them in the prompt. */
@@ -14,7 +15,7 @@ export class SubagentsModule extends BaseModule {
   }
 
   tools(): ToolDefinition[] {
-    return [subagentTool(this.session, () => this.agents)];
+    return [subagentTool(this.session, () => this.agents), subagentApplyTool(this.session)];
   }
 
   init() {
@@ -33,7 +34,8 @@ const DELEGATION =
   "another package (`explore`); a check that doesn't need this conversation; a whole task that would flood this " +
   "context. Do quick lookups and questions about one known file yourself. A run goes in the background: keep " +
   "working, and its answer arrives as a message. If a child reports a refused call, tell the user what it needed " +
-  "and why, and offer to take that step here, where the user can approve it. Don't retry the child with the same call.";
+  "and why, and offer to take that step here, where the user can approve it. Don't retry the child with the same call. " +
+  "Apply a writer's patch only with `subagent_apply`; never use `git apply` through `bash`, which wouldn't ask the user.";
 
 /** The agent list in the prompt: when delegating pays off, then one line per agent. */
 export function promptSection(agents: AgentDefinition[]): string {

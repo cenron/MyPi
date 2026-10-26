@@ -27,15 +27,19 @@ export function validateName(name: string): void {
   }
 }
 
-/** Runs git without a shell; a failure throws with git's own message. `LC_ALL=C` keeps that message in English. */
-export async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execute("git", args, {
+/** Runs git without a shell; `LC_ALL=C` keeps its messages in English. */
+export async function gitOutput(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return execute("git", args, {
     cwd,
     maxBuffer: MAX_GIT_OUTPUT,
     encoding: "utf8",
     env: { ...process.env, LC_ALL: "C" },
   });
-  return stdout;
+}
+
+/** Runs git without a shell and returns stdout; a failure throws with git's own message. */
+export async function git(cwd: string, args: string[]): Promise<string> {
+  return (await gitOutput(cwd, args)).stdout;
 }
 
 /** The main checkout (git lists it first) and every worktree of the repository `cwd` is in. */
