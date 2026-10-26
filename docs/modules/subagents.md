@@ -277,10 +277,27 @@ Deferred until internal agents work. The design so far:
 | `agent_manage` | Same folder | `deferred` exposure; the confirm comes from a rule on `ToolGuard` that always asks. |
 | `subagent_apply` | Same folder | Applies or drops a writer's patch after a dialog with the diff stat and summary; never applies without my answer. |
 | Plan rule | `onToolCall` in `init()` | Read-only runs allowed, write runs blocked, while the parent is in Plan. |
-| Child session | `createAgentSession`, `ModelRuntime`, `SessionManager`, `resolveCliModel`, `DefaultResourceLoader` | All exported by pi 1.2.0. Dispose a child by emitting `session_shutdown`, then `dispose()`. |
+| Child session | `createAgentSession`, `ModelRuntime`, `SessionManager`, `resolveCliModel`, `DefaultResourceLoader` | All exported by pi 1.2.0; see "Spike results" below. Dispose a child with `session.dispose()`. |
 | Background | `session.jobs` (`JobManager`), with run details on the job | One list for `job_list`, `job_stop`, the footer, and the fleet view. |
 | Fleet view | `src/ui/` widget through `ctx.ui.setWidget`, plus `/agents` | Built from `src/ui/components/`. |
 | Rendering | `renderCall` / `renderResult` | The agent and the task's first line; the child's last few steps; Ctrl+O expands. |
+
+### Spike results (milestone 1 checkpoint 1, 2026-10-26)
+
+A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscription login:
+
+- **Pass the model explicitly.** `ModelRuntime.create()` uses pi's own logins, but left to choose it picked the first
+  available model, `gpt-4`, which the subscription rejects. `inherit` passes the parent's current model.
+- **`DefaultResourceLoader({ noExtensions: true, systemPrompt })`.** Without `noExtensions` the child loads the
+  user's global extensions, MyPi included, and MyPi's `bash` wrapper failed looking for the parent's `toolGuard`.
+  A child gets only its own inline extension (access and the folder guard).
+- **The answer and usage:** `session.getLastAssistantText()`, and the usage on the last assistant message in
+  `session.messages`.
+- **The session file:** `SessionManager.create(cwd, sessionDir, { parentSession })` writes it in the given folder with
+  the parent's path.
+- **Shutdown:** `session.dispose()` is public and aborts any work in flight. Emitting `session_shutdown` needs an
+  internal `ExtensionRunner` that `createAgentSession` doesn't expose; since a child's only extension is MyPi's
+  inline one, which holds nothing to clean up, `dispose()` is enough.
 
 ## Slices
 
