@@ -2,21 +2,12 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isNodeError } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
+import { slugify } from "#core/util/slug";
 
 /** Relative to the main checkout, or cwd outside Git; registered as writable in Plan. */
 export const PLANS_DIR = join(".pi", "plans");
 
 const MAX_SLUG = 50;
-
-/** `title` as a file-name slug: lowercase, runs of anything but a-z and 0-9 become `-`; `plan` when nothing is left. */
-export function slugify(title: string): string {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .slice(0, MAX_SLUG)
-    .replace(/^-+|-+$/g, "");
-  return slug || "plan";
-}
 
 /**
  * `<UTC timestamp>-<slug>.md`, like `2026-10-20-143205-add-submit-plan.md`. UTC, so names sort by time even across a
@@ -24,7 +15,7 @@ export function slugify(title: string): string {
  */
 export function planFileName(title: string, now: Date): string {
   const stamp = now.toISOString().slice(0, 19).replace("T", "-").replaceAll(":", "");
-  return `${stamp}-${slugify(title)}.md`;
+  return `${stamp}-${slugify(title, MAX_SLUG, "plan")}.md`;
 }
 
 /**

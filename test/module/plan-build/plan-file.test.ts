@@ -2,30 +2,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { latestPlan, planFileName, savePlan, slugify } from "#module/plan-build/plan-file";
+import { latestPlan, planFileName, savePlan } from "#module/plan-build/plan-file";
 
 const now = new Date("2026-10-20T14:32:05.123Z");
-
-describe("slugify", () => {
-  it.each([
-    ["Add submit_plan", "add-submit-plan"],
-    ["  Fix: the /plan  command!  ", "fix-the-plan-command"],
-    ["Ünïcode café", "n-code-caf"],
-  ])("turns %j into %j", (title, slug) => {
-    expect(slugify(title)).toBe(slug);
-  });
-
-  it("falls back to plan when nothing is left, such as for a title in another script", () => {
-    expect(slugify("日本語")).toBe("plan");
-  });
-
-  // The cut can land on a dash, so the trim runs after it.
-  it("caps the slug at 50 characters without a trailing dash", () => {
-    const slug = slugify(`${"a".repeat(49)} bcd`);
-    expect(slug).toBe("a".repeat(49));
-    expect(slugify("word ".repeat(30)).length).toBeLessThanOrEqual(50);
-  });
-});
 
 describe("planFileName", () => {
   it("is a UTC timestamp with seconds, then the slug", () => {

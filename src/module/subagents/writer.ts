@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Session } from "#core/session";
 import { keepOutOfGit } from "#core/util/git";
+import { slugify } from "#core/util/slug";
 import { git } from "#core/worktree/git";
 import type { AgentDefinition } from "./agents";
 
@@ -46,17 +47,6 @@ export async function prepareWriter(session: Session, agent: AgentDefinition): P
   const base = (await git(session.ctx.cwd, ["rev-parse", "HEAD"])).trim();
   const worktree = await session.worktrees.create(name);
   return { name, base, path: worktree.path, main: project.main };
-}
-
-/** The agent's name as a worktree name: lowercase letters, digits, and single hyphens; `writer` when nothing is left. */
-export function writerSlug(agentName: string): string {
-  const slug = agentName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, MAX_SLUG_CHARS)
-    .replace(/-+$/, "");
-  return slug || "writer";
 }
 
 /** Saves all work since `base`, including the writer's own commits, before discarding its checkout. */
@@ -116,7 +106,7 @@ export async function captureWork(
 /** `sub-<slug>-<n>` with the first `n` that has neither a worktree nor a saved patch, so no unapplied patch is lost. */
 async function freeName(session: Session, main: string, agentName: string): Promise<string> {
   const taken = new Set((await session.worktrees.list()).flatMap((worktree) => worktree.managedName ?? []));
-  const slug = writerSlug(agentName);
+  const slug = slugify(agentName, MAX_SLUG_CHARS, "writer");
   for (let number = 1; ; number++) {
     const name = `sub-${slug}-${number}`;
     if (!taken.has(name) && !existsSync(join(main, PATCHES_DIR, `${name}.patch`))) return name;

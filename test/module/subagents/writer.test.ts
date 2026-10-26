@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentDefinition } from "#module/subagents/agents";
-import { captureWork, PATCHES_DIR, prepareWriter, writerSlug } from "#module/subagents/writer";
+import { captureWork, PATCHES_DIR, prepareWriter } from "#module/subagents/writer";
 import { fakeSession } from "../../fakes";
 
 const execute = promisify(execFile);
@@ -49,19 +49,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
-});
-
-describe("writerSlug", () => {
-  it.each([
-    ["developer", "developer"],
-    ["My Reviewer", "my-reviewer"],
-    ["test_writer!!", "test-writer"],
-    ["--Ünïcode--", "n-code"],
-    ["!!!", "writer"],
-    ["x".repeat(60), "x".repeat(40)],
-  ])("%s → %s", (name, slug) => {
-    expect(writerSlug(name)).toBe(slug);
-  });
 });
 
 describe("writer work", () => {
