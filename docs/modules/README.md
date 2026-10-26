@@ -14,7 +14,7 @@ Each module has a doc here, named after its folder in `src/module/`. Start a doc
 | Module | Status | Summary |
 |---|---|---|
 | [analytics](analytics.md) | idea | Metrics across sessions and pi instances, per model and effort: tokens, cache, tool failures, shell commands without a tool; later, benchmarks for new models. SQLite under `~/.pi/` |
-| [context](context.md) | building | What goes to the model as a session grows: compaction summaries that keep decisions, the plan, and the next step; later, clearing old tool results. `ON_LOAD` |
+| [context](context.md) | building | What goes to the model as a session grows: compaction summaries that keep decisions, the plan, and the next step, and clearing old tool results. `ON_LOAD` |
 | [done-check](done-check.md) | done | When the agent is about to stop, check the files it changed (LSP errors) and run the project's approved commands, and send it back to fix what's broken |
 | [lsp](lsp.md) | done | Symbol navigation, rename, and diagnostics from language servers, with a `/lsp` menu |
 | [memory](memory.md) | done | Markdown memories per project (git-ignored) and global; the prompt lists them, the agent reads what it needs. `ALWAYS`, replaceable |

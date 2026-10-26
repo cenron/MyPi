@@ -1,6 +1,6 @@
 # Context
 
-**Status:** building (A–D done 2026-10-25; E next)
+**Status:** building (A–E done 2026-10-25)
 
 **Load type:** `ON_LOAD`. The `context` module (`src/module/context/`) holds C (`compaction.ts`) and, once built, E
 (`tool-results.ts`); turning it off in `/modules` turns both off. A is a pi setting, and B and D live in
@@ -43,7 +43,7 @@ doesn't keep: the plan being implemented, `principles.md`, and recently edited f
 | B | The plan stays in view | plan-build | **Done 2026-10-25** |
 | C | Steer the summary | this module, `compaction.ts` (`session_before_compact`) | **Done 2026-10-25** |
 | D | Re-check the principles before "done" | plan-build's Build section | **Done 2026-10-25** |
-| E | Clear old tool results | this module, `tool-results.ts` (pi's `context` event) | Planned: building next |
+| E | Clear old tool results | this module, `tool-results.ts` (pi's `context` event) | **Done 2026-10-25** |
 
 ### B: the plan stays in view
 
@@ -100,7 +100,15 @@ compaction reshuffling the list, and after `/reload` the first call clears every
 batch, which costs nothing a reload doesn't already cost. Untouched: the last 3 user turns, small results (errors,
 `ask_user`), user and assistant messages, MyPi's custom messages (done-check reports, job notices).
 
-Analytics' context-use numbers will check it afterwards: how often the agent re-reads what was cleared.
+**Built 2026-10-25** by pi on gpt-6-luna, then tightened in review: the message type now comes from
+pi-coding-agent's `ContextEvent` (not `pi-agent-core`, which MyPi doesn't depend on); the stub names any call's
+`path` or `command`; and the test rows were rebuilt so each rule is the only reason for its outcome (two rows passed
+whatever their rule did). Breaking any of the three rules (batching, the last 3 turns, the size floor) fails a test.
+
+**Tried live** (gpt-6-luna, throwaway repo): after reading four files of about 30KB each, the footer's context figure
+stayed at 12.8% while those reads were within the last 3 user turns, then dropped to 1.4% on the turn they fell out
+of it. Asked to quote a line from one of them, the agent read just that line again (`big2.txt:7-8`) and quoted it
+right. Analytics' context-use numbers will show how often that happens over real sessions.
 
 ### Subagents
 

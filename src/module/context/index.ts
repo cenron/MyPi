@@ -1,14 +1,18 @@
-import type { ExtensionContext, SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
+import type { ContextEvent, ExtensionContext, SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
 import { steerCompaction } from "./compaction";
+import { oldResultsToClear, withResultsCleared } from "./tool-results";
 
-/** What goes to the model as a session grows: compaction summaries that keep what MyPi needs. */
+/** What goes to the model as a session grows: summaries that keep what MyPi needs, and old tool results cleared. */
 export class ContextModule extends BaseModule {
+  /** Tool calls whose results are cleared. Once cleared, always cleared, so the start of the conversation stays put. */
+  private readonly cleared = new Set<string>();
+
   get info(): ModuleInfo {
     return {
       name: "context",
-      description: "Steers compaction summaries to keep decisions, the plan, and the next step.",
+      description: "Steers compaction summaries and clears old tool results to save context.",
       commands: [],
       loadType: ModuleLoadMode.ON_LOAD,
     };
@@ -16,6 +20,14 @@ export class ContextModule extends BaseModule {
 
   init(): void {
     this.session.pi.on("session_before_compact", (ev, ctx) => this.onBeforeCompact(ev, ctx));
+    this.session.pi.on("context", (ev) => this.onContext(ev));
+  }
+
+  private onContext(ev: ContextEvent) {
+    for (const id of oldResultsToClear(ev.messages, this.cleared)) {
+      this.cleared.add(id);
+    }
+    return { messages: withResultsCleared(ev.messages, this.cleared) };
   }
 
   private onBeforeCompact(ev: SessionBeforeCompactEvent, ctx: ExtensionContext) {
