@@ -48,6 +48,18 @@ describe("steerCompaction", () => {
       undefined,
       { A: "b" },
     );
+    // A summary once wrote "the user asked" for a done-check report.
+    expect(compact).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.stringContaining("not the user's words"),
+      expect.anything(),
+      undefined,
+      undefined,
+      expect.anything(),
+    );
   });
 
   it("warns and lets pi summarize when steering fails", async () => {

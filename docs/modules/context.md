@@ -72,6 +72,13 @@ MyPi's call made it. The summary kept "use SQLite: Node has it built in", the pl
 schema" as the next step, with no file contents, only their names. The later DuckDB decision sat in the recent
 messages pi keeps whole, so it wasn't summarized and wasn't lost.
 
+**First real compactions (2026-10-26, subagents milestone 3, checkpoint 1):** two in one session, each at about 193k
+tokens. Both kept the plan path, and the second also the fix list and exactly what was left, so pi carried on. But
+the second wrote "the user asked to assess name collisions" for a done-check report. pi gives the summarizer custom
+messages as `[User]: <text>`, without their type, so the instructions now say that messages starting with "Done
+check", "Background job", or "Subagent job" are MyPi's, not the user's, and every done-check report starts with
+"Done check:" (one with only open tasks or duplicate names didn't).
+
 ### D: re-check the principles before "done"
 
 One line in plan-build's Build section: before saying a slice is done, re-read "Before a slice is done" in

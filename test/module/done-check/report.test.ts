@@ -85,7 +85,7 @@ describe("doneCheckReport", () => {
         [{ name: "formatPrice", file: "/p/src/cart.ts", line: 4, elsewhere: { file: "/p/src/price.ts", line: 2 } }],
       ),
     ).toBe(
-      "1 new name already exists elsewhere:\n`formatPrice` (src/cart.ts:4) is also in src/price.ts:2\n" +
+      "Done check:\n1 new name already exists elsewhere:\n`formatPrice` (src/cart.ts:4) is also in src/price.ts:2\n" +
         "Reuse the existing one, or say why a second one is right.",
     );
   });
@@ -147,7 +147,7 @@ describe("doneCheckReport", () => {
         { id: "3", subject: "Write tests", status: "in_progress" },
         { id: "4", subject: "Live check", status: "pending" },
       ] as OpenTask[],
-      "2 tasks still open:\n#3 [in_progress] Write tests\n#4 [pending] Live check\n" +
+      "Done check:\n2 tasks still open:\n#3 [in_progress] Write tests\n#4 [pending] Live check\n" +
         "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.",
     ],
     [
@@ -167,7 +167,7 @@ describe("doneCheckReport", () => {
         { id: "1", subject: "Write tests, then\nrun them", status: "pending" },
         { id: "2", subject: "Live check", status: "in_progress" },
       ] as OpenTask[],
-      "2 tasks still open:\n#1 [pending] Write tests, then run them\n#2 [in_progress] Live check\n" +
+      "Done check:\n2 tasks still open:\n#1 [pending] Write tests, then run them\n#2 [in_progress] Live check\n" +
         "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.",
     ],
     ["no open tasks", [], [], [], undefined],

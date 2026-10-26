@@ -89,7 +89,8 @@ export function doneCheckReport(
   const hidden = errors.length - shown.length;
   const findingsSummary = summary(errors.length, failures.length);
   return [
-    ...(findingsSummary ? [`Done check: ${findingsSummary}.`] : []),
+    // Always the first words: a compaction summary sees this report as a user message, so it must say who wrote it.
+    findingsSummary ? `Done check: ${findingsSummary}.` : "Done check:",
     ...shown,
     ...(hidden > 0 ? [`… and ${hidden} more.`] : []),
     ...(errors.length > 0 && skipped > 0 ? [`${skipped} more changed files weren't checked.`] : []),
