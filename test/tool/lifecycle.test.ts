@@ -62,6 +62,7 @@ describe("built-in tool hooks", () => {
     expect(calls).toEqual([
       "register bash",
       "register job_list",
+      "register job_wait",
       "register job_stop",
       "register web_search",
       "register web_fetch",

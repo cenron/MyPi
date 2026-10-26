@@ -1,8 +1,8 @@
 # Sub-agents
 
-**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–4 done
-2026-10-26: the spike, agent definitions with the five builtins and the agent list, the `subagent` tool, and access
-in the child with the Plan rule)
+**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–5 done
+2026-10-26: the spike, agent definitions with the five builtins and the agent list, the `subagent` tool, access in
+the child with the Plan rule, and grouped completions with `job_wait`)
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -160,11 +160,13 @@ comes back to yours"), and naming what to do yourself.
   count, and the fleet view. When it's done, an exit notice brings its answer into the conversation and wakes the
   main agent (`sendMessage` with `followUp` and `triggerTurn`, like shell jobs). It stops when pi does; its session
   file stays.
-- **Grouped completions:** runs that succeed within a short window of each other arrive as one message, so the main
-  agent doesn't act on the first of three reviews before the other two land. A failed run is reported at once
-  (pi-subagents' `completionBatch`).
-- **Waiting on purpose:** the main agent can wait for given runs to finish (pi-subagents' `bg_wait`). Possibly a
-  `job_wait` tool in core, which would work for shell jobs too.
+- **Grouped completions:** runs that succeed within 3 seconds of each other arrive as one message, so the main
+  agent doesn't act on the first of three reviews before the other two land (pi-subagents' `completionBatch`). Each
+  success restarts the wait; a failed run is reported at once and doesn't flush the others. A `NoticeGroup` in
+  `src/tool/jobs/notice.ts`; shell jobs aren't grouped. Live: of three reviewers started together, the two that
+  ended 0.8 seconds apart came as one message and the one that ended 12 seconds later came alone.
+- **Waiting on purpose:** `job_wait` in core, for any job (pi-subagents' `bg_wait`). See
+  [background process](../tools/background-process.md#job_wait).
 - **Foreground** (`background: false`): the call waits, shows the child's progress under it, and returns the answer
   as its result.
 - **The result:** the child's final answer, its usage (tokens and cost over the run), the path of its session file

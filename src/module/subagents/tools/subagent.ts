@@ -2,7 +2,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { ask } from "#core/events";
 import type { Session } from "#core/session";
-import { jobNotice, NOTICE_LINES, noticeOnEnd } from "#tool/jobs/notice";
+import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
 import { jobDuration, jobEnding } from "#tool/utils";
 import { type AgentDefinition, THINKING_LEVELS } from "../agents";
 import { type ChildResult, RUN_TIMEOUT_MINUTES, type RunSettings, runChild } from "../child";
@@ -15,6 +15,9 @@ const MAX_PER_PROMPT = 8;
 
 /** Most characters of the task a job's label shows: models write a whole paragraph on one line. */
 const LABEL_TASK_CHARS = 60;
+
+/** Quiet period before successful subagent notices are grouped. */
+const GROUP_WAIT_MS = 3_000;
 
 const parameters = Type.Object({
   agent: Type.String({ description: "The agent's name, from the list in the system prompt." }),
@@ -32,7 +35,8 @@ const parameters = Type.Object({
     Type.Boolean({
       description:
         "Default true: return at once with a job id. You'll get a message with the answer when it ends; don't poll " +
-        "or sleep to wait for it. Stop it with job_stop. false waits and returns the answer.",
+        "or sleep to wait for it; use job_wait only when you can't go on without the result. Stop it with job_stop. " +
+        "false waits and returns the answer.",
     }),
   ),
 });
@@ -51,6 +55,7 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
   });
   /** `write` runs going now, foreground or background: one at a time until parallel writers get worktrees. */
   let writeRuns = 0;
+  const noticeGroup = new NoticeGroup(session, GROUP_WAIT_MS);
 
   return defineTool({
     name: "subagent",
@@ -89,7 +94,7 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
         const result = await start(signal ?? new AbortController().signal, () => {});
         return { content: [{ type: "text", text: formatResult(result) }], details: result };
       }
-      return startJob(session, jobLabel(agent, args.task), start);
+      return startJob(session, jobLabel(agent, args.task), start, noticeGroup);
     },
   });
 }
@@ -144,6 +149,7 @@ function startJob(
   session: Session,
   label: string,
   start: (signal: AbortSignal, onStep: (step: string) => void) => Promise<ChildResult>,
+  group: NoticeGroup,
 ) {
   let result: ChildResult | undefined;
   const job = session.jobs.start({
@@ -156,13 +162,18 @@ function startJob(
   });
 
   // A failed run has no result: its notice is a shell job's, with the error and the last steps.
-  noticeOnEnd(session, job, (ended) => {
-    const notice = jobNotice(ended, job.tail(NOTICE_LINES));
-    if (!result) return notice;
+  noticeOnEnd(
+    session,
+    job,
+    (ended) => {
+      const notice = jobNotice(ended, job.tail(NOTICE_LINES));
+      if (!result) return notice;
 
-    const heading = `Subagent job ${ended.id} ${jobEnding(ended)} after ${jobDuration(ended)}: ${ended.label}`;
-    return { ...notice, content: `${heading}\n\n${formatResult(result)}` };
-  });
+      const heading = `Subagent job ${ended.id} ${jobEnding(ended)} after ${jobDuration(ended)}: ${ended.label}`;
+      return { ...notice, content: `${heading}\n\n${formatResult(result)}` };
+    },
+    group,
+  );
 
   const text = `Started ${label} as job ${job.info.id}. You'll get a message with the answer when it ends.`;
   return { content: [{ type: "text" as const, text }], details: { jobId: job.info.id } };

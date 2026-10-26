@@ -19,6 +19,7 @@ describe("registerTools", () => {
     expect(registerTools(session.pi, session).map((tool) => tool.definition.name)).toEqual([
       "bash",
       "job_list",
+      "job_wait",
       "job_stop",
       "web_search",
       "web_fetch",

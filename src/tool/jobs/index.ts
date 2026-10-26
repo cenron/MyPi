@@ -1,8 +1,10 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Session } from "#core/session";
+import type { Job } from "#core/types";
 import type { Tool } from "#tool/types";
 import { jobDuration, jobEnding } from "#tool/utils";
+import { releaseNotice, reserveNotice, takeNotice } from "./notice";
 
 /** `job_list`: every background job of this session, running or ended, oldest first, with its log file. */
 export function jobListTool(session: Session): Tool {
@@ -26,6 +28,72 @@ export function jobListTool(session: Session): Tool {
   });
 
   return { definition };
+}
+
+/** How long `job_wait` waits when the call gives no timeout. */
+const DEFAULT_WAIT_SECONDS = 300;
+
+/**
+ * `job_wait`: waits for jobs to end and returns the text each one's notice would have carried; that notice then isn't
+ * sent. A job still running at the timeout is reported, and its notice still comes. Escape stops the wait, not the jobs.
+ */
+export function jobWaitTool(session: Session): Tool {
+  const definition = defineTool({
+    name: "job_wait",
+    label: "Job wait",
+    description:
+      "Wait for background jobs to end, up to the timeout, and return what each one's message would have said; " +
+      "that message then isn't sent. Only when you can't go on without the result. Waiting doesn't stop the jobs.",
+    promptSnippet: "Wait for background jobs when you can't continue without their results",
+    parameters: Type.Object({
+      ids: Type.Array(Type.String({ description: "Job ids, from the start message or job_list." }), { minItems: 1 }),
+      timeout_seconds: Type.Optional(
+        Type.Number({ minimum: 0, maximum: 1800, description: `Default ${DEFAULT_WAIT_SECONDS}.` }),
+      ),
+    }),
+    annotations: { readOnlyHint: true },
+    async execute(_id, { ids, timeout_seconds }, signal) {
+      const missing = ids.filter((id) => !session.jobs.get(id));
+      if (missing.length) throw new Error(`No job ${missing.join(", ")} in this session; job_list shows them.`);
+
+      // Reserved while waiting: a job that ends now would otherwise send its notice before the wait takes it.
+      const jobs = ids.flatMap((id) => session.jobs.get(id) ?? []);
+      for (const job of jobs) reserveNotice(job);
+      const startedAt = Date.now();
+      await untilEnded(jobs, (timeout_seconds ?? DEFAULT_WAIT_SECONDS) * 1000, signal);
+
+      const waited = Math.round((Date.now() - startedAt) / 1000);
+      const text = jobs.map((job) => {
+        if (job.info.status !== "running") return takeNotice(job).content;
+
+        releaseNotice(job);
+        return `${job.info.id} still running after ${waited}s: ${job.info.label}`;
+      });
+      return { content: [{ type: "text", text: text.join("\n\n") }], details: undefined };
+    },
+  });
+  return { definition };
+}
+
+/** Resolves when every job has ended, `timeoutMs` has passed, or `signal` aborts; leaves no timer or listener behind. */
+async function untilEnded(jobs: Job[], timeoutMs: number, signal: AbortSignal | undefined): Promise<void> {
+  let stop = () => {};
+  const stopped = new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    const onAbort = () => resolve();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) resolve();
+    stop = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+  });
+
+  try {
+    await Promise.race([Promise.all(jobs.map((job) => job.done)), stopped]);
+  } finally {
+    stop();
+  }
 }
 
 /** `job_stop`: stops a running background job and waits for it to end; its log file is kept. */

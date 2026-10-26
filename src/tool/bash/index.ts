@@ -30,7 +30,8 @@ export function bashTool(session: Session): Tool {
         description:
           "Run the command in the background and return at once with a job id and a log file. For dev servers, " +
           "watchers, and anything that doesn't exit. The timeout doesn't apply. You'll get a message when it ends; " +
-          "don't poll or sleep to wait for it. Stop it with job_stop.",
+          "don't poll or sleep to wait for it; use job_wait only when you can't go on without the result. " +
+          "Stop it with job_stop.",
       }),
     ),
   });

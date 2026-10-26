@@ -1,11 +1,13 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { answer } from "#core/events";
 import { planRule } from "#module/plan-build/rule";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { type ChildResult, changedPath, runChild, runUsage } from "#module/subagents/child";
 import { subagentTool } from "#module/subagents/tools/subagent";
 import { fakeSession } from "../../fakes";
+
+afterEach(() => vi.useRealTimers());
 
 const explore: AgentDefinition = {
   name: "explore",
@@ -94,6 +96,7 @@ describe("subagent", () => {
   });
 
   it("runs in the background as a subagent job whose notice carries the whole answer", async () => {
+    vi.useFakeTimers();
     const answer = Array.from({ length: 40 }, (_, line) => `line ${line + 1}`).join("\n");
     const { call, session, sendMessage } = setup(
       [explore],
@@ -102,11 +105,29 @@ describe("subagent", () => {
     await call({ agent: "explore", task: "Find\nmore detail" });
     expect(session.jobs.list()).toMatchObject([{ kind: "subagent", label: "explore: Find" }]);
 
-    await settled(session, "1");
+    await session.jobs.get("1")?.done;
+    await vi.advanceTimersByTimeAsync(3_000);
     const [message, options] = sendMessage.mock.calls[0] ?? [];
     expect(message).toMatchObject({ customType: "mypi-job" });
     expect(message.content).toContain(`explore: Find\n\n${answer}`);
     expect(options).toEqual({ deliverAs: "followUp", triggerTurn: true });
+  });
+
+  it("brings background runs that end together in one message", async () => {
+    vi.useFakeTimers();
+    const run = vi.fn<typeof runChild>(async (_ctx, _agent, task) => ({ ...result, answer: `answer to ${task}` }));
+    const { call, session, sendMessage } = setup([explore], run);
+    await call({ agent: "explore", task: "one" });
+    await call({ agent: "explore", task: "two" });
+    await Promise.all(["1", "2"].map((id) => session.jobs.get(id)?.done));
+
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(sendMessage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sendMessage).toHaveBeenCalledOnce();
+    const { content } = sendMessage.mock.calls[0]?.[0] ?? {};
+    expect(content).toContain("answer to one");
+    expect(content).toContain("answer to two");
   });
 
   it("labels a job with the agent and the start of the task's first line", async () => {

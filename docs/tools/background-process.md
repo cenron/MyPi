@@ -1,7 +1,8 @@
 # Background process
 
 **Status:** done (slices 1–5, 2026-10-22: the job registry, `bash` with `background: true`, the exit notice,
-`job_list` / `job_stop`, and the footer and display). Slice 6 is for later.
+`job_list` / `job_stop`, and the footer and display). Slice 6 is for later. `job_wait` added 2026-10-26 with
+subagents.
 
 ## Goal
 
@@ -412,6 +413,19 @@ and its start, and leaves a foreground call, an error, a result without job deta
 resolver is registered once however many sessions start. Mutations caught: no notify on start or on end, listeners
 kept by `stopAll()`, a remover that does nothing, counting ended jobs, `1 jobs`, background drawing for every call,
 errors drawn as starts, other tools wrapped, and no registration.
+
+## `job_wait`
+
+Added 2026-10-26 (subagents milestone 1, checkpoint 5). `job_wait({ ids, timeout_seconds? })` waits until every
+listed job has ended, or the timeout (300 seconds by default, at most 1800), and returns what each job's notice would
+have said: for a subagent, its whole answer. That notice then isn't sent, so the model doesn't get the result twice.
+While it waits, the jobs' notices are reserved: a job that ends during the wait would otherwise send its notice
+first, since that handler was registered earlier. A job still running at the timeout is reported, and its notice is
+released to come later. Escape ends the wait, not the jobs. It's marked read-only, like `job_list`. The `background`
+descriptions say to use it only when the model can't go on without the result.
+
+Each job's notice builder is kept in `src/tool/jobs/notice.ts` (a `WeakMap` keyed by the job), which `noticeOnEnd`
+fills and `takeNotice` reads, so `job_wait`, a single notice, and a subagent group all build the same text.
 
 ## Decided
 

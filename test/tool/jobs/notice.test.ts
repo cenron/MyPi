@@ -1,7 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JobInfo } from "#core/types";
-import { formatNotice, jobNotice, noticeOnEnd } from "#tool/jobs/notice";
+import { formatNotice, jobNotice, NoticeGroup, noticeOnEnd, takeNotice } from "#tool/jobs/notice";
 import { fakeSession } from "../../fakes";
 
 /** A job that completed after 3 seconds; rows change what they test. */
@@ -62,6 +62,87 @@ describe("formatNotice", () => {
       "<error>job 1 failed</error><muted> · exit 3 · 3.0s · npm run build</muted>\n" +
         "<toolOutput>one</toolOutput>\n<toolOutput>two</toolOutput>",
     );
+  });
+});
+
+afterEach(() => vi.useRealTimers());
+
+describe("NoticeGroup", () => {
+  it("groups successful notices after three seconds of quiet", async () => {
+    vi.useFakeTimers();
+    const { session, sendMessage } = fakeSession();
+    const group = new NoticeGroup(session, 3_000);
+    let finishFirst: (() => void) | undefined;
+    let finishSecond: (() => void) | undefined;
+    const first = session.jobs.start({
+      kind: "subagent",
+      label: "one",
+      run: () =>
+        new Promise((resolve) => {
+          finishFirst = () => resolve(0);
+        }),
+    });
+    const second = session.jobs.start({
+      kind: "subagent",
+      label: "two",
+      run: () =>
+        new Promise((resolve) => {
+          finishSecond = () => resolve(0);
+        }),
+    });
+    noticeOnEnd(session, first, undefined, group);
+    noticeOnEnd(session, second, undefined, group);
+    finishFirst?.();
+    await first.done;
+    await vi.advanceTimersByTimeAsync(2_000);
+    finishSecond?.();
+    await second.done;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(sendMessage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0]?.[0].content).toContain("Background job 1 completed");
+    expect(sendMessage.mock.calls[0]?.[0].content).toContain("Background job 2 completed");
+  });
+
+  it("sends failures immediately without flushing successful notices", async () => {
+    vi.useFakeTimers();
+    const { session, sendMessage } = fakeSession();
+    const group = new NoticeGroup(session, 3_000);
+    const success = session.jobs.start({ kind: "subagent", label: "success", run: async () => 0 });
+    const failure = session.jobs.start({ kind: "subagent", label: "failure", run: async () => 1 });
+    noticeOnEnd(session, success, undefined, group);
+    noticeOnEnd(session, failure, undefined, group);
+    await Promise.all([success.done, failure.done]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0]?.[0].content).toContain("failure");
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage.mock.calls[1]?.[0].content).toContain("success");
+  });
+
+  it("omits taken jobs and sends nothing after the session closes", async () => {
+    vi.useFakeTimers();
+    const { session, sendMessage } = fakeSession();
+    const group = new NoticeGroup(session, 3_000);
+    const taken = session.jobs.start({ kind: "subagent", label: "taken", run: async () => 0 });
+    const pending = session.jobs.start({ kind: "subagent", label: "pending", run: async () => 0 });
+    noticeOnEnd(session, taken, undefined, group);
+    noticeOnEnd(session, pending, undefined, group);
+    await Promise.all([taken.done, pending.done]);
+    takeNotice(taken);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0]?.[0].content).not.toContain("taken");
+
+    const closingGroup = new NoticeGroup(session, 3_000);
+    const closing = session.jobs.start({ kind: "subagent", label: "closing", run: async () => 0 });
+    noticeOnEnd(session, closing, undefined, closingGroup);
+    await closing.done;
+    session.jobs.stopAll();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 });
 

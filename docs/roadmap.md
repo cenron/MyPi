@@ -66,7 +66,7 @@ Asked for 2026-10-25. Deferred until everything in **Next up** is done; a list, 
 - [folder-guard](rules/folder-guard.md), the first core rule: asks before a tool's `path` or a bash command reaches
   outside the session's folder; lsp roots never go above it.
 - Built-in tools: [web_search](tools/web-search.md), [web_fetch](tools/web-fetch.md),
-  [background process](tools/background-process.md) (`bash` with `background: true`, `job_list`, `job_stop`).
+  [background process](tools/background-process.md) (`bash` with `background: true`, `job_list`, `job_wait`, `job_stop`).
 - [MCP server list](mcp/README.md): Parallel and Exa.
 
 ## How to choose

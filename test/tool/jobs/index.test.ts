@@ -2,7 +2,8 @@ import { rm } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "#core/session";
 import type { JobSpec } from "#core/types";
-import { jobListTool, jobStopTool } from "#tool/jobs/index";
+import { jobListTool, jobStopTool, jobWaitTool } from "#tool/jobs/index";
+import { noticeOnEnd } from "#tool/jobs/notice";
 import { fakeSession } from "../../fakes";
 
 /** A job that runs until it's stopped, rejecting then as pi's `exec` does. */
@@ -56,6 +57,104 @@ describe("job_list", () => {
         `2 · completed (exit code 0) · 0.0s · npm test · ${ended.info.logPath}`,
       ].join("\n"),
     );
+  });
+});
+
+describe("job_wait", () => {
+  it("returns the registered full notice and suppresses the later notice", async () => {
+    const session = newSession();
+    let finish: (() => void) | undefined;
+    const job = session.jobs.start({
+      kind: "subagent",
+      label: "agent",
+      run: () =>
+        new Promise((resolve) => {
+          finish = () => resolve(0);
+        }),
+    });
+    noticeOnEnd(session, job, () => ({ content: "full subagent answer", details: { job: job.info, tail: "" } }));
+    const waiting = jobWaitTool(session).definition.execute(
+      "call",
+      { ids: [job.info.id] },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    finish?.();
+    await job.done;
+    const result = await waiting;
+    expect(result.content[0]).toMatchObject({ type: "text", text: "full subagent answer" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(session.pi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("leaves no timer behind once the jobs have ended", async () => {
+    vi.useFakeTimers();
+    const session = newSession();
+    const job = session.jobs.start({ kind: "shell", label: "true", run: async () => 0 });
+    await jobWaitTool(session).definition.execute("call", { ids: [job.info.id] }, undefined, undefined, {} as never);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("reports running jobs at timeout without consuming their later notice", async () => {
+    vi.useFakeTimers();
+    const session = newSession();
+    let finish: (() => void) | undefined;
+    const job = session.jobs.start({
+      ...server,
+      run: () =>
+        new Promise((resolve) => {
+          finish = () => resolve(0);
+        }),
+    });
+    noticeOnEnd(session, job);
+    const waiting = jobWaitTool(session).definition.execute(
+      "call",
+      { ids: [job.info.id], timeout_seconds: 2 },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await waiting;
+    expect(result.content[0]).toMatchObject({ type: "text", text: "1 still running after 2s: npm run dev" });
+    finish?.();
+    await job.done;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.pi.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops waiting on abort without stopping the job", async () => {
+    const session = newSession();
+    let finish: (() => void) | undefined;
+    const job = session.jobs.start({
+      ...server,
+      run: () =>
+        new Promise((resolve) => {
+          finish = () => resolve(0);
+        }),
+    });
+    const controller = new AbortController();
+    const waiting = jobWaitTool(session).definition.execute(
+      "call",
+      { ids: [job.info.id] },
+      controller.signal,
+      undefined,
+      {} as never,
+    );
+    controller.abort();
+    const result = await waiting;
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("still running") });
+    expect(job.info.status).toBe("running");
+    finish?.();
+    await job.done;
+  });
+
+  it("rejects an unknown id with the job_list direction", async () => {
+    const session = newSession();
+    await expect(
+      jobWaitTool(session).definition.execute("call", { ids: ["missing"] }, undefined, undefined, {} as never),
+    ).rejects.toThrow("job_list shows them");
   });
 });
 
