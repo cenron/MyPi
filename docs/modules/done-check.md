@@ -186,7 +186,7 @@ with another extension").
    each diagnostics source that answered, with how many changed files it checked, and each approved command that ran
    (`Done check passed: lsp checked 1 changed file; true passed.`); if nothing ran, it stays quiet. The line
    lands after the model's last message, so the model sees it on its next turn, not in the run it ends.
-5. **Planned 2026-10-26, with [todo](../tools/todo.md) slice 4.** Open tasks: when a Build run ends with todo tasks
+5. **Planned 2026-10-26, with [todo](todo.md) slice 4.** Open tasks: when a Build run ends with todo tasks
    still `pending` or `in_progress`, the report lists them and the run continues, as for a failed command. It asks the
    todo tool on the event bus (an `open-tasks` question). Aimed at milestone 1's main failure: stopping partway.
 

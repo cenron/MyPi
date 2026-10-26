@@ -39,7 +39,6 @@ The must-haves:
 |---|---|---|
 | [web_search](web-search.md) | done | Search the web through keyless search services; returns titles, URLs, and excerpts |
 | [web_fetch](web-fetch.md) | done | Fetch a public URL and return readable markdown, capped, with the full text saved when cut |
-| [todo](todo.md) | planned (next after the self-build fixes) | Claude Code-style task tools: a checklist the agent keeps while it works, shown above the editor, seeded from the plan, checked by the done check |
 | [background process](background-process.md) | done | Start long-running commands, read their output, stop them, and get told when they exit; monitor output |
 | [apply_patch](apply-patch.md) | idea | Multi-file edits in Codex's patch format |
 | [worktree](worktree.md) | done | `/worktree` enter, exit, list, remove: a conversation moves into a git worktree and back; memories and plans stay shared with the main checkout. No model-facing tools; subagents use `Session.worktrees`. |
