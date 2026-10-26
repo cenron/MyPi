@@ -9,6 +9,7 @@ import {
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { resolveToolPath } from "#core/util/paths";
 import { BaseModule } from "../base";
+import { availableLanguages } from "./available";
 import { lspCmd } from "./commands/lsp";
 import { type Lookup, ServerManager } from "./manager";
 import { problemsIn } from "./problems";
@@ -19,11 +20,21 @@ import { lspEditTool } from "./tools/lsp-edit";
 /** What the module saves: the ids of the servers turned off in `/lsp`. */
 type LspState = { off: string[] };
 
+/** When to reach for `lsp`, shown only while a server can answer: the tool alone was almost never chosen. */
+const LSP_PROMPT =
+  "To find where a symbol is defined or used, use `lsp` (`find_symbol`, `references`, `definition`) instead of `rg` or " +
+  "`grep`: it matches the symbol, not text. Before reading a large file whole, use `lsp` `outline` to see its shape " +
+  "and read only the part you need. Use `rg` for text, strings, comments, config, and code no server covers, such as " +
+  "compiled files in `node_modules`.";
+
 export class LspModule extends BaseModule<LspState> {
   readonly servers = new ServerManager(SERVERS, this.session.ctx.cwd, (message) => this.session.logWarning(message));
 
   // Built once: `info` lists its info.
-  private readonly lspCommand = lspCmd(this.servers, (off) => this.saveState({ off: [...off] }));
+  private readonly lspCommand = lspCmd(this.servers, (off) => {
+    this.saveState({ off: [...off] });
+    this.updatePrompt();
+  });
   /** Servers the user was told the done check can't use, so each is told once a session. */
   private readonly warnedUnavailable = new Set<string>();
 
@@ -39,6 +50,7 @@ export class LspModule extends BaseModule<LspState> {
   init(): void {
     // Nothing is running yet, so this only restores the off set.
     void this.servers.setOff(this.savedOff());
+    this.updatePrompt();
 
     this.session.pi.on("tool_result", (ev, ctx) => this.onToolResult(ev, ctx));
     this.session.pi.on("session_shutdown", () => this.servers.stopAll());
@@ -52,6 +64,19 @@ export class LspModule extends BaseModule<LspState> {
 
   tools(): ToolDefinition[] {
     return [lspTool(this.servers), lspEditTool(this.servers)];
+  }
+
+  /** The prompt section for the languages a server can answer for now; none when no server can. */
+  private updatePrompt() {
+    const languages = availableLanguages(this.servers.statuses(), this.session.ctx.cwd);
+    if (languages.length === 0) {
+      this.setPrompt(undefined);
+      return;
+    }
+
+    this.setPrompt(
+      `## Language servers\n\nLanguage servers answer for ${languages.join(", ")} in this project. ${LSP_PROMPT}`,
+    );
   }
 
   /**

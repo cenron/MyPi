@@ -75,7 +75,7 @@ Asked for 2026-10-25. Deferred until everything in **Next up** is done; a list, 
 
 - Prefer what makes later work cheaper or better informed (memory, analytics) over what only adds a feature.
 - Measure before steering: no hints or blocks that push the agent toward a tool until analytics shows it's worth it.
-  See [analytics](modules/analytics.md#measuring-what-mypi-adds).
+  See [analytics](modules/analytics.md#what-to-measure).
 - Before calling a new tool done, run a self-evaluation prompt on it (Serena's method, same section).
 - Run an outside tool before wrapping it: if it works from bash and skills, it needs no MyPi code (ripwire).
 - New dependencies follow the rule in [AGENTS.md](../AGENTS.md#rules).

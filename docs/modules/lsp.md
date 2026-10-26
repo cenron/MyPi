@@ -1,6 +1,6 @@
 # LSP
 
-**Status:** done 2026-10-24 (slices 1–5). Diagnostics after each Build run come through the [done check](done-check.md), which asks this module on the event bus; symbol edits (slice 6) wait for a need.
+**Status:** done 2026-10-24 (slices 1–5), and the nudge (slice 7) 2026-10-26. Diagnostics after each Build run come through the [done check](done-check.md), which asks this module on the event bus; symbol edits (slice 6) wait for a need.
 
 ## Goal
 
@@ -310,6 +310,14 @@ export const SERVERS = [
 5. **Done 2026-10-24.** Rename, as the first action of `lsp_edit`.
 6. Later: symbol edits in `lsp_edit` (replace a body, insert before or after, safe delete), if
    [analytics](analytics.md) or a live test shows the agent needs them. In the live tests, `edit` did the job.
+7. **Done 2026-10-26: the nudge.** The agent almost never chose `lsp`: 3 calls against 447 `bash` and 291 `read` in
+   14 MyPi sessions, finding symbols with `rg` and reading whole files. The `lsp` tool's description now leads with
+   when to use it (a symbol's definition or uses instead of `rg`; `outline` before reading a large file), and the
+   module sets a prompt section with the same advice **only while a server can answer here**: installed, turned on
+   in `/lsp`, and rooted in the project (`availableLanguages`). Off, or with no server, there's no section, so nothing
+   points the model at a tool that can't answer, and no other part names `lsp`. Measured over subagents milestone 2
+   ([analytics](analytics.md#findings)): a third nudge, a hint on an `rg` or whole-file `read` result, waits for
+   those numbers.
 
 ## Tried and rejected
 

@@ -21,8 +21,8 @@ function toolResult(toolName: string, path: string, isError = false) {
 }
 
 /** The module, after `init()`, over a fake session whose branch holds `branch`. */
-function start(branch: unknown[] = []) {
-  const fake = fakeSession(branch);
+function start(branch: unknown[] = [], cwd = "/project") {
+  const fake = fakeSession(branch, cwd);
   const module = new LspModule(fake.session);
   module.init();
   return { ...fake, module };
@@ -92,6 +92,33 @@ describe("LspModule", () => {
   it("restores the saved off set", () => {
     const { module } = start([customEntry("mypi-module-lsp", { off: ["typescript", 3] })]);
     expect(module.servers.statuses().find((status) => status.spec.id === "typescript")?.on).toBe(false);
+  });
+
+  it("sets and removes its prompt according to available project servers", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "mypi-lsp-prompt-"));
+    const bin = await mkdtemp(join(tmpdir(), "mypi-lsp-bin-"));
+    await writeFile(join(cwd, "package.json"), "{}");
+    await writeFile(join(bin, "tsc"), "");
+    await chmod(join(bin, "tsc"), 0o755);
+    vi.stubEnv("PATH", bin);
+
+    try {
+      const { module, session, appendEntry } = start([], cwd);
+      const sections: Record<string, string> = {};
+      session.promptManager.apply(sections);
+      expect(sections["mypi-lsp"]).toContain("Language servers answer for TypeScript in this project.");
+
+      const toSave = SERVERS.map(() => DOWN);
+      await module.commands()[0]?.execute(pressing([SPACE, ...toSave, ENTER]), []);
+      expect(appendEntry).toHaveBeenCalledWith("mypi-module-lsp", { off: ["typescript"] });
+      const updated: Record<string, string> = {};
+      session.promptManager.apply(updated);
+      expect(updated["mypi-lsp"]).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(cwd, { recursive: true, force: true });
+      await rm(bin, { recursive: true, force: true });
+    }
   });
 
   it("applies and saves the menu's choice on Save", async () => {

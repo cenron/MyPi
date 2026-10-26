@@ -21,7 +21,7 @@ Picked 2026-10-22; the order to build them is in the [roadmap](../roadmap.md).
 | Symbol tools by name path; diagnostics at the end of a turn, not per edit | Serena | [lsp](../modules/lsp.md) |
 | Honest output: say what was cut and how to get it; "none found", not "none exist"; one call answers | ripwire | [tools](../tools/README.md#rules-for-every-built-in-tool) |
 | Edit receipts and atomic writes | ripwire | [apply_patch](../tools/apply-patch.md) |
-| Measure before steering the agent; a self-evaluation prompt per new tool | ripwire, Serena | [analytics](../modules/analytics.md#measuring-what-mypi-adds) |
+| Measure before steering the agent; a self-evaluation prompt per new tool | ripwire, Serena | [analytics](../modules/analytics.md#what-to-measure) |
 | Run an outside tool before wrapping it | ripwire | [roadmap](../roadmap.md) (ripwire is deferred: I install it myself) |
 | Write down what was tried and rejected | ripwire | [roadmap](../roadmap.md#how-to-choose) |
 | Children as pi SDK sessions; agents as Markdown; read-only roles; no nesting; evidence in the result | pi-subagents | [subagents](../modules/subagents.md) |

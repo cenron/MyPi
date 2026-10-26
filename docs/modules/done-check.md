@@ -1,6 +1,6 @@
 # Done check
 
-**Status:** done 2026-10-24 (slices 1 and 2). Counting how often it catches something moved to [analytics](analytics.md#measuring-what-mypi-adds).
+**Status:** done 2026-10-24 (slices 1 and 2). Counting how often it catches something moved to [analytics](analytics.md#what-to-measure).
 
 ## Goal
 
@@ -190,7 +190,7 @@ with another extension").
    passing test kept the check quiet; a function broken from outside during a run came back as a failed assertion;
    after No, nothing ran and the next run didn't ask. With the LSP module turned off in `/modules`, the report held
    only the failed command, a TypeScript error went unchecked, and no language server started.
-3. Moved to [analytics](analytics.md#measuring-what-mypi-adds) (2026-10-24): counting how often the check caught
+3. Moved to [analytics](analytics.md#what-to-measure) (2026-10-24): counting how often the check caught
    something, to show whether it pays. The done check would publish a notice on the bus for each report, and
    analytics would listen; the channel comes with analytics, its first listener.
 4. **Built 2026-10-26 (roadmap "Self-build fixes").** Say when it passed. A clean check appends one short line naming

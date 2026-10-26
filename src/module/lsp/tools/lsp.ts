@@ -62,9 +62,10 @@ export function lspTool(servers: ServerManager) {
     name: "lsp",
     label: "LSP",
     description:
-      `Code navigation from language servers (${languages}): outline a file, find a symbol by name path, list its ` +
-      "references or implementations, jump from a name to its definition, or get a file's errors. Exact where grep " +
-      "matches text; use it to see a file's shape or follow code without reading whole files.",
+      `To find where a symbol is defined or used, use lsp (find_symbol, references, definition) instead of rg or grep: ` +
+      `it matches the symbol, not text. Before reading a large file whole, use lsp outline to see its shape and read ` +
+      `only the part you need. Code navigation from language servers (${languages}): outline a file, find a symbol by ` +
+      `name path, list its references or implementations, jump from a name to its definition, or get a file's errors.`,
     promptSnippet: "Outline, find symbols, references, definitions, and errors, through language servers",
     parameters,
     annotations: { readOnlyHint: true },

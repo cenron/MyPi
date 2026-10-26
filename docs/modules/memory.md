@@ -149,7 +149,7 @@ in passing (a test persona, not my real preferences):
 | 3 | gpt-6-luna | Trigger line, plus a temporary end-of-run nudge | The nudge ("did this task teach you anything a future session would need … save it now") fired once after the build, and the model saved the preference at once. |
 
 Saving on its own depends on the model; the trigger line stays, but isn't enough by itself. The nudge was removed
-after the test: measure first ([analytics](analytics.md#measuring-what-mypi-adds) counts runs that changed files
+after the test: measure first ([analytics](analytics.md#what-to-measure) counts runs that changed files
 without a memory save). How it worked, if it comes back: on `before_agent_start`, reset two flags and mark a run whose
 prompt is the nudge itself; on `tool_result`, a successful `write`/`edit` in a memory folder is a save and one outside
 `.pi/` is work; on `agent_settled`, send the nudge with `pi.sendUserMessage` when the run did work, saved nothing, and
