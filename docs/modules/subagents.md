@@ -24,11 +24,16 @@ little. Only the summary reaches the main conversation, so its context stays sma
 session showed the cost of not having that: whole files of pi's compiled code and long command output filled the
 main context to 253k, and the code drifted as it did ([context](context.md)).
 
-- **The main agent hands off reads and checks,** not only writing: "find where pi resolves session cwd", "check this
-  diff against `docs/principles.md`". A read-only run, in the background when it can be, returning a short answer
-  with evidence (file and line).
-- **A builtin `explorer`** next to `architect`, `developer`, and `reviewer`: read-only tools, a small fast model by
-  default, told to answer in a few lines with file references and never paste whole files.
+Two uses (agreed 2026-10-25, following Claude Code):
+
+1. **The model offloads work on its own.** When a task means reading or searching widely, or an independent check,
+   the main agent starts a generic subagent without being asked: "find where pi resolves session cwd", "check this
+   diff against `docs/principles.md`". Two builtins, like Claude Code's: **`explore`** (read-only, for searching and
+   checking) and **`general`** (can write, for a multi-step task handed off whole). Both **inherit the parent's
+   model and thinking level**, so they're as capable as the session that started them. Only the short answer comes
+   back.
+2. **The user's own agents:** a reviewer, a developer, an architect, and any the user creates, by asking or in the
+   fleet view (milestones 2 and 3).
 - **Other parts may build on it:** a check after a slice (the reviewer against the principles), research during
   planning. That's why it's `ALWAYS`. Each still works without a subagent run in flight; they use it, they don't
   wait on it to start.
@@ -41,7 +46,10 @@ main context to 253k, and the code drifted as it did ([context](context.md)).
   roles, no nesting, evidence in the result, and a fleet view.
 - **[Radian](https://github.com/cenron/radian-harness)**, my own earlier harness: other harnesses as interactive
   sessions in herdr panes, on my subscriptions. That's the [external agents](#external-agents-later) part, deferred.
-- **Claude Code:** the Task tool, Explore agents, and agent files with a tool allowlist.
+- **Claude Code** ([sub-agents](https://code.claude.com/docs/en/sub-agents)): built-in Explore, Plan, and
+  general-purpose agents that inherit the main model and its thinking setting; the model delegates on its own from
+  each agent's description ("use proactively"); agent files with a tool allowlist, a model, and an effort level;
+  fresh context plus CLAUDE.md, or a fork; background by default; only the final report comes back.
 
 ## Decisions (2026-10-23)
 
@@ -50,21 +58,26 @@ main context to 253k, and the code drifted as it did ([context](context.md)).
    managed through herdr. Pi is always internal. No headless `claude -p` or `codex exec`. **External agents are
    deferred:** internal first.
 2. **Definitions, not one-off agents.** An agent is a reusable definition for a responsibility; a run is that agent
-   doing one task. MyPi ships `architect`, `developer`, `reviewer`, and (since 2026-10-25) `explorer`. I add agents by
-   asking the model or in the fleet view.
+   doing one task. MyPi ships the generic `explore` and `general` (2026-10-25) and the named `architect`,
+   `developer`, and `reviewer`. I add agents by asking the model or in the fleet view.
 3. **Creating, editing and deleting always ask me**, with the whole definition shown. Saved globally by default.
    Allowed in Plan mode; running a `write` agent isn't. Builtins can't be deleted, only overridden by my own copy.
 4. **Models and effort:** a loose name ("luna 6") is resolved once, at creation, to an exact `provider/id`; if it
    matches several models, the model asks me. The level actually used is shown when pi lowers it. A missing model
    fails clearly. `inherit` (the main session's model) is a deliberate choice, and the builtins ship with it.
+   **Thinking inherits too** by default (2026-10-25, as in Claude Code): a definition may set its own level, and
+   one run may override it.
 5. **Tools:** `subagent` (run) is always there; `agent_manage` (create, edit, delete) has `deferred` exposure and is
    loaded through `tool_search` when needed. The agent list is a prompt section.
 6. **Order:** milestone 1 (running internal agents) first; subagents comes before [analytics](analytics.md) on the
    roadmap, so analytics is built to track runs per agent, model and effort.
-7. **The main window orchestrates, and still works.** It hands work to specialists and keeps going, and it can still
-   do things itself. It delegates when my request or my instructions say so (as pi-subagents does: "task complexity
-   does not grant delegation authority"). A pure orchestrator that never edits, like Radian's coordinator, could be a
-   plan-build mode later.
+7. **The main window orchestrates, and still works.** It hands work to subagents and keeps going, and it can still
+   do things itself. **It may delegate on its own** (changed 2026-10-25, was "only when my request or my
+   instructions say so"), guided by each agent's description in the prompt section, as Claude Code's model is. My
+   instructions can still ask for a subagent or rule one out. Delegating costs a cold start, so the section says when
+   it pays off: wide reading or searching, an independent check, or a task that would flood the main context; not a
+   quick lookup or a one-file change. The per-prompt run limit is the backstop. A pure orchestrator that never edits,
+   like Radian's coordinator, could be a plan-build mode later.
 8. **Background by default.** A run returns at once and its answer wakes the main agent when it's done; foreground
    (`background: false`) is for when the next step can't happen without the answer. Runs that finish close together
    arrive as one message, and the main agent can wait for runs on purpose.
@@ -82,39 +95,58 @@ Markdown files with frontmatter and the prompt as the body:
 
 | Field | Meaning |
 |---|---|
-| `name`, `description` | How the parent picks it. |
+| `name`, `description` | How the parent picks it: the description is all it sees (see "Writing agent files"). |
 | `access` | `read-only` or `write`. |
 | `tools` | Optional: an exact allowlist of pi tool names, inside what `access` allows. |
 | `model` | An exact `provider/id`, or `inherit` for the main session's model. |
-| `thinking` | pi's thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
+| `thinking` | `inherit` (the default) or pi's thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 
-The builtins ship with `model: inherit`, since a public package can't know which providers someone is logged in to.
-I set models once ("make reviewer use luna 6"), which saves my copy over the shipped one:
+The builtins ship with `model: inherit` and `thinking: inherit`, since a public package can't know which providers
+someone is logged in to. I set models once ("make reviewer use luna 6"), which saves my copy over the shipped one:
 
-| Agent | Access | Thinking | Role |
+| Agent | Kind | Access | Role |
 |---|---|---|---|
-| `architect` | read-only | high | Designs and plans; challenges the approach before building. |
-| `developer` | write | medium | Implements a brief. |
-| `reviewer` | read-only | medium | Checks a change against its task: tests, edge cases, simplicity. |
+| `explore` | generic | read-only | Searches and checks across many files; answers briefly with file and line. |
+| `general` | generic | write | Carries out a multi-step task handed off whole; reports what it did and how it checked it. |
+| `architect` | named | read-only | Designs and plans before building; challenges the approach. |
+| `developer` | named | write | Implements a written brief. |
+| `reviewer` | named | read-only | Checks a change against its task: correctness, tests, edge cases, simplicity. |
+
+### Writing agent files
+
+Learned from Claude Code's built-in descriptions and its examples (2026-10-25):
+
+- **The description says when to use it,** not only what it is, since it's all the parent sees when deciding:
+  "Use proactively when answering means reading or searching widely". Name what comes back and what it won't do
+  ("locates code; doesn't review it"), so the parent doesn't misuse it, and what to pass ("say how thorough").
+- **Keep descriptions short.** Every one sits in the parent's prompt on every request; detail goes in the body,
+  which loads only when the agent runs.
+- **The body is short too:** one line of role, a few rules for how to work, and the exact shape of the answer.
+- **Every body says the agent isn't the orchestrator:** do the task and report; don't plan the rest of the work.
+
+The builtins' text is drafted in the [milestone 1 plan](#slices) checkpoint 2, to be kept as written unless the live
+check shows a problem.
 
 **Where they live:** the builtins in the module's folder; mine in `~/.pi/agent/agents/` (the default for new ones); a
 project's in `.pi/agents/`, loaded only in a trusted project. A name in my folder or the project's wins over a
 builtin.
 
-**The prompt section** lists each agent in one line (name, description, model, thinking, access) and says how to
-create or change one ("load `agent_manage` through `tool_search`"). It goes through MyPi's `PromptManager`, which
+**The prompt section** lists each agent in one line (name, description, model, thinking, access), says when
+delegating pays off (decision 7), and says how to create or change one ("load `agent_manage` through
+`tool_search`"). It goes through MyPi's `PromptManager`, which
 updates it when an agent is added or changed.
 
 ## Running an agent
 
-- **`subagent({ agent, task, model?, thinking?, background? })`**, `background` true by default. `model` and `thinking` override the definition for
-  this one run. An unknown agent is an error that lists the agents.
+- **`subagent({ agent, task, model?, thinking?, background? })`**, `background` true by default. `model` and
+  `thinking` override the definition for this one run. An unknown agent is an error that lists the agents.
 - **The child** is `createAgentSession({ cwd, modelRuntime, model, thinkingLevel, tools, resourceLoader, sessionManager })`
   with one `ModelRuntime.create()` per pi session. That reads pi's own `auth.json` and `models.json`, so children use
   the models and logins pi has (checked in pi 1.2.0). `SessionManager.create(cwd, dir, { parentSession })` makes
   each child an ordinary pi session file that points to its parent.
-- **Fresh context:** the child gets its agent prompt and the task, not my conversation. Starting from my conversation
-  (a fork) is a later slice.
+- **Fresh context:** the child gets its agent prompt and the task, not my conversation, plus the project's
+  `AGENTS.md` (like Claude Code's CLAUDE.md) for every agent except `explore`, which skips it as Claude Code's
+  Explore does: it only searches. Starting from my conversation (a fork) is a later slice.
 - **Background** (default): the call returns at once ("started reviewer as job 3") and the main agent keeps going. The
   child runs as a job in MyPi's [`JobManager`](../tools/background-process.md): `job_list`, `job_stop`, the footer
   count, and the fleet view. When it's done, an exit notice brings its answer into the conversation and wakes the
@@ -142,6 +174,10 @@ access:
 - **`read-only`:** read tools only (`read`, `grep`, `find`, `ls`), plus `bash` checked by plan-build's `planRule`
   through a small inline extension in the child (`DefaultResourceLoader`'s `extensionFactories`, checked in pi 1.2.0).
 - **`write`:** pi's normal tools.
+- **The folder guard, in every child** (gap found 2026-10-25 planning milestone 1): MyPi's `FolderRule` doesn't run
+  in a child either, so an `explore` run could read `~/.ssh` unasked. The same inline extension runs it; a child has no
+  UI to ask on, so a call reaching outside the session's folder is refused with the reason, and the child reports it
+  in its answer so the parent can ask the user.
 - **In the parent's Plan mode**, the module's own `onToolCall` rule allows a `subagent` run of a `read-only` agent and
   blocks a `write` agent with a reason. pi's generic rule would ask every time, since `subagent` isn't read-only.
 - **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
@@ -234,7 +270,7 @@ Deferred until internal agents work. The design so far:
 
 | Piece | Where | Notes |
 |---|---|---|
-| Module | `BaseModule`, `src/module/subagents/` | `ON_LOAD`. |
+| Module | `BaseModule`, `src/module/subagents/` | `ALWAYS` (foundational, 2026-10-25). |
 | Agent files | A pure parser (frontmatter + body), tested; a loader over the three folders | Builtins in the module's folder. |
 | Prompt section | `BaseModule.setPrompt` | The agent list; refreshed when an agent changes. |
 | `subagent` | `src/module/subagents/tools/`, from `tools()` | `direct` exposure. Streams progress with `onUpdate`, passes the `signal` to the child's `abort()`. |
@@ -252,11 +288,12 @@ Deferred until internal agents work. The design so far:
 
 1. Spike: a command creates an in-memory child with `createAgentSession` and `ModelRuntime.create()`, sends one
    prompt, and prints the answer. Proves models, logins and tools work in process.
-2. Agent definitions: the parser with tests, the three builtins, the three folders with my copy winning, and the
+2. Agent definitions: the parser with tests, the five builtins (`explore` and `general` generic), the three folders with my copy winning, and the
    prompt section.
 3. The `subagent` tool: background by default through `JobManager`, the exit notice that wakes the main agent, the
    result (answer, usage, session file, changed files), and `background: false` for foreground.
-4. Access in the child (read-only tools, Plan's shell check) and the Plan rule; one writer at a time.
+4. Access in the child (read-only tools, Plan's shell check, the folder guard) and the Plan rule; one writer at a
+   time.
 5. Grouped completions, and waiting on purpose.
 6. Rendering: progress under a foreground call; Ctrl+O expands.
 
@@ -278,10 +315,16 @@ Deferred until internal agents work. The design so far:
 
 ## Open questions
 
-- Where do child session files go: pi's session folder (they'd show in `/resume`), or a folder of their own?
-- How many background runs at once, and how many runs per prompt?
-- How close together is "close together" for grouped completions?
-- The fleet view's key, and whether `/agents` replaces `job_list` for runs.
+Answered for milestone 1 (2026-10-25), as defaults to revisit with real use:
+
+- **Child session files:** their own folder, `<agentDir>/subagents/sessions/`, so they don't crowd `/resume`; each
+  points to its parent (`parentSession`), and the run's result gives its path.
+- **Limits:** 3 background runs at once, 8 runs per prompt, a 30-minute timeout per run.
+- **Grouped completions:** runs that succeed within 3 seconds of each other arrive as one message.
+
+Still open:
+
+- The fleet view's key, and whether `/agents` replaces `job_list` for runs (milestone 2).
 - Should the [done check](done-check.md) run when a `developer` run finishes?
 - External agents: keep Radian's rule that Anthropic models only run on Claude Code?
 
