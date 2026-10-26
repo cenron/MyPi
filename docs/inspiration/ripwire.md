@@ -49,8 +49,11 @@ worktree name rule, and its own way to run git:
   duplicates nobody had seen: the done check's `inBuild` (90% the same as `isPlanMode`) and `writerSlug`, written in
   that checkpoint's review (83% the same as plan-build's `slugify`; now one function in core).
 
-So it answers well when asked; the model still has to think to ask, the same problem as `lsp`. The clone check needs
-no question at all, which is why it fits the [duplicate check](../roadmap.md) (row 14) better than a nudge does.
+So it answers well when asked; the model still has to think to ask, the same problem as `lsp`. **MyPi doesn't build on
+it** (the user's call, 2026-10-26): not every system has ripwire, so no MyPi code calls it and nothing nudges the
+agent toward it; where it's installed, its own skills inform the agent. Its skills are hidden from pi during subagents
+milestone 2 and turned back on for milestone 3, to measure what they do alone. The clone finding still taught the
+[duplicate check](../roadmap.md) (row 14) that a name lookup misses renamed copies.
 
 ripwire and the LSP module overlap (callers, references) but differ: LSP is exact and per-language with a server
 running; ripwire is fast, offline, cross-language, and ranks by task.
