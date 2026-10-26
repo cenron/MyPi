@@ -69,6 +69,7 @@ function fakeContext() {
     hasUI: true,
     ui: fakeUI(),
     cwd: "/project",
+    isProjectTrusted: () => false,
     sessionManager: { getBranch: () => [] },
   } as unknown as ExtensionCommandContext;
 }

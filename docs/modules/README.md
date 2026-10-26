@@ -21,7 +21,7 @@ Each module has a doc here, named after its folder in `src/module/`. Start a doc
 | [notifications](notifications.md) | idea | A desktop notification when the agent is done or a dialog is waiting |
 | [pair-programmer](pair-programmer.md) | idea | A pair-programming mode where the agent navigates and I drive |
 | [plan-build](plan-build.md) | done | Plan and Build modes with an "Implement this plan?" dialog |
-| [subagents](subagents.md) | planned | Reusable agents (architect, developer, reviewer, and ones I create) run as pi sessions through pi's SDK, with a fleet view; external harnesses in herdr panes later. `ALWAYS`: foundational, for background research and checks as well as delegated work |
+| [subagents](subagents.md) | building | Reusable agents (architect, developer, reviewer, and ones I create) run as pi sessions through pi's SDK, with a fleet view; external harnesses in herdr panes later. `ALWAYS`: foundational, for background research and checks as well as delegated work |
 
 Built-in tools that don't belong to a module are documented in [`docs/tools/`](../tools/README.md).
 

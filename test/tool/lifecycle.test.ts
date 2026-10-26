@@ -46,7 +46,13 @@ describe("built-in tool hooks", () => {
       registerMessageRenderer: () => {},
       registerToolRenderer: () => {},
     } as unknown as ExtensionAPI;
-    const ctx = { hasUI: true, ui: fakeUI(), cwd: "/project", sessionManager: { getBranch: () => [] } };
+    const ctx = {
+      hasUI: true,
+      ui: fakeUI(),
+      cwd: "/project",
+      isProjectTrusted: () => false,
+      sessionManager: { getBranch: () => [] },
+    };
     mypi(pi);
 
     await handlers.get("session_start")?.(

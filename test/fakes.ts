@@ -70,6 +70,7 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: 
   const ctx = {
     hasUI: true,
     cwd,
+    isProjectTrusted: () => false,
     ui,
     sessionManager: { getBranch: () => branch },
   } as unknown as ExtensionContext;

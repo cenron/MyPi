@@ -6,8 +6,16 @@ import { DoneCheckModule } from "./done-check";
 import { LspModule } from "./lsp";
 import { MemoryModule } from "./memory";
 import { PlanBuildModule } from "./plan-build";
+import { SubagentsModule } from "./subagents";
 
-const modules: ModuleClass[] = [PlanBuildModule, MemoryModule, LspModule, DoneCheckModule, ContextModule];
+const modules: ModuleClass[] = [
+  PlanBuildModule,
+  MemoryModule,
+  LspModule,
+  DoneCheckModule,
+  ContextModule,
+  SubagentsModule,
+];
 
 /**
  * Builds every module and hands them to the session's `ModuleManager`, which picks the ones to load for `reason`.

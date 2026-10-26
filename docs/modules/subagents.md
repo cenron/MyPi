@@ -1,7 +1,7 @@
 # Sub-agents
 
-**Status:** planned (design agreed 2026-10-23; foundational since 2026-10-25; on the [roadmap](../roadmap.md) after
-plan-build slice 9 and context B–D; milestone 1 first)
+**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–2 done
+2026-10-26: the spike, and agent definitions with the five builtins and the agent list)
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
