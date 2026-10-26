@@ -1,4 +1,5 @@
 import type { ContextEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { OpenTask } from "#core/channels";
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
 import { listForNewRun, rebuildTasks, type Task, taskReminderDue, taskReminderText } from "./tasks";
@@ -7,6 +8,9 @@ import { todoWidgetLines } from "./widget";
 
 /** The widget's key, named like MyPi's footer statuses (`mypi-<key>`). */
 const WIDGET_KEY = "mypi-todo";
+/** Seeds the list from the plan: the deliverables sit in a long plan read once, and the list keeps them in view. */
+const TODO_PROMPT =
+  "When you start a plan or a request with several steps, create one task per deliverable in the step you're doing, including its tests and live check. Work through the tasks in order.";
 
 /** Claude Code-style checklist tools whose state follows the active session branch. */
 export class TodoModule extends BaseModule {
@@ -35,11 +39,15 @@ export class TodoModule extends BaseModule {
   init() {
     this.restoreTasks();
     this.drawTasks();
+    this.setPrompt(TODO_PROMPT);
     this.session.pi.on("session_tree", () => this.onSessionTree());
     this.session.pi.on("context", (ev) => this.onContext(ev));
     // before_agent_start fires once per run, not on the done check's continuations.
     this.session.pi.on("before_agent_start", () => this.onRunStart());
     this.onKey("alt+t", () => this.toggleWidget());
+
+    // The done check asks which tasks are still open when a Build run ends.
+    this.answer("openTasks", () => this.openTasks());
   }
 
   /** A finished list stays in view until the next prompt, which starts a new one. */
@@ -67,6 +75,12 @@ export class TodoModule extends BaseModule {
 
   private restoreTasks() {
     this.tasks = rebuildTasks(this.session.ctx.sessionManager.getBranch());
+  }
+
+  private openTasks(): OpenTask[] {
+    return this.tasks.flatMap((task) =>
+      task.status === "completed" ? [] : [{ id: task.id, subject: task.subject, status: task.status }],
+    );
   }
 
   private toggleWidget() {

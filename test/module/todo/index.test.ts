@@ -1,5 +1,6 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { ask } from "#core/events";
 import { TodoModule } from "#module/todo/index";
 import { fakeSession } from "../../fakes";
 
@@ -33,6 +34,49 @@ describe("TodoModule", () => {
     ).resolves.toMatchObject({
       content: [{ text: "#1 [completed] Run tests" }],
     });
+  });
+
+  it("sets plan-seeding guidance and answers with open tasks", async () => {
+    const fake = fakeSession();
+    const module = new TodoModule(fake.session);
+    module.init();
+    const prompt: Record<string, string> = {};
+    fake.session.promptManager.apply(prompt);
+    expect(prompt["mypi-todo"]).toContain("create one task per deliverable");
+
+    const create = toolCall(module, "task_create");
+    await create?.execute(
+      "id",
+      { subject: "Run tests", description: "Run the suite" },
+      undefined,
+      undefined,
+      fake.session.ctx as ExtensionToolContext,
+    );
+    await toolCall(module, "task_update")?.execute(
+      "id",
+      { taskId: "1", status: "in_progress" },
+      undefined,
+      undefined,
+      fake.session.ctx as ExtensionToolContext,
+    );
+    await toolCall(module, "task_create")?.execute(
+      "id",
+      { subject: "Deploy", description: "Deploy it" },
+      undefined,
+      undefined,
+      fake.session.ctx as ExtensionToolContext,
+    );
+    await toolCall(module, "task_update")?.execute(
+      "id",
+      { taskId: "1", status: "completed" },
+      undefined,
+      undefined,
+      fake.session.ctx as ExtensionToolContext,
+    );
+
+    await expect(ask(fake.session.pi.events, "openTasks", undefined)).resolves.toEqual([
+      { kind: "answer", from: "todo", value: [{ id: "2", subject: "Deploy", status: "pending" }] },
+    ]);
   });
 
   it("includes task-use guidance in the tool descriptions", () => {

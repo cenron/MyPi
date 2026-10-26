@@ -1,5 +1,5 @@
 import { isAbsolute, relative } from "node:path";
-import type { Problem } from "#core/channels";
+import type { OpenTask, Problem } from "#core/channels";
 import { type FileChange, FileChangeKind } from "#core/util/walk";
 import { COMMAND_TIMEOUT_SECONDS, type CommandFailure } from "./project-commands";
 
@@ -9,8 +9,20 @@ export const MAX_CHECKED_FILES = 50;
 /** Most errors one report lists; the agent fixes the first ones, and the next round shows the rest. */
 const MAX_REPORTED_ERRORS = 20;
 
-/** What one check found: the sources' problems and the commands that failed, and how many changed files it left out. */
-export type Findings = { problems: readonly Problem[]; failures: readonly CommandFailure[]; skipped: number };
+/**
+ * What to do about open tasks. The last sentence keeps the report from overriding the user: seen live, a model told
+ * "do only the first, then stop" was sent back and did the second too.
+ */
+const OPEN_TASKS_NEXT_STEP =
+  "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.";
+
+/** What one check found: source problems, failed commands, skipped files, and tasks that are still open. */
+export type Findings = {
+  problems: readonly Problem[];
+  failures: readonly CommandFailure[];
+  skipped: number;
+  openTasks?: readonly OpenTask[];
+};
 
 /**
  * The line the agent gets when a check found nothing, naming what ran so a pass isn't mistaken for no check. Undefined
@@ -39,25 +51,30 @@ export function filesToCheck(changes: readonly FileChange[]): { files: string[];
 }
 
 /**
- * The report the agent gets: the errors in the files the run changed, by file and line, then each check command that
- * failed with the end of its output, and what to do about them. Undefined when there are none, so the check stays
- * quiet. Warnings and hints never count.
+ * The report the agent gets: changed-file errors, failed commands, and open tasks, with a next step for each. Undefined
+ * when there is nothing to report, so the check stays quiet. Warnings and hints never count.
  */
-export function doneCheckReport({ problems, failures, skipped }: Findings, cwd: string): string | undefined {
+export function doneCheckReport(
+  { problems, failures, skipped, openTasks = [] }: Findings,
+  cwd: string,
+): string | undefined {
   const errors = problems
     .filter((problem) => problem.severity === "error")
     .toSorted((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column);
-  if (errors.length === 0 && failures.length === 0) return undefined;
+  if (errors.length === 0 && failures.length === 0 && openTasks.length === 0) return undefined;
 
   const shown = errors.slice(0, MAX_REPORTED_ERRORS).map((error) => errorLine(error, cwd));
   const hidden = errors.length - shown.length;
+  const findingsSummary = summary(errors.length, failures.length);
   return [
-    `Done check: ${summary(errors.length, failures.length)}.`,
+    ...(findingsSummary ? [`Done check: ${findingsSummary}.`] : []),
     ...shown,
     ...(hidden > 0 ? [`… and ${hidden} more.`] : []),
     ...(errors.length > 0 && skipped > 0 ? [`${skipped} more changed files weren't checked.`] : []),
     ...failures.map(failureBlock),
-    "Fix these, or say why they're fine.",
+    ...(openTasks.length > 0 ? [openTasksBlock(openTasks)] : []),
+    ...(errors.length > 0 || failures.length > 0 ? ["Fix these, or say why they're fine."] : []),
+    ...(openTasks.length > 0 ? [OPEN_TASKS_NEXT_STEP] : []),
   ].join("\n");
 }
 
@@ -68,6 +85,12 @@ function summary(errors: number, failures: number): string {
     ...(failures > 0 ? [`${failures === 1 ? "1 check command" : `${failures} check commands`} failed`] : []),
   ];
   return parts.join(", and ");
+}
+
+/** The pending work that keeps a Build run from passing. */
+function openTasksBlock(tasks: readonly OpenTask[]): string {
+  const lines = tasks.map(({ id, subject, status }) => `#${id} [${status}] ${subject.replace(/[\r\n]+/g, " ")}`);
+  return `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"} still open:\n${lines.join("\n")}`;
 }
 
 /** `` `npm test` failed (exit 1): `` and the end of its output, indented under it. */

@@ -19,10 +19,10 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 
 ## Behavior
 
-- **When:** at the end of a run in Build that finished normally (not aborted, no error) and changed files. Plan
-  makes no edits, so it's never checked. A `/plan implement` run is a Build run, so it ends with the check too. The
-  mode is plan-build's, so the check asks for it on the [event bus](#the-event-bus) (`mode`); with no answer (no
-  plan-build), it counts as Build.
+- **When:** at the end of a run in Build that finished normally (not aborted, no error), when files changed or todo
+  has open tasks. Plan makes no edits, so it's never checked. A `/plan implement` run is a Build run, so it ends with
+  the check too. The mode is plan-build's, so the check asks for it on the [event bus](#the-event-bus) (`mode`); with
+  no answer (no plan-build), it counts as Build.
 - **Changed files:** every file whose modification time differs from the start of the run, or that was created or
   deleted since, skipping hidden folders and `node_modules`. That catches `bash` (`sed -i`, code generators,
   `git checkout`), not only `edit`, `write`, and `lsp_edit`. Two scans per Build run: 4 ms for MyPi, 245 ms for a
@@ -67,6 +67,10 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
   Fix these, or say why they're fine.
   ```
 
+- **Open tasks** (todo slice): pending and in-progress tasks are reported even when no files changed. The report
+  lists each task's id, status, and subject, then asks the model to finish them or mark each completed or deleted and
+  say why, and to leave them open if the user asked it to stop before them. Without that last sentence, a model told
+  "do only the first, then stop" was sent back and did the second too (seen live 2026-10-26). An open-task report continues the run under the same 3-round and repeat rules; it is not a pass.
 - **Nothing to report:** says nothing. The footer shows `checking…` while it runs.
 - **Loop guard:** at most 3 rounds per prompt, and it stops early when a round's report is the same as the last one.
   After that it's quiet until the next prompt.
@@ -86,6 +90,7 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 | Changed files | `fileTimes` and `fileChanges`, moved from `lsp/util/walk.ts` to `src/core/util/walk.ts` | Two parts need them now, so they went to core, as [principles](../principles.md) say. `fileTimes` takes every file, or the extensions lsp asks for; core has its own change kinds (`FileChangeKind`), which lsp's client maps to the protocol's. |
 | Mode | `ask("mode")` on the [event bus](#the-event-bus) | plan-build answers with `"plan"` or `"build"`. |
 | Diagnostics | `ask("diagnostics", { files, signal })` on the event bus | The LSP module answers in `init()` (`problems.ts`), for each file a server serves, through the same `fileProblems` as its `diagnostics` action; each server is brought up to date with the disk once first. Files no server serves are skipped; a server not yet running starts then, as on any first use. See [lsp](lsp.md#design-in-pi). |
+| Open tasks | `ask("openTasks", undefined)` on the event bus | Todo answers with pending and in-progress tasks; no answer means todo is off. Open tasks are reported even with no changed files. |
 | Commands | `project-commands.ts`: `readCommands`, `approvalKey`, `isApproved`, `approve`, `runCommand` | The list is validated at the boundary (`{ "commands": string[] }`, else an error saying so); approvals in pi's agent dir (`getAgentDir()`), never the project. |
 | Approval | `ctx.ui.select` with Yes and No, in `approvedCommands` (`index.ts`) | Like the tool guard's dialog. |
 | `/done-check` | `commands/done-check.ts` | Shows the list and its approval. |
@@ -127,24 +132,29 @@ with another extension").
     jobs: number;
   };
 
+  export type OpenTask = { id: string; subject: string; status: "pending" | "in_progress" };
+
   export type MyPiQuestions = {
     /** Plan or Build. The done check asks; plan-build answers. */
     mode: { request: undefined; answer: "plan" | "build" };
     /** The problems in `files`. The done check asks; the LSP module answers. */
     diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
+    /** Tasks still open at the end of a Build run. The done check asks; todo answers. */
+    openTasks: { request: undefined; answer: OpenTask[] };
   };
   ```
 
 - Modules use them through `BaseModule` (`this.publish`, `this.subscribe`, `this.ask`, `this.answer`); core uses the
   functions with `session.pi.events`. `Session` doesn't grow.
 
-**Its first three channels:**
+**Its channels:**
 
 | Channel | Kind | Publishes or asks | Listens or answers |
 |---|---|---|---|
 | `jobs` | notice: how many jobs are running | `JobManager` | `Session`'s footer item; later the subagents fleet view |
 | `mode` | ask | done check | plan-build |
 | `diagnostics` | ask | done check | LSP |
+| `openTasks` | ask | done check | todo |
 
 - **`jobs` moved over from `JobManager.onChange`**, its own listener list, which is gone. `stopAll` stops publishing
   before the jobs end, as `onChange` dropped its listeners first: a job ending after the session has would otherwise
@@ -157,7 +167,7 @@ with another extension").
 ## Slices
 
 1. **Done 2026-10-24.** The event bus (`src/core/events.ts`, the `BaseModule` helpers, the channel maps) with its
-   first three channels: `jobs` moved over from `JobManager.onChange`, `mode` answered by plan-build, and
+   channels: `jobs` moved over from `JobManager.onChange`, `mode` answered by plan-build, and
    `diagnostics` answered by LSP. Then the done check itself: the changed-files snapshot (the walk helpers moved to
    core), the `agent_before_settle` report, the loop guard, and the footer. Tried live in pi with TypeScript, Go, and
    Python files holding type errors: one report listed all three servers' errors; told the errors were real, pi fixed
@@ -186,9 +196,10 @@ with another extension").
    each diagnostics source that answered, with how many changed files it checked, and each approved command that ran
    (`Done check passed: lsp checked 1 changed file; true passed.`); if nothing ran, it stays quiet. The line
    lands after the model's last message, so the model sees it on its next turn, not in the run it ends.
-5. **Planned 2026-10-26, with [todo](todo.md) slice 4.** Open tasks: when a Build run ends with todo tasks
-   still `pending` or `in_progress`, the report lists them and the run continues, as for a failed command. It asks the
-   todo tool on the event bus (an `open-tasks` question). Aimed at milestone 1's main failure: stopping partway.
+5. **Done 2026-10-26, with [todo](todo.md) slice 4.** Open tasks: when a Build run ends with todo tasks still
+   `pending` or `in_progress`, the report lists them and the run continues, as for a failed command, even when no files
+   changed, unless the user asked to stop before them. The done check asks todo on the event bus (`openTasks`). With
+   todo off, no one answers and behavior is unchanged. Aimed at milestone 1's main failure: stopping partway.
 
 ## Decided 2026-10-24
 

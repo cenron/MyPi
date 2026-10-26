@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Problem } from "#core/channels";
+import type { OpenTask, Problem } from "#core/channels";
 import { answer } from "#core/events";
 import type { Project } from "#core/worktree/index";
 import { DoneCheckModule } from "#module/done-check/index";
@@ -22,7 +22,12 @@ afterEach(() => rm(dir, { recursive: true, force: true }));
  * `problems` gives each check's answer.
  */
 function start(
-  options: { mode?: "plan" | "build"; problems?: (files: readonly string[]) => Problem[]; project?: Project } = {},
+  options: {
+    mode?: "plan" | "build";
+    problems?: (files: readonly string[]) => Problem[];
+    openTasks?: OpenTask[];
+    project?: Project;
+  } = {},
 ) {
   const fake = fakeSession([], dir, options.project);
   const events = fake.session.pi.events;
@@ -30,6 +35,7 @@ function start(
   answer(events, "mode", "plan-build", () => mode);
   const diagnostics = vi.fn(({ files }: { files: readonly string[] }) => options.problems?.(files) ?? []);
   answer(events, "diagnostics", "lsp", diagnostics);
+  answer(events, "openTasks", "todo-test", () => options.openTasks ?? []);
   new DoneCheckModule(fake.session).init();
 
   /** One run: starts it, lets `work` change files, then asks the check, as pi does before the run settles. */
@@ -93,6 +99,25 @@ describe("DoneCheckModule", () => {
     ],
   ])("stays quiet when %s", async (_case, options, work, outcome) => {
     expect(await start(options).runTurn(work, outcome)).toBeUndefined();
+  });
+
+  it("reports open tasks and continues when the Build run changed no files", async () => {
+    const { runTurn, diagnostics } = start({
+      openTasks: [{ id: "2", subject: "Write tests", status: "pending" }],
+    });
+
+    expect(await runTurn()).toEqual({
+      entries: [
+        {
+          type: "custom_message",
+          customType: "mypi-done-check",
+          content: expect.stringContaining("1 task still open:\n#2 [pending] Write tests"),
+          display: true,
+        },
+      ],
+      continue: true,
+    });
+    expect(diagnostics).not.toHaveBeenCalled();
   });
 
   it("stays quiet after a switch to Plan during the run", async () => {

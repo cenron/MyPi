@@ -282,7 +282,7 @@ built it in a sub-folder.
 10. **Built 2026-10-26 (roadmap "Self-build fixes").** Keep the thinking level across the hand-off. `/plan
     implement` reads the current level before switching sessions and saves it with the Build state; the new session
     restores it once, then drops it from module state so later resumes respect a level the user picked. The dialog's
-    Clear context choice uses the same command. Plan seeding belongs to [todo](todo.md)'s own prompt section, not
+    Clear context choice uses the same command. Task seeding lives in [todo](todo.md)'s own prompt section, not
     `buildPrompt(plan)`, so disabling todo removes its instructions.
 
 ## Open questions

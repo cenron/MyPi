@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Problem } from "#core/channels";
+import type { OpenTask, Problem } from "#core/channels";
 import { FileChangeKind } from "#core/util/walk";
 import type { CommandFailure } from "#module/done-check/project-commands";
 import { doneCheckPassed, doneCheckReport, filesToCheck, MAX_CHECKED_FILES } from "#module/done-check/report";
@@ -31,8 +31,8 @@ describe("filesToCheck", () => {
 });
 
 /** The report for `problems` and `failures` in /p, with `skipped` changed files left out. */
-const report = (problems: Problem[], failures: CommandFailure[] = [], skipped = 0) =>
-  doneCheckReport({ problems, failures, skipped }, "/p");
+const report = (problems: Problem[], failures: CommandFailure[] = [], skipped = 0, openTasks: OpenTask[] = []) =>
+  doneCheckReport({ problems, failures, skipped, openTasks }, "/p");
 
 describe("doneCheckPassed", () => {
   it.each([
@@ -99,6 +99,43 @@ describe("doneCheckReport", () => {
         "Fix these, or say why they're fine.",
       ].join("\n"),
     );
+  });
+
+  it.each([
+    [
+      "open tasks alone",
+      [],
+      [],
+      [
+        { id: "3", subject: "Write tests", status: "in_progress" },
+        { id: "4", subject: "Live check", status: "pending" },
+      ] as OpenTask[],
+      "2 tasks still open:\n#3 [in_progress] Write tests\n#4 [pending] Live check\n" +
+        "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.",
+    ],
+    [
+      "open tasks with errors",
+      [problem("/p/a.ts", 1)],
+      [],
+      [{ id: "1", subject: "Run tests", status: "pending" }] as OpenTask[],
+      "Done check: 1 error in files changed during this run.\na.ts:1:1  bad 1 (ts 1)\n" +
+        "1 task still open:\n#1 [pending] Run tests\nFix these, or say why they're fine.\n" +
+        "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.",
+    ],
+    [
+      "subjects with commas and line breaks remain on their task line",
+      [],
+      [],
+      [
+        { id: "1", subject: "Write tests, then\nrun them", status: "pending" },
+        { id: "2", subject: "Live check", status: "in_progress" },
+      ] as OpenTask[],
+      "2 tasks still open:\n#1 [pending] Write tests, then run them\n#2 [in_progress] Live check\n" +
+        "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.",
+    ],
+    ["no open tasks", [], [], [], undefined],
+  ])("reports %s", (_case, problems, failures, openTasks, expected) => {
+    expect(report(problems, failures, 0, openTasks)).toBe(expected);
   });
 
   it("reports a failed command alone, and one that couldn't run", () => {

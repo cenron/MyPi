@@ -3,6 +3,7 @@ import type {
   AgentBeforeSettleEventResult,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import type { OpenTask } from "#core/channels";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { fileChanges, fileTimes } from "#core/util/walk";
@@ -73,9 +74,9 @@ export class DoneCheckModule extends BaseModule {
   }
 
   /**
-   * The check, as pi's last chance to continue the run. Sends the report back and asks for one more model request,
-   * unless the run didn't finish normally, nothing changed, there are no errors, the last round got the same report,
-   * or the rounds are used up: pi's docs warn that an unconditional continuation loops.
+   * The check, as pi's last chance to continue the run. Sends changed-file errors, failed commands, or open tasks back
+   * for another model request; a repeated report stops the loop, as pi's docs warn that unconditional continuation
+   * loops.
    */
   private async onBeforeSettle(
     ev: AgentBeforeSettleEvent,
@@ -85,40 +86,53 @@ export class DoneCheckModule extends BaseModule {
     if (!run || ev.outcome !== "completed" || run.rounds >= MAX_ROUNDS) return undefined;
     if (!(await this.inBuild())) return undefined;
 
+    const openTasks = await this.openTasks();
     const { files, skipped } = filesToCheck(fileChanges(run.before, await fileTimes(ctx.cwd)));
-    if (files.length === 0) return undefined;
-
-    const result = await this.check(files, skipped, ctx);
-    if (result.report !== undefined) {
-      if (result.report === run.lastReport) return undefined;
-
-      run.rounds++;
-      run.lastReport = result.report;
-      return {
-        entries: [{ type: "custom_message", customType: REPORT_TYPE, content: result.report, display: true }],
-        continue: true,
-      };
+    if (files.length === 0) {
+      return this.continueWithReport(run, doneCheckReport({ problems: [], failures: [], skipped, openTasks }, ctx.cwd));
     }
+
+    const result = await this.check(files, skipped, openTasks, ctx);
+    if (result.report !== undefined) return this.continueWithReport(run, result.report);
 
     const passed = doneCheckPassed(result.sources, result.commands, files.length);
     if (passed === undefined) return undefined;
     return { entries: [{ type: "custom_message", customType: REPORT_TYPE, content: passed, display: true }] };
   }
 
-  /** The report for `files` and the project's commands, or undefined when nothing is broken. */
+  /** The report for changed files, approved commands, and any open tasks. */
   private async check(
     files: string[],
     skipped: number,
+    openTasks: OpenTask[],
     ctx: ExtensionContext,
   ): Promise<{ report: string | undefined; sources: string[]; commands: string[] }> {
     this.setFooter({ text: "checking…", color: FooterColor.MUTED });
     try {
       const { problems, sources } = await this.problemsIn(files, ctx);
       const { failures, commands } = await this.runCommands(ctx);
-      return { report: doneCheckReport({ problems, failures, skipped }, ctx.cwd), sources, commands };
+      return { report: doneCheckReport({ problems, failures, skipped, openTasks }, ctx.cwd), sources, commands };
     } finally {
       this.setFooter(undefined);
     }
+  }
+
+  /** The tasks still open according to todo, or none when that module is turned off. */
+  private async openTasks(): Promise<OpenTask[]> {
+    const answers = await this.ask("openTasks", undefined);
+    return answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
+  }
+
+  /** Sends one report back, unless it repeats the last one or the round limit is reached. */
+  private continueWithReport(run: Run, report: string | undefined): AgentBeforeSettleEventResult | undefined {
+    if (report === undefined || report === run.lastReport) return undefined;
+
+    run.rounds++;
+    run.lastReport = report;
+    return {
+      entries: [{ type: "custom_message", customType: REPORT_TYPE, content: report, display: true }],
+      continue: true,
+    };
   }
 
   /** Every source's problems in `files`. A source that fails is told to the user, who can fix it; the agent can't. */

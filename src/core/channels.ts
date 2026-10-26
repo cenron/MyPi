@@ -24,6 +24,9 @@ export type MyPiNotices = {
   jobs: number;
 };
 
+/** The subset todo shares with the done check; completed tasks do not block a Build run. */
+export type OpenTask = { id: string; subject: string; status: "pending" | "in_progress" };
+
 /**
  * Every question MyPi asks, by channel: what the asker sends and what each listener answers. Each says who asks and
  * who answers.
@@ -33,4 +36,6 @@ export type MyPiQuestions = {
   mode: { request: undefined; answer: "plan" | "build" };
   /** The problems in `files`. The done check asks; the LSP module answers. */
   diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
+  /** Tasks still open at the end of a Build run. The done check asks; todo answers. */
+  openTasks: { request: undefined; answer: OpenTask[] };
 };

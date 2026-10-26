@@ -1,7 +1,6 @@
 # todo
 
-**Status:** building (2026-10-26): the four task tools, branch-following state, and UI are built; the reminder and
-plan seeding with open tasks in the done check come next.
+**Status:** done 2026-10-26. Four task tools, branch-following state, the UI, reminder, plan seeding, and open-task reporting in the done check.
 
 ## Goal
 
@@ -54,8 +53,10 @@ to the next model request. It includes the current task list, if any, and is not
 - `readOnlyHint: true` is accurate: these tools change only session context and are available in Plan.
 - The toggle is `alt+t`; pi uses `ctrl+t` for thinking blocks.
 - The reminder comes every five quiet assistant messages since the last task tool call (or session start).
-- Plan seeding belongs to todo's own prompt section, not plan-build's Build prompt. Disabling todo removes its tools,
-  reminder, prompt section, widget, and open-task answer together.
+- Plan seeding belongs to todo's own prompt section, not plan-build's Build prompt. When starting a plan or a request
+  with several steps, create one task per deliverable in the step being done (including tests and live check), then
+  work through them in order. Disabling todo removes its tools, reminder, prompt section, widget, and open-task answer
+  together.
 - No `owner`, `blocks`, or `metadata` until there is a need for subagents to share and claim tasks.
 
 ## Implementation
@@ -66,8 +67,8 @@ to the next model request. It includes the current task list, if any, and is not
 | Module | `src/module/todo/index.ts` | Restores state and registers the module's hooks, prompt, and tools. |
 | UI | `src/module/todo/widget.ts` | Pure widget lines; the module updates the widget and working message. |
 | Reminder | `context` handler | Adds a transient reminder and task list to the next model request. |
-| Plan seeding | todo prompt section | Starts tasks from each deliverable in the step being done, including tests and live check. |
-| Done check | `openTasks` event-bus question | Reports pending and in-progress tasks at the end of a Build run. |
+| Plan seeding | todo prompt section | When starting a plan or multi-step request, creates one task per deliverable in the current step, including tests and live check, then works in order. |
+| Done check | `openTasks` event-bus question | Reports pending and in-progress tasks at the end of a Build run, even when no files changed; asks the model to finish or explain each task's completion or deletion. |
 
 ## What it doesn't solve
 
