@@ -73,6 +73,22 @@ export class Worktrees {
     return { worktree, blockers: await blockers(worktree.path) };
   }
 
+  /** Discards a managed worktree and its branch after its work has been saved elsewhere. */
+  async discard(name: string): Promise<void> {
+    const { worktree, blockers } = await this.inspect(name);
+    if (isInside(worktree.path, await realpath(this.cwd))) {
+      throw new Error(`Leave worktree ${name} before discarding it.`);
+    }
+    const localBlockers = blockers.filter((file) => file.startsWith(".pi/memories/") || file.startsWith(".pi/plans/"));
+    if (localBlockers.length) {
+      throw new Error(`Worktree ${name} has local state that cannot be discarded:\n${localBlockers.join("\n")}`);
+    }
+
+    const { main } = await mainAndWorktrees(this.cwd);
+    await git(main, ["worktree", "remove", "--force", worktree.path]);
+    await git(main, ["branch", "-D", `${BRANCH_PREFIX}${name}`]);
+  }
+
   /** Removes a clean managed worktree, and its branch when merged into the main checkout's HEAD. Never forces. */
   async remove(name: string): Promise<Removal> {
     const { worktree, blockers } = await this.inspect(name);

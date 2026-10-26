@@ -79,6 +79,32 @@ describe("Worktrees", () => {
     expect(await git(main, "branch", "--list", "mypi/worktree/task")).toBe("");
   });
 
+  it("discards work in a managed worktree and deletes its branch", async () => {
+    const { path } = await service.create("task");
+    await put(path, "tracked", "changed");
+    await put(path, "new.txt");
+
+    await service.discard("task");
+
+    expect(await git(main, "worktree", "list", "--porcelain")).not.toContain(path);
+    expect(await git(main, "branch", "--list", "mypi/worktree/task")).toBe("");
+  });
+
+  it.each([".pi/memories/local.md", ".pi/plans/local.md"])("refuses to discard local state at %s", async (file) => {
+    const { path } = await service.create("task");
+    await put(path, file);
+
+    await expect(service.discard("task")).rejects.toThrow(file);
+    expect(await git(main, "branch", "--list", "mypi/worktree/task")).not.toBe("");
+  });
+
+  it("only discards managed worktrees and never the checkout it is called from", async () => {
+    await expect(service.discard("missing")).rejects.toThrow("No MyPi worktree named missing");
+    const { path } = await service.create("task");
+
+    await expect(new Worktrees(path).discard("task")).rejects.toThrow("Leave worktree task");
+  });
+
   it("removes the checkout but keeps a branch with unmerged commits, saying why", async () => {
     const { path } = await service.create("task");
     await put(path, "tracked", "committed in the worktree");

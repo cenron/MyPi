@@ -135,6 +135,9 @@ git's own message, and nothing runs with `--force`.
   in `.pi/memories/` or `.pi/plans/` even though they're ignored (a patch from `git diff` can't carry them; the two
   ignore markers don't count). Other ignored files, such as `node_modules`, go with the checkout. Then
   `git branch -d`, which keeps an unmerged branch and says why.
+- `discard(name)`: for a managed worktree only, refuses the caller's current worktree and new or changed files in
+  `.pi/memories/` or `.pi/plans/`; after its work has been saved elsewhere, removes the checkout with
+  `git worktree remove --force` and deletes its branch with `git branch -D`.
 
 ### Shared state
 
@@ -168,16 +171,13 @@ work that would be lost; commit or move it first: new.txt".
    `checkout` field, and argument-count checks; tests went from 993 to 934 for the whole suite, and the worktree files
    from about 1,400 lines of code and tests to about 820. Each kept rule was broken on purpose to see its test fail.
 
-## Open questions
+## Subagent integration
 
-- **Subagents need a discard step** (found 2026-10-25 reviewing slice 2): a writer's patch is built by staging
-  everything in its worktree (`git diff --cached --binary`), and `remove` then refuses those staged changes, with no
-  force. After the patch is saved, the subagents work needs something like `worktrees.discard(name)`: managed
-  worktrees only, still refusing changed `.pi/memories/` or `.pi/plans/` files, deleting the branch as `remove` does.
-- [Subagents](../modules/subagents.md) depend on this (decided 2026-10-23): each sub-agent writer gets its own
-  worktree so writers can run in parallel. Design the create and remove steps so the subagents module can call them
-  without moving the main session. A writer's work comes back as a patch (decided 2026-10-23, see its doc), so
-  the worktree and branch are temporary: created for the run, removed once the patch is captured.
+The subagents writer helper is implemented and tested directly; wiring it into runs remains checkpoint 4. Once
+wired, [Subagents](../modules/subagents.md) will use `Worktrees.discard` after saving a writer's patch and handoff. It is limited
+to managed checkouts, refuses new or changed `.pi/memories/` and `.pi/plans/` files, then removes the worktree
+forcibly and deletes its branch. The subagents module calls the service without moving the main session; each writer's
+temporary worktree and branch are removed after its patch and handoff are captured.
 
 ## References
 

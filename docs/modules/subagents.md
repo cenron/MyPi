@@ -208,21 +208,20 @@ it here (no UI). Tell the user what you needed and why: …").
 - **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
   Without one, only one `write` run works in the main checkout at a time (counted in the tool, foreground and
   background alike), and the main agent leaves its files alone.
-- **Children don't commit. A writer's work comes back as a patch:**
+- **Children don't commit. A writer's work comes back as a patch:** `writer.ts` implements and tests preparation and
+  capture directly; the `subagent` run path is not wired to it yet (checkpoint 4).
   1. The worktree branches from the **calling checkout's committed `HEAD`** (decided 2026-10-25), matching
      `Session.worktrees.create`. If the parent works inside a worktree, the writer branches from that checkout,
      not the primary checkout. Storage remains under the main checkout's `.pi/worktrees/`. The clean-caller
-     preflight below applies to the calling checkout.
-  2. When the run ends, MyPi stages everything in the worktree (new files too) and writes `git diff --cached --binary`
-     to a patch file, plus a handoff file: the agent, the task, the base commit, the files changed, the patch's path,
-     and the child's summary.
-  3. The worktree and its branch are removed. The patch and handoff stay until the patch is applied or dropped.
-     **Gap (found 2026-10-25, worktree slice 2):** `Session.worktrees.remove` refuses any staged change, with no
-     force, and step 2 stages everything on purpose. So this step needs a discard on the worktree service, something
-     like `worktrees.discard(name)`, called only after the patch and handoff are saved: managed worktrees only, still
-     refusing new or changed `.pi/memories/` and `.pi/plans/` files (the patch can't carry ignored files, so the run
-     reports them instead of losing them), and deleting the branch as `remove` does. Build it with this module, not
-     as a model-facing tool. See [worktree](../tools/worktree.md#open-questions).
+     preflight below applies to the calling checkout. `prepareWriter` in `src/module/subagents/writer.ts` refuses
+     any `git status --porcelain` output and lists the caller's files before creating the worktree.
+  2. `captureWork` stages everything in the worktree (`git add -A`) and writes `git diff --cached --binary <base>`
+     to `.pi/patches/<name>.patch`, plus `<name>.md`: the agent, task, base commit, files changed, diff stat, patch
+     path, and child's summary. No-change runs create no patch or handoff.
+  3. After both files are saved, `Session.worktrees.discard(name)` removes the managed worktree with force and deletes
+     its branch. It still refuses new or changed `.pi/memories/` and `.pi/plans/` files, which a patch cannot carry;
+     if that happens, the worktree stays and the refusal names the files. Patches and handoffs stay until applied or
+     dropped. See [worktree](../tools/worktree.md#subagent-integration).
   4. The run's result names the patch and the files. The main agent reviews it and calls `subagent_apply`, which
      asks me first: a dialog with the agent, the task, the files and their diff stat, and the child's summary, and
      Apply, Drop, or Cancel (Cancel is the default, as in Radian's merge dialog). Apply runs `git apply --3way` (Build
