@@ -2,7 +2,7 @@ import { basename, dirname } from "node:path";
 import type { Duplicate } from "#core/channels";
 import { errorMessage } from "#core/util/errors";
 import { git } from "#core/worktree/git";
-import { duplicateLocations, isTestFile, newDeclarations } from "./duplicates";
+import { declaredIn, duplicateLocations, isTestFile, newDeclarations } from "./duplicates";
 import type { Lookup, ServerManager } from "./manager";
 import { forEachServedFile } from "./served-files";
 import { languageIdOf } from "./servers";
@@ -26,7 +26,9 @@ export async function duplicatesIn(
     const symbols = namedSymbols(await client.documentSymbols(uri, signal));
     for (const symbol of newDeclarations(symbols, await committedText(file))) {
       const name = symbol.path.at(-1) ?? "";
-      for (const match of duplicateLocations(name, file, await client.workspaceSymbols(name, signal))) {
+      const results = await client.workspaceSymbols(name, signal);
+      if (!declaredIn(name, file, results)) continue;
+      for (const match of duplicateLocations(name, file, results)) {
         if (!isTestFile(match.file)) duplicates.push({ name, file, line: symbol.start + 1, elsewhere: match });
       }
     }

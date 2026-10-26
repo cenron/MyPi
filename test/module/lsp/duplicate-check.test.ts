@@ -38,4 +38,13 @@ describe("duplicatesIn", () => {
       { name: "formatPrice", file, line: 1, elsewhere: { file: join(dir, "price.ts"), line: 1 } },
     ]);
   });
+
+  // Seen live: imported helpers were reported as duplicates of themselves.
+  it("doesn't report a name the file only imports", async () => {
+    const file = join(dir, "cart.ts");
+    await writeFile(file, "import formatPrice\n");
+    servers = new ServerManager([fakeSpec()], dir, () => {});
+
+    expect(await duplicatesIn(servers, [file], vi.fn())).toEqual([]);
+  });
 });

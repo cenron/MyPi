@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { type SymbolInformation, SymbolKind } from "vscode-languageserver-protocol/node";
-import { duplicateLocations, isTestFile, newDeclarations, topLevelDeclarations } from "#module/lsp/duplicates";
+import {
+  declaredIn,
+  duplicateLocations,
+  isTestFile,
+  newDeclarations,
+  topLevelDeclarations,
+} from "#module/lsp/duplicates";
 import type { NamedSymbol } from "#module/lsp/symbols";
 
 function symbol(name: string, depth = 0, kind: SymbolKind = SymbolKind.Function): NamedSymbol {
@@ -12,6 +18,8 @@ describe("duplicate rules", () => {
     ["top-level declaration", [symbol("top")], [symbol("top")]],
     ["nested declaration", [symbol("nested", 1)], []],
     ["non-declaration", [symbol("field", 0, SymbolKind.Field)], []],
+    // Private names such as a tool's `parameters` repeat on purpose.
+    ["a top-level constant", [symbol("parameters", 0, SymbolKind.Constant)], []],
   ])("selects %s", (_case, input, expected) => {
     expect(topLevelDeclarations(input)).toEqual(expected);
   });
@@ -67,5 +75,19 @@ describe("duplicate rules", () => {
     expect(duplicateLocations("format", "/repo/src/current.ts", results)).toEqual([
       { file: "/repo/src/other.ts", line: 9 },
     ]);
+  });
+
+  // A file's symbol list also has the names it imports; only a name declared in the file counts.
+  it.each([
+    ["declared in the file", "file:///repo/src/current.ts", true],
+    ["only declared elsewhere (an import)", "file:///repo/src/other.ts", false],
+  ])("treats a name %s", (_case, uri, expected) => {
+    const results = [
+      {
+        name: "format",
+        location: { uri, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } },
+      },
+    ] as SymbolInformation[];
+    expect(declaredIn("format", "/repo/src/current.ts", results)).toBe(expected);
   });
 });

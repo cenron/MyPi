@@ -3,13 +3,15 @@ import { fileURLToPath } from "node:url";
 import { type SymbolInformation, SymbolKind, type WorkspaceSymbol } from "vscode-languageserver-protocol/node";
 import type { NamedSymbol } from "./symbols";
 
+/**
+ * The kinds a rebuilt helper takes. Not constants and variables: private names such as a tool's `parameters` repeat on
+ * purpose, and MyPi's helpers are `function` declarations (seen live: every `parameters` was reported).
+ */
 const DECLARATION_KINDS = new Set<number>([
   SymbolKind.Function,
   SymbolKind.Class,
   SymbolKind.Interface,
   SymbolKind.Enum,
-  SymbolKind.Constant,
-  SymbolKind.Variable,
 ]);
 
 /** Source declarations eligible for checking; nested declarations and non-declarations are excluded. */
@@ -33,6 +35,20 @@ export function newDeclarations(current: readonly NamedSymbol[], committed: stri
     const name = path.at(-1) ?? "";
     return !new RegExp(`(?<![\\p{ID_Continue}$])${escapeRegex(name)}(?![\\p{ID_Continue}$])`, "u").test(committed);
   });
+}
+
+/**
+ * Whether the workspace search finds `name` declared in `file` itself. A file's symbol list also has the names it
+ * imports, which aren't declarations there (seen live: imported helpers were reported as duplicates of themselves).
+ */
+export function declaredIn(
+  name: string,
+  file: string,
+  results: readonly (SymbolInformation | WorkspaceSymbol)[],
+): boolean {
+  return results.some(
+    (result) => result.name === name && "uri" in result.location && fileURLToPath(result.location.uri) === file,
+  );
 }
 
 /** Workspace matches in a different file, with an exact symbol name. */

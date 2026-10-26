@@ -217,7 +217,10 @@ with another extension").
    doesn't appear in the file's last commit at all (plain text, so a local copy of a helper the file already imported
    isn't caught, and neither is a copy under another name: accepted limits). Seen live: asked to "add a helper that
    formats a price" next to an existing `formatPrice`, the model wrote its own, the report named both, and the model
-   imported the existing one instead. Aimed at pi rebuilding helpers it was told about (4 in subagents milestone 2).
+   imported the existing one instead. Aimed at pi rebuilding helpers it was told about (4 in subagents milestone 2). **Narrowed
+   2026-10-26** after its first runs on pi raised only false alarms: a name counts only if the server's workspace
+   search finds it declared in the file (a file's symbol list also has its imports), and only functions, classes,
+   interfaces, and enums count (private constants such as each tool's `parameters` repeat on purpose).
 
 ## Decided 2026-10-24
 

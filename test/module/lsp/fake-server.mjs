@@ -125,7 +125,7 @@ connection.onRequest(WorkspaceSymbolRequest.type, ({ query }) => {
   return [...disk.keys(), ...open].flatMap((file) => {
     const uri = pathToFileURL(file).href;
     return flatten(symbolsOf(docs.get(uri) ?? disk.get(file) ?? ""), "")
-      .filter((symbol) => symbol.name.includes(query))
+      .filter((symbol) => symbol.name.includes(query) && !symbol.imported)
       .map((symbol) => found(symbol.name, symbol.container, uri, symbol.range.start.line, symbol.kind));
   });
 });
@@ -140,6 +140,20 @@ function symbolsOf(text) {
   const top = [];
   const stack = [];
   text.split("\n").forEach((line, i) => {
+    // `import NAME` is listed among the file's symbols, as tsserver lists imports, but isn't a declaration.
+    const imported = /^import (\w+)/.exec(line);
+    if (imported) {
+      const range = { start: { line: i, character: 0 }, end: { line: i, character: line.length } };
+      top.push({
+        name: imported[1],
+        kind: SymbolKind.Function,
+        range,
+        selectionRange: range,
+        children: [],
+        imported: true,
+      });
+      return;
+    }
     const match = /^( *)(class|method|function) (\w+)/.exec(line);
     if (!match) return;
 
