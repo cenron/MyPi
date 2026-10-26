@@ -4,6 +4,7 @@ import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-age
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
 import { type AgentDefinition, loadAgents, projectAgentDir, userAgentDir } from "./agents";
+import { agentsCmd } from "./agents-view";
 import { subagentApplyTool } from "./tools/apply";
 import { agentManageRule, agentManageTool } from "./tools/manage";
 import { subagentTool } from "./tools/subagent";
@@ -17,6 +18,17 @@ export class SubagentsModule extends BaseModule {
 
   get info(): ModuleInfo {
     return { name: "subagents", description: "Run internal agents", commands: [], loadType: ModuleLoadMode.ALWAYS };
+  }
+
+  commands() {
+    return [
+      agentsCmd({
+        agents: () => this.agents,
+        cwd: () => this.session.ctx.cwd,
+        userDir: userAgentDir,
+        reload: () => this.reloadAgents(),
+      }),
+    ];
   }
 
   tools(): ToolDefinition[] {

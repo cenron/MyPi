@@ -1,7 +1,7 @@
 # Sub-agents
 
-**Status:** milestones 1 and 2 done 2026-10-26. Milestone 3 is in progress: `agent_manage` creates, edits, and
-deletes definitions with approval; the `/agents` view is next.
+**Status:** milestones 1–3 done 2026-10-26. `agent_manage` creates, edits, and deletes definitions with approval;
+`/agents` lists, creates, edits, and deletes definitions.
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -256,6 +256,14 @@ it here (no UI). Tell the user what you needed and why: …").
 - **Allowed in Plan mode:** a definition isn't project code. Only the agent folders are writable for `agent_manage`.
 - **After a change**, the module reloads definitions and updates its prompt section for the next request.
 
+## Agents view
+
+`/agents` lists each definition with its source, model, thinking level, and access. Enter shows the full definition;
+`e` edits it in pi's editor, `n` creates a user agent from a template, and `d` deletes a user or project definition
+after confirmation. Builtins can't be deleted. Editing a builtin saves a user copy; editing a project definition saves
+back to `.pi/agents/`. Invalid editor text is refused with the parser's message. Changes reload the list and prompt
+section.
+
 ## Jobs view
 
 The user's `/jobs` view covers every `JobManager` job, including shell jobs and subagents:
@@ -356,8 +364,8 @@ A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscrip
 
 **Milestone 3: creating agents**
 
-9. `agent_manage` (deferred): create, edit, delete, the confirm, model resolution, the actual thinking level.
-10. The agents view: create, edit, delete from the menu.
+9. **Done 2026-10-26:** `agent_manage` (deferred): create, edit, delete, the confirm, model resolution, the actual thinking level.
+10. **Done 2026-10-26:** `/agents` lists definitions and lets the user create, edit, and delete them from the menu.
 
 **Later**
 
@@ -375,7 +383,6 @@ Answered for milestone 1 (2026-10-25), as defaults to revisit with real use:
 
 Still open:
 
-- The `/agents` view for managing agent definitions (milestone 3).
 - Should the [done check](done-check.md) run when a `developer` run finishes?
 - External agents: keep Radian's rule that Anthropic models only run on Claude Code?
 

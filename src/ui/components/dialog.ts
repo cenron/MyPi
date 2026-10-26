@@ -1,6 +1,9 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Component, Container, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
+/** Rows a list shows inside a dialog before it scrolls; the overlays (`/jobs`, `/agents`) share it. */
+export const DIALOG_LIST_ROWS = 12;
+
 /** Dialog settings. */
 type DialogOptions = {
   title: string;

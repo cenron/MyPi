@@ -66,7 +66,7 @@ export async function runChild(
     modelRuntime: runtime,
     model,
     thinkingLevel: thinking,
-    tools: agent.tools ?? (agent.access === "read-only" ? READ_ONLY_TOOLS : undefined),
+    tools: childTools(agent),
     resourceLoader: resources,
     sessionManager: manager,
   });
@@ -164,4 +164,9 @@ export function runUsage(messages: readonly { role: string }[]): RunUsage {
     tokens: replies.reduce((sum, reply) => sum + reply.usage.totalTokens, 0),
     cost: replies.reduce((sum, reply) => sum + reply.usage.cost.total, 0),
   };
+}
+
+/** The tools a child of `agent` gets: its own list, else the read-only set, else undefined for pi's default tools. */
+export function childTools(agent: AgentDefinition): string[] | undefined {
+  return agent.tools ?? (agent.access === "read-only" ? READ_ONLY_TOOLS : undefined);
 }

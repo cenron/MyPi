@@ -10,9 +10,8 @@ import {
 import type { Session } from "#core/session";
 import type { Command, JobInfo } from "#core/types";
 import { jobDuration, jobEnding } from "#core/util/jobs";
-import { Dialog } from "#ui/components/dialog";
+import { DIALOG_LIST_ROWS, Dialog } from "#ui/components/dialog";
 
-const LIST_HEIGHT = 12;
 const OUTPUT_LINES = 100;
 
 /** `/jobs` opens the session's background jobs, with an output view and stop action. */
@@ -148,7 +147,7 @@ class JobsView implements Component {
       // No description column: SelectList gives it half the width, and the log path is in the opened view.
       label: `${job.id} · ${job.kind} · ${jobEnding(job).replace("exit code ", "exit ")} · ${jobDuration(job)} · ${job.label}`,
     }));
-    const list = new SelectList(rows, LIST_HEIGHT, this.listTheme);
+    const list = new SelectList(rows, DIALOG_LIST_ROWS, this.listTheme);
     list.setSelectedIndex(
       Math.max(
         0,

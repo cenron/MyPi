@@ -151,7 +151,8 @@ export function validateAgentName(name: string): void {
   }
 }
 
-function serializeAgent(agent: Omit<AgentDefinition, "source" | "path">): string {
+/** Keeps agent files and editor prefills in the same parseable frontmatter format. */
+export function serializeAgent(agent: Omit<AgentDefinition, "source" | "path">): string {
   const fields = [
     `name: ${JSON.stringify(agent.name)}`,
     `description: ${JSON.stringify(agent.description)}`,
