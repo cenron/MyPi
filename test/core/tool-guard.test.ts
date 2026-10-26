@@ -280,6 +280,7 @@ describe("ToolGuard", () => {
     const { ctx, select } = fakeContext({ hasUI: false });
     const result = await guard.check(event(), ctx);
     expect(result?.block).toBe(true);
+    expect(result?.reason).toContain("no one can give it here");
     expect(result?.reason).toContain("one: Run ls?");
     expect(select).not.toHaveBeenCalled();
   });

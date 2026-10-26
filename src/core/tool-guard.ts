@@ -56,6 +56,10 @@ const PREVIEW_LINES = 12;
 /** Most characters of one line the dialog shows; a longer line wraps into many rows. */
 const PREVIEW_LINE_CHARS = 160;
 
+/** Without a UI (a subagent, print mode) an ask is refused, worded so the model takes it to the user, not retries. */
+const NO_UI_REFUSAL =
+  "Refused: this call needs the user's approval, and no one can give it here (no UI). Tell the user what you needed and why:";
+
 /**
  * `ask` cut down to fit the permission dialog, saying what was left out. Only the display is cut: "Allow for this
  * session" still matches the full text, so two long commands that start alike never share an approval.
@@ -139,7 +143,7 @@ export class ToolGuard {
 
     const lines = pending.map(({ name, question }) => `${name}: ${question}`);
     const details = lines.map(previewAsk).join("\n\n");
-    if (!ctx.hasUI) return blocked(`Confirmation needed, no UI to ask:\n ${details}`);
+    if (!ctx.hasUI) return blocked(`${NO_UI_REFUSAL}\n ${details}`);
 
     // Esc and an abort resolve undefined, which declines like No.
     const choice = await ctx.ui.select(`Permission required\n${details}`, Object.values(Choice), {

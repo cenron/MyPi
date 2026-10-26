@@ -112,7 +112,7 @@ roadmap row before this one ("Self-build fixes").
 3. The reminder in the `context` handler.
 4. Plan seeding (plan-build's Build prompt) and open tasks in the done check's report.
 
-Each slice gets a live check in an interactive pi (in a herdr pane).
+Each slice gets a [live check](../../AGENTS.md#live-checks) in an interactive pi (in a herdr pane).
 
 ## Open questions
 

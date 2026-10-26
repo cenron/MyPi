@@ -39,7 +39,7 @@ describe("child access", () => {
     await expect(call("write", "edit", { path: "inside.ts" })).resolves.toBeUndefined();
     await expect(call("write", "read", { path: "/etc/passwd" })).resolves.toMatchObject({
       block: true,
-      reason: expect.stringContaining("Confirmation needed, no UI to ask"),
+      reason: expect.stringContaining("no one can give it here"),
     });
   });
 

@@ -187,16 +187,14 @@ MyPi isn't loaded in the child, so the parent's `ToolGuard` never sees the child
 an inline extension (`access.ts`, through `DefaultResourceLoader`'s `extensionFactories`) builds a `ToolGuard` with
 MyPi's own rules (`registerRules`, as the parent does), fills their prompt paths from the child's
 `before_agent_start`, and checks every `tool_call`. A child has no UI (`ctx.hasUI` is false, seen live), so the
-guard turns any ask into a block with the reason ("Confirmation needed, no UI to ask: …"); nothing new was needed
-for that.
+guard turns any ask into a block with the reason ("Refused: this call needs the user's approval, and no one can give
+it here (no UI). Tell the user what you needed and why: …").
 
 - **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with plan-build's `planRule` on the child's guard: the
   same check as Plan, so `git log` runs and `touch` is refused.
 - **`write`:** pi's normal tools.
-- **Clearer refusals (planned 2026-10-26, roadmap "Self-build fixes"):** when there's no UI, `ToolGuard` answers
-  "Confirmation needed, no UI to ask", which reads as if someone could confirm; the child in milestone 1 reported
-  "requires confirmation". Say instead that the call is refused because it needs the user's approval and no one can
-  give it here, so the child reports a refusal the parent can take to the user.
+- **Clearer refusals:** when there's no UI, `ToolGuard` says the call needs the user's approval and no one can give
+  it here, then includes what needed confirming. The child reports a refusal the parent can take to the user.
 - **The folder guard, in every child** (gap found 2026-10-25 planning milestone 1): MyPi's `FolderRule` doesn't run
   in a child either, so an `explore` run could read `~/.ssh` unasked. The child's guard runs it; a call reaching
   outside the session's folder is refused with the reason, and the child reports it in its answer so the parent can

@@ -95,3 +95,15 @@ Test each behavior once, at the lowest level that shows it:
   caller would notice; tests of internals (spies on private calls, how often something runs) stay out.
 - Coverage only has to stay at 85% (`vitest.config.ts`). Don't add a test just to cover a line; leave out tests for
   plain glue and for paths a higher-level test already runs through.
+
+## Live checks
+
+- Run live checks yourself through the **herdr skill**: open a new pane, make a throwaway repo there
+  (`cd "$(mktemp -d -t mypi-<name>)" && git init -q`), start an interactive `pi --model openai/gpt-6-luna`, send the
+  prompt, wait for it to finish, and read the screen.
+- Never `pi --print`: it can't answer a dialog or wait for a background notice.
+- Herdr reports pi as `idle` while a pi dialog is open ("Permission required", "enter select"). Read the screen and
+  answer a dialog by sending keys.
+- Fixtures go in the throwaway repo. A fixture that must be outside the session's folder must also be outside the
+  temp folder, which the folder guard allows: a fake file in the home folder, deleted afterwards.
+- Close the pane afterwards and write down what you saw.
