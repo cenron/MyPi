@@ -2,11 +2,11 @@ import { defineTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import type { Session } from "#core/session";
 import { jobDuration, jobEnding } from "#core/util/jobs";
+import { isPlanMode } from "#core/util/mode";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
 import { expandKey, reuseText, textOf } from "#tool/utils";
 import { type AgentDefinition, THINKING_SETTINGS } from "../agents";
 import { type RunSettings, runChild } from "../child";
-import { isPlanMode } from "../mode";
 import { runWriter, type WriterResult } from "../writer";
 import { formatResult } from "./outcome";
 
@@ -97,7 +97,7 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
     async execute(_id, args, signal, onUpdate, ctx) {
       const agent = findAgent(agents(), args.agent);
       const writes = agent.access === "write";
-      if (writes && (await isPlanMode(session))) {
+      if (writes && (await isPlanMode(session.pi.events))) {
         throw new Error(`Plan mode is on: ${agent.name} can change files. Switch to Build, or use a read-only agent.`);
       }
       if (writes && session.project && worktreeWriters >= MAX_BACKGROUND) {

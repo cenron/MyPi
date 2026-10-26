@@ -355,8 +355,8 @@ list in `src/module/index.ts`.
 `src/ui/components/` holds reusable TUI components, imported as `#ui/components/<file>`. They implement pi-tui's
 `Component` (`render`, `invalidate`, `handleInput`) and know nothing about MyPi features. A feature's UI lives in
 `src/ui/` and builds on them. `src/ui/modules-modal.ts` is the example: `openModulesModal(ctx, session)` refuses
-outside TUI mode, calls `ctx.ui.custom`, and resolves to the result, so the command only formats what comes back. The
-mode check lives with the UI, so every caller gets it.
+outside TUI mode, calls `openToggleDialog(ctx, title, items)`, and maps the saved ids back to its result, so the command
+only formats what comes back. `/lsp` shares the same centered toggle dialog.
 
 - **`Dialog`** draws a titled, rounded border around a padded background. A title too long for the width is cut with
   `truncateToWidth` and ends in `…`, so the top border never grows past `width`. `addChild` puts components inside the
@@ -368,6 +368,12 @@ mode check lives with the UI, so every caller gets it.
   Enter can't change it, `onToggle` never fires for it, and its label is dim. The dim comes
   from overriding `label` in the `SettingsList` theme. `SettingsList` pads every label to the longest before styling
   it (`settings-list.js`), so the override matches on `text.trimEnd()`.
+
+- **`openToggleDialog(ctx, title, items)`** opens a `ToggleList` in a `Dialog` as a centered overlay and resolves to
+  the ids that are on at Save, or `undefined` on Escape. Toggles change a local copy until Save. `/modules` and `/lsp`
+  use it.
+- **`selectListTheme(theme)`**, next to `Dialog`, is the theme for pi-tui's `SelectList` in a dialog (accent for the
+  selected row, dim for the rest), with `DIALOG_LIST_ROWS` for its height. `/jobs` and `/agents` use both.
 
 Keys follow pi's own `SettingsList` screens, so MyPi feels like pi: Enter or Space changes a row, Escape cancels. When
 changes have to be saved or discarded, the list gets an Apply row, like pi's theme picker (`settings-selector.js`): a

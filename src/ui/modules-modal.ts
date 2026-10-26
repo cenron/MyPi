@@ -1,8 +1,7 @@
-import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
-import { type ModuleInfo, ModuleLoadMode } from "#core/types";
-import { Dialog } from "./components/dialog";
-import { ToggleList } from "./components/toggle-list";
+import { ModuleLoadMode } from "#core/types";
+import { openToggleDialog } from "./components/toggle-dialog";
 
 /**
  * Opens the module dialog as a centered overlay. Resolves to the selected names in list order on Save, or `undefined`
@@ -11,43 +10,17 @@ import { ToggleList } from "./components/toggle-list";
 export async function openModulesModal(ctx: ExtensionContext, session: Session): Promise<Set<string> | undefined> {
   if (ctx.mode !== "tui") throw new Error("/modules requires TUI mode");
 
-  return ctx.ui.custom<Set<string> | undefined>(
-    (_tui, theme: Theme, _keybindings, done) => modal(theme, done, session.moduleManager.moduleInfos),
-    {
-      overlay: true,
-      overlayOptions: {
-        anchor: "center",
-        width: 100,
-        maxHeight: "70%",
-      },
-    },
-  );
-}
-
-/** Builds the dialog. Toggles edit a local copy of the selected set, so nothing outside changes until Save. */
-function modal(theme: Theme, done: (selected: Set<string> | undefined) => void, modules: ModuleInfo[]) {
-  const container = new Dialog(theme, {
-    title: "Modules",
-  });
-
-  const loaded = new Set(modules.filter((info) => info.isSelected).map((info) => info.name));
-
-  const list = new ToggleList(
-    theme,
+  const modules = session.moduleManager.moduleInfos;
+  const on = await openToggleDialog(
+    ctx,
+    "Modules",
     modules.map((info) => ({
       id: info.name,
       label: info.name,
       description: info.description,
-      on: loaded.has(info.name),
+      on: info.isSelected ?? false,
       disabled: info.loadType === ModuleLoadMode.ALWAYS,
     })),
-    {
-      onToggle: (id, on) => (on ? loaded.add(id) : loaded.delete(id)),
-      onAccept: () => done(new Set(modules.filter((info) => loaded.has(info.name)).map((info) => info.name))),
-      onCancel: () => done(undefined),
-    },
   );
-
-  container.addChild(list);
-  return container;
+  return on && new Set(modules.filter((info) => on.has(info.name)).map((info) => info.name));
 }

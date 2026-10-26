@@ -6,6 +6,7 @@ import type {
 import type { OpenTask } from "#core/channels";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
+import { isPlanMode } from "#core/util/mode";
 import { fileChanges, fileTimes } from "#core/util/walk";
 import { git } from "#core/worktree/git";
 import { FooterColor } from "#ui/footer";
@@ -90,7 +91,7 @@ export class DoneCheckModule extends BaseModule {
   ): Promise<AgentBeforeSettleEventResult | undefined> {
     const run = this.run;
     if (!run || ev.outcome !== "completed" || run.rounds >= MAX_ROUNDS) return undefined;
-    if (!(await this.inBuild())) return undefined;
+    if (await isPlanMode(this.session.pi.events)) return undefined;
 
     const openTasks = await this.openTasks();
     const changes = fileChanges(run.before, await fileTimes(ctx.cwd));
@@ -254,11 +255,5 @@ export class DoneCheckModule extends BaseModule {
 
     this.warned.add(message);
     this.session.logWarning(message);
-  }
-
-  /** True unless a module answers `mode` with Plan; with no plan-build, every run counts as Build. */
-  private async inBuild(): Promise<boolean> {
-    const answers = await this.ask("mode", undefined);
-    return !answers.some((answer) => answer.kind === "answer" && answer.value === "plan");
   }
 }

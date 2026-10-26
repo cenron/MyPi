@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { type AgentToolResult, defineTool, type ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import type { Session } from "#core/session";
+import { isPlanMode } from "#core/util/mode";
 import { git, gitOutput, validateName } from "#core/worktree/git";
-import { isPlanMode } from "../mode";
 import { PATCHES_DIR } from "../writer";
 
 const CANCEL = "Cancel";
@@ -45,7 +45,9 @@ export function subagentApplyTool(session: Session) {
       } catch {
         throw new Error(await unknownPatch(session, name));
       }
-      if (await isPlanMode(session)) throw new Error("Plan mode is on. Switch to Build to apply a subagent patch.");
+      if (await isPlanMode(session.pi.events)) {
+        throw new Error("Plan mode is on. Switch to Build to apply a subagent patch.");
+      }
       if (!ctx.hasUI) {
         throw new Error("This patch needs the user's approval, and no one can give it here (no UI).");
       }

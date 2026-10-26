@@ -1,15 +1,8 @@
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
-import {
-  type Component,
-  matchesKey,
-  SelectList,
-  type SelectListTheme,
-  type TUI,
-  truncateToWidth,
-} from "@earendil-works/pi-tui";
+import { type Component, matchesKey, SelectList, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
-import { DIALOG_LIST_ROWS, Dialog } from "#ui/components/dialog";
+import { DIALOG_LIST_ROWS, Dialog, selectListTheme } from "#ui/components/dialog";
 import {
   type AgentDefinition,
   deleteAgent,
@@ -44,7 +37,13 @@ export function agentsCmd(callbacks: AgentViewCallbacks): Command {
         const action = await ctx.ui.custom<AgentAction | undefined>(
           (tui, theme, _keybindings, done) => {
             const dialog = new Dialog(theme, { title: "Agents" });
-            dialog.addChild(new AgentsView(theme, tui, done, callbacks, message, focus));
+            dialog.addChild(
+              new AgentsView(theme, tui, done, {
+                agents: callbacks.agents(),
+                message,
+                focus,
+              }),
+            );
             return dialog;
           },
           { overlay: true, overlayOptions: { anchor: "center", width: 110, maxHeight: "80%" } },
@@ -90,34 +89,27 @@ async function runAction(
 class AgentsView implements Component {
   private selected: AgentDefinition | undefined;
   private agents: AgentDefinition[];
+  private readonly message: string | undefined;
   private readonly list: SelectList;
 
   constructor(
     private readonly theme: Theme,
     private readonly tui: TUI,
     private readonly done: (result: AgentAction | undefined) => void,
-    callbacks: AgentViewCallbacks,
-    private readonly message: string | undefined,
-    focus: string | undefined,
+    options: { agents: AgentDefinition[]; message: string | undefined; focus: string | undefined },
   ) {
-    this.agents = callbacks.agents();
-    const listTheme: SelectListTheme = {
-      selectedPrefix: (text) => theme.fg("accent", text),
-      selectedText: (text) => theme.fg("accent", text),
-      description: (text) => theme.fg("dim", text),
-      scrollInfo: (text) => theme.fg("dim", text),
-      noMatch: (text) => theme.fg("dim", text),
-    };
+    this.agents = options.agents;
+    this.message = options.message;
     const rows = this.agents.map((agent) => ({
       value: agent.name,
       label: `${agent.name} · ${agent.source} · ${agent.model} · ${agent.thinking} · ${agent.access}`,
     }));
-    this.list = new SelectList(rows, DIALOG_LIST_ROWS, listTheme);
+    this.list = new SelectList(rows, DIALOG_LIST_ROWS, selectListTheme(theme));
     // Reopened after an edit or delete: stay on the row the user was on.
     this.list.setSelectedIndex(
       Math.max(
         0,
-        rows.findIndex((row) => row.value === focus),
+        rows.findIndex((row) => row.value === options.focus),
       ),
     );
     this.list.onSelect = (item) => {

@@ -1,8 +1,26 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Box, type Component, Container, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import {
+  Box,
+  type Component,
+  Container,
+  type SelectListTheme,
+  truncateToWidth,
+  visibleWidth,
+} from "@earendil-works/pi-tui";
 
 /** Rows a list shows inside a dialog before it scrolls; the overlays (`/jobs`, `/agents`) share it. */
 export const DIALOG_LIST_ROWS = 12;
+
+/** Theme shared by selectable rows in the dialog views. */
+export function selectListTheme(theme: Theme): SelectListTheme {
+  return {
+    selectedPrefix: (text) => theme.fg("accent", text),
+    selectedText: (text) => theme.fg("accent", text),
+    description: (text) => theme.fg("dim", text),
+    scrollInfo: (text) => theme.fg("dim", text),
+    noMatch: (text) => theme.fg("dim", text),
+  };
+}
 
 /** Dialog settings. */
 type DialogOptions = {

@@ -10,7 +10,7 @@ import {
 import type { Session } from "#core/session";
 import type { Command, JobInfo } from "#core/types";
 import { jobDuration, jobEnding } from "#core/util/jobs";
-import { DIALOG_LIST_ROWS, Dialog } from "#ui/components/dialog";
+import { DIALOG_LIST_ROWS, Dialog, selectListTheme } from "#ui/components/dialog";
 
 const OUTPUT_LINES = 100;
 
@@ -76,13 +76,7 @@ class JobsView implements Component {
     private readonly done: (result: undefined) => void,
     private readonly onStop: (job: JobInfo) => void,
   ) {
-    this.listTheme = {
-      selectedPrefix: (text) => theme.fg("accent", text),
-      selectedText: (text) => theme.fg("accent", text),
-      description: (text) => theme.fg("dim", text),
-      scrollInfo: (text) => theme.fg("dim", text),
-      noMatch: (text) => theme.fg("dim", text),
-    };
+    this.listTheme = selectListTheme(theme);
     this.list = this.createList();
     this.refreshList();
   }
