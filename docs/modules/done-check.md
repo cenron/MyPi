@@ -77,8 +77,9 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
   After that it's quiet until the next prompt.
 - **Esc** during the check aborts the run, as at any other point.
 - **Turned off** in `/modules` (`ON_LOAD`), everything else works as before: nothing asks on the bus, and LSP's
-  answer just isn't called. With the LSP module turned off, nothing answers `diagnostics`, and the done check checks
-  nothing.
+  answer just isn't called. With the LSP module turned off, nothing answers `diagnostics`: the done check skips the errors in
+  changed files and still runs the project's approved commands and the open-task check (seen live: a failed command
+  was still reported, and no language server started).
 
 ## Design in pi
 
