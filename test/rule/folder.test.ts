@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -32,6 +33,7 @@ describe("FolderRule", () => {
     ["a skill folder from the prompt", "read", { path: "/home/me/.agents/skills/herdr/SKILL.md" }],
     ["a context file from the prompt", "read", { path: "../AGENTS.md" }],
     ["the temp folder", "read", { path: join(tmpdir(), "pi-bash-1.log") }],
+    ["the temp folder by its real path", "read", { path: join(realpathSync(tmpdir()), "mypi-x", "a.md") }],
     ["/tmp, by habit", "bash", { command: "mktemp -d /tmp/spike.XXXXXX" }],
     ["/private/tmp, where macOS's /tmp points", "read", { path: "/private/tmp/spike/a.md" }],
     ["a /dev stream", "write", { path: "/dev/null" }],

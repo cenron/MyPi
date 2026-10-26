@@ -33,7 +33,9 @@ user's other projects and personal files are none of the agent's business unless
     wherever it lives (the agent dir, `~/.agents/skills`, a package such as MyPi's `resources/skills`, a project's
     parents), with no folder list to keep in step;
   - the temp folder (`os.tmpdir()`), where background jobs and `web_fetch` write their output. On macOS that's
-    `/var/folders/…/T`, not `/tmp`;
+    `/var/folders/…/T`, not `/tmp`. Its real path (`/private/var/folders/…/T`) is allowed too: a session started in
+    a temp folder runs from the real path, so `..` from it named a folder the guard asked about (found 2026-10-26 in
+    every live check in a throwaway repo);
   - `/tmp` and `/private/tmp` (macOS's `/tmp` links there, and the guard compares text): shared scratch space that
     agents reach for by habit ([slice 5](#slices));
   - `/dev/null` and the other `/dev/std*` streams.

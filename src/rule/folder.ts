@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { ToolCall, ToolEnv, Verdict } from "#core/tool-guard";
 import { commandPaths, isInside, resolveToolPath } from "#core/util/paths";
@@ -14,6 +15,12 @@ const DEVICE_FILES = ["/dev/null", "/dev/stdin", "/dev/stdout", "/dev/stderr"];
  * links to `/private/tmp`, and the guard compares text, so both are listed.
  */
 const SCRATCH_DIRS = ["/tmp", "/private/tmp"];
+
+/**
+ * The temp folder, as `os.tmpdir()` names it and by its real path: on macOS `/var` links to `/private/var`, and a
+ * session started in a temp folder runs from the real path, so `..` from it names `/private/var/folders/…/T`.
+ */
+const TEMP_DIRS = [tmpdir(), realpathSync(tmpdir())];
 
 const ALLOW: Verdict = { kind: "allow" };
 
@@ -45,7 +52,7 @@ export class FolderRule extends BaseRule {
     const allowed = [
       cwd,
       ...writableDirs,
-      tmpdir(),
+      ...TEMP_DIRS,
       ...SCRATCH_DIRS,
       ...DEVICE_FILES,
       ...this.prompt.paths,
