@@ -1,7 +1,7 @@
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ContextEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
-import { listForNewRun, rebuildTasks, type Task } from "./tasks";
+import { listForNewRun, rebuildTasks, type Task, taskReminderDue, taskReminderText } from "./tasks";
 import { taskTools } from "./tools";
 import { todoWidgetLines } from "./widget";
 
@@ -36,6 +36,7 @@ export class TodoModule extends BaseModule {
     this.restoreTasks();
     this.drawTasks();
     this.session.pi.on("session_tree", () => this.onSessionTree());
+    this.session.pi.on("context", (ev) => this.onContext(ev));
     // before_agent_start fires once per run, not on the done check's continuations.
     this.session.pi.on("before_agent_start", () => this.onRunStart());
     this.onKey("alt+t", () => this.toggleWidget());
@@ -50,6 +51,18 @@ export class TodoModule extends BaseModule {
   private onSessionTree() {
     this.restoreTasks();
     this.drawTasks();
+  }
+
+  private onContext(ev: ContextEvent) {
+    if (!taskReminderDue(ev.messages)) return;
+
+    // Transient: returned for this request only, never saved to the session.
+    const reminder = {
+      role: "user" as const,
+      content: taskReminderText(this.tasks),
+      timestamp: Date.now(),
+    };
+    return { messages: [...ev.messages, reminder] };
   }
 
   private restoreTasks() {

@@ -1,3 +1,4 @@
+import type { ContextEvent } from "@earendil-works/pi-coding-agent";
 import { isRecord } from "#core/util/guards";
 
 /** The statuses task_update can set on a task (deleted removes it). */
@@ -28,6 +29,11 @@ export const TASK_TOOLS = {
 } as const;
 
 const TASK_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(TASK_TOOLS));
+/** Quiet model requests between reminders; Claude Code doesn't publish its own count. */
+const REMINDER_INTERVAL = 5;
+/** Claude Code's reminder, with MyPi's tool names. */
+const REMINDER_TEXT =
+  "The task tools haven't been used recently. If you're working on tasks that would benefit from tracking progress, consider using task_create to add new tasks and task_update to update task status (set to in_progress when starting, completed when done). Also consider cleaning up the task list if it has become stale. Only use these if relevant to the current work. This is just a gentle reminder - ignore if not applicable.";
 
 /** Adds one pending task with the next id. */
 export function createTask(tasks: Task[], input: Omit<Task, "id" | "status">): { tasks: Task[]; task: Task } {
@@ -62,6 +68,30 @@ export function rebuildTasks(branch: readonly unknown[]): Task[] {
     tasks = tasksIn(entry) ?? tasks;
   }
   return tasks;
+}
+
+/** True on every fifth assistant message since the last task tool call (or since the start). */
+export function taskReminderDue(messages: readonly ContextEvent["messages"][number][]): boolean {
+  let quietMessages = 0;
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    if (message.content.some((block) => block.type === "toolCall" && TASK_TOOL_NAMES.has(block.name))) {
+      quietMessages = 0;
+      continue;
+    }
+    quietMessages++;
+  }
+  return quietMessages > 0 && quietMessages % REMINDER_INTERVAL === 0;
+}
+
+/**
+ * The reminder sent with the next model request, and the list when there is one. In `<system-reminder>` tags, as
+ * Claude Code sends it, so the model doesn't take it for the user's words.
+ */
+export function taskReminderText(tasks: readonly Task[]): string {
+  const list = tasks.map((task) => `#${task.id}. [${task.status}] ${task.subject}`).join("\n");
+  const text = tasks.length === 0 ? REMINDER_TEXT : `${REMINDER_TEXT}\n\nHere are the existing tasks:\n${list}`;
+  return `<system-reminder>\n${text}\n</system-reminder>`;
 }
 
 function tasksIn(entry: unknown): Task[] | undefined {

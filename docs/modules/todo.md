@@ -38,8 +38,8 @@ With more than five, it keeps four rows (in progress first, then pending, then t
 counting the rest and how many of those are completed. The in-progress task's `activeForm` (or its subject) appears beside pi's spinner. `alt+t` hides or shows the
 widget for this session; it does not change the task list.
 
-When tools have not been used for five assistant messages, a transient reminder is added to the next request with the
-current list.
+After every five assistant messages since the last task-tool call (or session start), a transient reminder is appended
+to the next model request. It includes the current task list, if any, and is not saved to the session.
 
 ## Decisions (2026-10-26)
 
