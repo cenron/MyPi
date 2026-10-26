@@ -19,6 +19,8 @@ const explore: AgentDefinition = {
   model: "inherit",
   thinking: "inherit",
   prompt: "Search",
+  source: "builtin",
+  path: "/builtins/explore.md",
 };
 
 const result: ChildResult = {

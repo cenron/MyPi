@@ -11,6 +11,8 @@ const agent = (access: AgentDefinition["access"]): AgentDefinition => ({
   model: "inherit",
   thinking: "inherit",
   prompt: "Test",
+  source: "builtin",
+  path: "/builtins/test-agent.md",
 });
 
 async function call(access: AgentDefinition["access"], toolName: string, input: Record<string, unknown>) {

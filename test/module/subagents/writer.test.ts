@@ -17,6 +17,8 @@ const developer: AgentDefinition = {
   model: "inherit",
   thinking: "inherit",
   prompt: "Implement",
+  source: "builtin",
+  path: "/builtins/developer.md",
 };
 
 let root: string;

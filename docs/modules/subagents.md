@@ -1,8 +1,7 @@
 # Sub-agents
 
-**Status:** milestones 1 and 2 done 2026-10-26: agent definitions with the five builtins and the agent list, the
-`subagent` tool, access in the child with the Plan rule, grouped completions, the jobs view, and parallel writers in
-temporary worktrees whose changes return as patches. Milestone 3 (creating agents) is next.
+**Status:** milestones 1 and 2 done 2026-10-26. Milestone 3 is in progress: `agent_manage` creates, edits, and
+deletes definitions with approval; the `/agents` view is next.
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -240,16 +239,22 @@ it here (no UI). Tell the user what you needed and why: …").
 ## Creating and changing agents
 
 - **`agent_manage({ action: "create" | "edit" | "delete", … })`**, exposure `deferred`: it costs no context until
-  `tool_search` loads it. Never read-only.
-- **Every call asks me** through the `ToolGuard` confirm, showing the whole definition: name, the prompt's first lines
-  (the full text one key away), model, thinking, access, tools, and where it's saved. Anything I didn't say, such as
-  a default model, is shown before it's saved.
-- **Model names** are resolved with pi's `resolveCliModel` (exact ID, fuzzy ID or name, `provider/id`, `:level`). Two
-  matches → ask me which; none → say so. The file stores the exact ID.
-- **Thinking above what the model supports** is shown as the level that will actually run.
-- **Saved** to `~/.pi/agent/agents/` unless I ask for the project's `.pi/agents/`.
-- **Builtins** can't be deleted. Editing one saves my copy; deleting my copy brings the builtin back.
-- **Allowed in Plan mode:** a definition isn't project code.
+  `tool_search` loads it. Never read-only. The prompt section points the model to `tool_search` when it needs to manage
+  definitions.
+- **Every call asks me** through the `ToolGuard` confirm. Create and edit show the definition fields, exact model,
+  actual thinking level, destination, and the prompt's first lines. Delete shows the file and whether a builtin will
+  return. Without a UI, the guard refuses the call.
+- **Create** needs a description and prompt. Edit changes only fields supplied. Names are lowercase letters, digits,
+  and hyphens, matching the worktree name rule. An existing name must be edited, not created again.
+- **Model names** are resolved against pi's available models through `resolveCliModel`. A loose name must match exactly
+  one model; none or several fail with the matches listed. `inherit` remains `inherit`, and files store an exact
+  `provider/id` for every resolved model.
+- **Thinking above what the model supports** is shown as the level that will actually run; the file keeps the
+  requested level.
+- **Saved** to `~/.pi/agent/agents/` by default, or to the trusted project's `.pi/agents/` when requested.
+- **Builtins** can't be deleted. Editing one saves a user copy; deleting a user copy restores the builtin.
+- **Allowed in Plan mode:** a definition isn't project code. Only the agent folders are writable for `agent_manage`.
+- **After a change**, the module reloads definitions and updates its prompt section for the next request.
 
 ## Jobs view
 

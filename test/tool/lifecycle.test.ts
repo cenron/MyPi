@@ -72,6 +72,7 @@ describe("built-in tool hooks", () => {
       "register lsp_edit",
       "register subagent",
       "register subagent_apply",
+      "register agent_manage",
       "register task_create",
       "register task_update",
       "register task_list",

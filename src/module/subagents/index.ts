@@ -1,25 +1,59 @@
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
-import { type AgentDefinition, loadAgents } from "./agents";
+import { type AgentDefinition, loadAgents, projectAgentDir, userAgentDir } from "./agents";
 import { subagentApplyTool } from "./tools/apply";
+import { agentManageRule, agentManageTool } from "./tools/manage";
 import { subagentTool } from "./tools/subagent";
 
 /** Subagents: agents the main session hands work to. Loads their definitions and lists them in the prompt. */
 export class SubagentsModule extends BaseModule {
   private agents: AgentDefinition[] = [];
+  private builtinNames: string[] = [];
+  private modelRuntime: ModelRuntime | undefined;
+  private readonly modelRuntimePromise = ModelRuntime.create().then((runtime) => (this.modelRuntime = runtime));
 
   get info(): ModuleInfo {
     return { name: "subagents", description: "Run internal agents", commands: [], loadType: ModuleLoadMode.ALWAYS };
   }
 
   tools(): ToolDefinition[] {
-    return [subagentTool(this.session, () => this.agents), subagentApplyTool(this.session)];
+    return [
+      subagentTool(this.session, () => this.agents),
+      subagentApplyTool(this.session),
+      agentManageTool(this.session, this.manageCallbacks()),
+    ];
   }
 
   init() {
+    this.setWritable({
+      dirs: [userAgentDir(), projectAgentDir(this.session.ctx.cwd)],
+      tools: ["agent_manage"],
+    });
+    this.onToolCall(agentManageRule(this.manageCallbacks(), this.session.ctx.cwd));
+    this.reloadAgents();
+  }
+
+  private manageCallbacks() {
+    return {
+      agents: () => this.agents,
+      runtime: () => this.modelRuntimePromise,
+      runtimeReady: () => this.modelRuntime,
+      trusted: () => this.session.ctx.isProjectTrusted(),
+      currentModel: () => this.session.ctx.model,
+      currentThinking: () => this.session.ctx.thinkingLevel ?? "off",
+      builtinNames: () => this.builtinNames,
+      reload: () => this.reloadAgents(),
+    };
+  }
+
+  private reloadAgents() {
     const builtinDir = fileURLToPath(new URL("./builtins/", import.meta.url));
+    this.builtinNames = readdirSync(builtinDir)
+      .filter((file) => file.endsWith(".md"))
+      .map((file) => file.slice(0, -3));
     this.agents = loadAgents(builtinDir, this.session.ctx.cwd, this.session.ctx.isProjectTrusted(), (message) =>
       this.session.logWarning(message),
     );
@@ -45,5 +79,10 @@ export function promptSection(agents: AgentDefinition[]): string {
     (agent) =>
       `- ${agent.name}: ${agent.description} (model: ${agent.model}; thinking: ${agent.thinking}; access: ${agent.access})`,
   );
-  return ["## Subagents", DELEGATION, ...rows].join("\n");
+  return [
+    "## Subagents",
+    DELEGATION,
+    "To create, change, or remove an agent, find `agent_manage` with `tool_search`.",
+    ...rows,
+  ].join("\n");
 }

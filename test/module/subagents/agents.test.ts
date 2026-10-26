@@ -1,8 +1,17 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadAgents, parseAgentFile } from "#module/subagents/agents";
+import {
+  deleteAgent,
+  loadAgents,
+  parseAgentFile,
+  projectAgentDir,
+  saveAgent,
+  userAgentDir,
+  validateAgentName,
+} from "#module/subagents/agents";
 
 const valid = (name = "explore", extras = "") =>
   `---\nname: ${name}\ndescription: Search\naccess: read-only\n${extras}---\nPrompt`;
@@ -28,6 +37,7 @@ describe("parseAgentFile", () => {
     ["missing required access", valid().replace("access: read-only\n", ""), "missing or invalid field 'access'"],
     ["bad access", valid("explore", "model: inherit\n").replace("read-only", "admin"), "invalid field 'access'"],
     ["bad thinking", valid("explore", "thinking: impossible\n"), "invalid field 'thinking'"],
+    ["a tool a child doesn't have", valid("explore", "tools: [read, lsp]\n"), "a subagent can't use lsp"],
   ])("rejects %s", (_label, source, error) => {
     expect(() => parseAgentFile("agent.md", source)).toThrow(`agent.md: ${error}`);
   });
@@ -39,6 +49,17 @@ describe("parseAgentFile", () => {
       tools: ["read", "bash"],
       prompt: "Prompt",
     });
+  });
+});
+
+describe("agent directories", () => {
+  it("builds the user and project folders from their canonical roots", async () => {
+    const root = await tempFolder();
+    folders.push(root);
+    vi.stubEnv("PI_CODING_AGENT_DIR", root);
+
+    expect(userAgentDir()).toBe(join(root, "agents"));
+    expect(projectAgentDir(root)).toBe(join(root, ".pi", "agents"));
   });
 });
 
@@ -63,8 +84,29 @@ describe("loadAgents", () => {
 
     const trusted = loadAgents(builtin, project, true, vi.fn());
     const untrusted = loadAgents(builtin, project, false, vi.fn());
-    expect(trusted[0]?.description).toBe("Project");
-    expect(untrusted[0]?.description).toBe("User");
+    expect(trusted[0]).toMatchObject({
+      description: "Project",
+      source: "project",
+      path: join(project, ".pi", "agents", "explore.md"),
+    });
+    expect(untrusted[0]).toMatchObject({
+      description: "User",
+      source: "user",
+      path: join(agentDir, "agents", "explore.md"),
+    });
+  });
+
+  it("records builtin source and path", async () => {
+    const builtin = await tempFolder();
+    const agentDir = await tempFolder();
+    folders.push(builtin, agentDir);
+    await writeFile(join(builtin, "explore.md"), valid());
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+
+    expect(loadAgents(builtin, "/project", false, vi.fn())[0]).toMatchObject({
+      source: "builtin",
+      path: join(builtin, "explore.md"),
+    });
   });
 
   it("skips a bad user file and warns", async () => {
@@ -80,5 +122,59 @@ describe("loadAgents", () => {
     expect(loadAgents(builtin, "/project", false, warn)).toHaveLength(1);
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0]?.[0]).toContain("bad.md: missing or invalid field 'description'");
+  });
+});
+
+const definition = {
+  name: "tester",
+  description: "Writes tests",
+  access: "read-only" as const,
+  tools: ["read", "bash"],
+  model: "provider/model",
+  thinking: "high" as const,
+  prompt: "Use the spec.",
+};
+
+describe("agent persistence", () => {
+  it.each([
+    ["uppercase", "Tester"],
+    ["spaces", "test agent"],
+    ["underscore", "test_agent"],
+    ["too long", "a".repeat(65)],
+  ])("rejects %s names", (_label, name) => {
+    expect(() => validateAgentName(name)).toThrow("Agent name must be");
+  });
+
+  it("writes definitions that parse back", async () => {
+    const folder = await tempFolder();
+    folders.push(folder);
+    const path = saveAgent(definition, folder);
+    const text = await readFile(path, "utf8");
+
+    expect(text.indexOf("name:")).toBeLessThan(text.indexOf("description:"));
+    expect(text.indexOf("description:")).toBeLessThan(text.indexOf("access:"));
+    expect(text.indexOf("access:")).toBeLessThan(text.indexOf("tools:"));
+    expect(text.indexOf("tools:")).toBeLessThan(text.indexOf("model:"));
+    expect(text.indexOf("model:")).toBeLessThan(text.indexOf("thinking:"));
+    expect(parseAgentFile(path, text)).toMatchObject(definition);
+  });
+
+  it("refuses a serialized definition that would not parse", async () => {
+    const folder = await tempFolder();
+    folders.push(folder);
+
+    expect(() => saveAgent({ ...definition, description: "" }, folder)).toThrow("invalid field 'description'");
+    expect(existsSync(join(folder, "tester.md"))).toBe(false);
+  });
+
+  it("refuses deleting a builtin and removes a user override", async () => {
+    const folder = await tempFolder();
+    folders.push(folder);
+    const path = saveAgent(definition, folder);
+    const user = { ...definition, source: "user" as const, path };
+
+    expect(() => deleteAgent({ ...user, source: "builtin" })).toThrow("can't be deleted");
+    deleteAgent(user);
+    expect(existsSync(path)).toBe(false);
   });
 });

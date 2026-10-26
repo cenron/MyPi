@@ -9,10 +9,13 @@ it("says when to delegate, then lists each agent with its run settings", () => {
     model: "inherit",
     thinking: "inherit" as const,
     prompt: "",
+    source: "builtin" as const,
+    path: "/builtins/explore.md",
   };
   expect(promptSection([explore]).split("\n")).toEqual([
     "## Subagents",
     expect.stringContaining("more than about three queries"),
+    "To create, change, or remove an agent, find `agent_manage` with `tool_search`.",
     "- explore: Search widely (model: inherit; thinking: inherit; access: read-only)",
   ]);
   expect(promptSection([explore])).toContain(
