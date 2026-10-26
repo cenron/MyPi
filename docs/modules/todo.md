@@ -1,6 +1,6 @@
 # todo
 
-**Status:** building (2026-10-26): the four task tools and branch-following state are built; the UI, the reminder, and
+**Status:** building (2026-10-26): the four task tools, branch-following state, and UI are built; the reminder and
 plan seeding with open tasks in the done check come next.
 
 ## Goal
@@ -31,9 +31,15 @@ instructions, but not for one simple task. A task is `in_progress` before work s
 done. Never mark it completed if tests fail, work is partial, or errors are unresolved. When blocked, keep it
 `in_progress` and create a task for what blocks it; add follow-ups found along the way.
 
+The widget (`mypi-todo`) draws the list above the editor in id order, every task when five fit. In-progress
+tasks use the accent color, pending tasks are muted, and completed tasks are dimmed and struck through when the theme
+supports it.
+With more than five, it keeps four rows (in progress first, then pending, then the latest completed) and a last line
+counting the rest and how many of those are completed. The in-progress task's `activeForm` (or its subject) appears beside pi's spinner. `alt+t` hides or shows the
+widget for this session; it does not change the task list.
+
 When tools have not been used for five assistant messages, a transient reminder is added to the next request with the
-current list. The widget draws tasks above the editor: `◼` in progress, `◻` pending, and `✔` completed; it shows at
-most five. The in-progress task's `activeForm` appears beside pi's spinner. `alt+t` toggles the widget.
+current list.
 
 ## Decisions (2026-10-26)
 

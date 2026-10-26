@@ -1,5 +1,5 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TodoModule } from "#module/todo/index";
 import { fakeSession } from "../../fakes";
 
@@ -24,6 +24,9 @@ describe("TodoModule", () => {
     expect(module.info.loadType).toBe("on_load");
     expect(module.tools().map((tool) => tool.name)).toEqual(["task_create", "task_update", "task_list", "task_get"]);
     module.init();
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<dim><strike>✔ Run tests"], {
+      placement: "aboveEditor",
+    });
 
     await expect(
       toolCall(module, "task_list")?.execute("id", {}, undefined, undefined, fake.session.ctx as ExtensionToolContext),
@@ -109,6 +112,9 @@ describe("TodoModule", () => {
     await expect(
       toolCall(module, "task_list")?.execute("id", {}, undefined, undefined, fake.session.ctx as ExtensionToolContext),
     ).resolves.toMatchObject({ content: [{ text: "#1 [pending] Read files" }] });
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<muted>◻ Read files"], {
+      placement: "aboveEditor",
+    });
   });
 
   it("starts a new list when a run starts with every task completed", async () => {
@@ -127,6 +133,91 @@ describe("TodoModule", () => {
     await expect(
       toolCall(module, "task_list")?.execute("id", {}, undefined, undefined, fake.session.ctx as ExtensionToolContext),
     ).resolves.toMatchObject({ content: [{ text: "No tasks." }] });
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", undefined, {
+      placement: "aboveEditor",
+    });
+  });
+
+  it("draws the checklist and updates the working message after task changes", async () => {
+    const fake = fakeSession();
+    const module = new TodoModule(fake.session);
+    module.init();
+    const create = toolCall(module, "task_create");
+    const update = toolCall(module, "task_update");
+
+    await create?.execute(
+      "id",
+      { subject: "Run tests", description: "Run the suite", activeForm: "Running tests" },
+      undefined,
+      undefined,
+      fake.session.ctx as ExtensionToolContext,
+    );
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<muted>◻ Run tests"], {
+      placement: "aboveEditor",
+    });
+    expect(fake.session.ctx.ui.setWorkingMessage).toHaveBeenLastCalledWith(undefined);
+
+    await update?.execute(
+      "id",
+      { taskId: "1", status: "in_progress" },
+      undefined,
+      undefined,
+      fake.session.ctx as ExtensionToolContext,
+    );
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<accent>◼ Run tests"], {
+      placement: "aboveEditor",
+    });
+    expect(fake.session.ctx.ui.setWorkingMessage).toHaveBeenLastCalledWith("Running tests");
+
+    await update?.execute(
+      "id",
+      { taskId: "1", status: "completed" },
+      undefined,
+      undefined,
+      fake.session.ctx as ExtensionToolContext,
+    );
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<dim><strike>✔ Run tests"], {
+      placement: "aboveEditor",
+    });
+    expect(fake.session.ctx.ui.setWorkingMessage).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("toggles the widget with alt+t", () => {
+    const fake = fakeSession([
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolName: "task_create",
+          details: { tasks: [{ id: "1", subject: "Run tests", description: "Run tests", status: "pending" }] },
+        },
+      },
+    ]);
+    const onKey = vi.spyOn(fake.session.editor, "onKey");
+    const module = new TodoModule(fake.session);
+    module.init();
+
+    expect(onKey).toHaveBeenCalledWith("alt+t", expect.any(Function));
+    const toggle = onKey.mock.calls[0]?.[1];
+    expect(toggle).toBeDefined();
+    if (!toggle) throw new Error("alt+t handler was not registered");
+    toggle();
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", undefined, {
+      placement: "aboveEditor",
+    });
+    toggle();
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<muted>◻ Run tests"], {
+      placement: "aboveEditor",
+    });
+  });
+
+  it("does not request UI when it is unavailable", () => {
+    const fake = fakeSession();
+    fake.session.ctx.hasUI = false;
+    const module = new TodoModule(fake.session);
+    module.init();
+    expect(fake.session.ctx.ui.setWidget).not.toHaveBeenCalled();
+    expect(fake.session.ctx.ui.setWorkingMessage).not.toHaveBeenCalled();
   });
 
   it("reports an unknown task with the recovery tool", async () => {

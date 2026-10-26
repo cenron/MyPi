@@ -22,10 +22,15 @@ export function fakeUI() {
     notify: vi.fn(),
     setStatus: vi.fn<(key: string, text: string | undefined) => void>(),
     setEditorComponent: vi.fn(),
+    setWidget: vi.fn(),
+    setWorkingMessage: vi.fn(),
     select: vi.fn(
       async (_title: string, _options: string[], _opts?: unknown): Promise<string | undefined> => undefined,
     ),
-    theme: { fg: (color: string, text: string) => `<${color}>${text}` },
+    theme: {
+      fg: (color: string, text: string) => `<${color}>${text}`,
+      strikethrough: (text: string) => `<strike>${text}`,
+    },
   };
 }
 
