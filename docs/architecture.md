@@ -193,7 +193,8 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   code or a thrown error), or `stopped`. It publishes the running count on the bus's `jobs` channel on every start and
   end; `Session` listens for the `jobs` footer item, and `stopAll()` stops publishing. Generic on purpose: shell
   commands are one kind (`shellJob` in `src/tool/bash/`, through pi's own `createLocalBashOperations().exec`, which
-  kills the process tree on abort), and subagents can be a second. `MyPi.onSessionEnd` calls `stopAll()` before the
+  kills the process tree on abort), and subagent runs are a second. Every kind's end goes through `noticeOnEnd` in
+  `src/tool/jobs/notice.ts`, which also feeds `job_wait` and the subagents' grouped completions. `MyPi.onSessionEnd` calls `stopAll()` before the
   tools' shutdown. See [background process](tools/background-process.md).
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike

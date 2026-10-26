@@ -72,6 +72,47 @@ describe("subagent", () => {
     expect(run.mock.calls[0]?.[3]).toEqual(settings);
   });
 
+  describe("drawing", () => {
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
+    const context = { lastComponent: undefined, isPartial: true } as never;
+    const drawn = (component: { render(width: number): string[] } | undefined) =>
+      component
+        ?.render(100)
+        .map((line) => line.trimEnd())
+        .join("\n");
+
+    it("draws a call as the agent and the start of the task's first line", () => {
+      const { tool } = setup();
+      const call = tool.renderCall?.({ agent: "explore", task: "Find it\nThen check" } as never, theme, context);
+      expect(drawn(call)).toBe("subagent explore Find it");
+    });
+
+    it("streams a foreground run's steps, the last five until expanded", async () => {
+      const steps = Array.from({ length: 7 }, (_, step) => `read: ${step + 1}.ts`);
+      const run = vi.fn<typeof runChild>(async (...args) => {
+        for (const step of steps) args[5](step);
+        return result;
+      });
+      const { tool, session } = setup([explore], run);
+      const updates: unknown[] = [];
+      await tool.execute(
+        "call",
+        { agent: "explore", task: "Find", background: false },
+        undefined,
+        (update) => updates.push(update),
+        session.ctx as never,
+      );
+
+      const last = updates.at(-1) as never;
+      const collapsed = drawn(tool.renderResult?.(last, { expanded: false, isPartial: true }, theme, context));
+      expect(collapsed).toContain("… 2 earlier steps");
+      expect(collapsed).not.toContain("read: 2.ts");
+      expect(collapsed).toContain("read: 7.ts");
+      const expanded = drawn(tool.renderResult?.(last, { expanded: true, isPartial: true }, theme, context));
+      expect(expanded).toContain("read: 1.ts");
+    });
+  });
+
   it("returns the answer, usage, session file, and changed files when not in the background", async () => {
     const { text } = setup();
     expect(await text({ agent: "explore", task: "Find" })).toBe(

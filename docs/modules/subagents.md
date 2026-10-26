@@ -1,8 +1,9 @@
 # Sub-agents
 
-**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–5 done
-2026-10-26: the spike, agent definitions with the five builtins and the agent list, the `subagent` tool, access in
-the child with the Plan rule, and grouped completions with `job_wait`)
+**Status:** milestone 1 done 2026-10-26 (design agreed 2026-10-23; foundational since 2026-10-25): agent
+definitions with the five builtins and the agent list, the `subagent` tool, access in the child with the Plan rule,
+grouped completions with `job_wait`, and rendering. Milestones 2 (the fleet view, parallel writers) and 3 (creating
+agents) are next.
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -168,7 +169,9 @@ comes back to yours"), and naming what to do yourself.
 - **Waiting on purpose:** `job_wait` in core, for any job (pi-subagents' `bg_wait`). See
   [background process](../tools/background-process.md#job_wait).
 - **Foreground** (`background: false`): the call waits, shows the child's progress under it, and returns the answer
-  as its result.
+  as its result. The call is drawn as the agent and the start of the task; while it runs, the child's last five steps
+  (`onUpdate`, drawn from `details`) show under it; the finished answer shows its first 500 characters. Ctrl+O
+  expands either. A background call shows "started as job N".
 - **The result:** the child's final answer, its usage (tokens and cost over the run), the path of its session file
   (the full transcript), and the files it changed (from its own tool results). A `developer` that changed nothing
   says so; a run stopped at the time limit says so. A background run's notice carries the whole result, not the

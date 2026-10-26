@@ -1,9 +1,9 @@
-import { defineTool } from "@earendil-works/pi-coding-agent";
+import { defineTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { ask } from "#core/events";
 import type { Session } from "#core/session";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
-import { jobDuration, jobEnding } from "#tool/utils";
+import { expandKey, jobDuration, jobEnding, reuseText, textOf } from "#tool/utils";
 import { type AgentDefinition, THINKING_LEVELS } from "../agents";
 import { type ChildResult, RUN_TIMEOUT_MINUTES, type RunSettings, runChild } from "../child";
 
@@ -13,11 +13,17 @@ const MAX_BACKGROUND = 3;
 /** Most runs one user prompt may start, as a backstop for a model that delegates too eagerly. */
 const MAX_PER_PROMPT = 8;
 
-/** Most characters of the task a job's label shows: models write a whole paragraph on one line. */
+/** Most characters of the task a job's label and a call's line show: models write a whole paragraph on one line. */
 const LABEL_TASK_CHARS = 60;
 
 /** Quiet period before successful subagent notices are grouped. */
 const GROUP_WAIT_MS = 3_000;
+
+/** Most of the child's steps a foreground call shows while it runs, until expanded. */
+const PROGRESS_LINES = 5;
+
+/** Most characters of a foreground answer shown until expanded. */
+const PREVIEW_CHARS = 500;
 
 const parameters = Type.Object({
   agent: Type.String({ description: "The agent's name, from the list in the system prompt." }),
@@ -69,7 +75,22 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
     // In Plan, execute refuses write agents; calls that reach planRule only run read-only agents.
     annotations: { readOnlyHint: true },
     parameters,
-    async execute(_id, args, signal, _onUpdate, ctx) {
+    renderCall(args, theme, context) {
+      const title = theme.fg("toolTitle", theme.bold(`subagent ${args.agent ?? "..."}`));
+      return reuseText(context.lastComponent, `${title} ${theme.fg("muted", taskStart(args.task ?? "..."))}`);
+    },
+    renderResult(result, { expanded }, theme, context) {
+      const details = result.details as { jobId?: string; steps?: string[] } | undefined;
+      if (!context.isPartial && details?.jobId) {
+        return reuseText(context.lastComponent, `\n${theme.fg("muted", `started as job ${details.jobId}`)}`);
+      }
+      if (details?.steps) {
+        return reuseText(context.lastComponent, formatProgress(details.steps, expanded, theme));
+      }
+      const output = textOf(result.content);
+      return reuseText(context.lastComponent, formatOutput(output, expanded, theme));
+    },
+    async execute(_id, args, signal, onUpdate, ctx) {
       const agent = findAgent(agents(), args.agent);
       const writes = agent.access === "write";
       if (writes && (await isPlanMode(session))) {
@@ -91,7 +112,12 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
         });
 
       if (!background) {
-        const result = await start(signal ?? new AbortController().signal, () => {});
+        const steps: string[] = [];
+        const result = await start(signal ?? new AbortController().signal, (step) => {
+          steps.push(step);
+          // Drawn by `renderResult` from `details`; partial results don't reach the model.
+          onUpdate?.({ content: [], details: { steps } });
+        });
         return { content: [{ type: "text", text: formatResult(result) }], details: result };
       }
       return startJob(session, jobLabel(agent, args.task), start, noticeGroup);
@@ -126,9 +152,13 @@ function requireCapacity(session: Session, background: boolean, runsThisPrompt: 
 
 /** The agent and the start of the task's first line, for `job_list`, the footer, and notices. */
 function jobLabel(agent: AgentDefinition, task: string): string {
+  return `${agent.name}: ${taskStart(task)}`;
+}
+
+/** The start of the task's first line, at most `LABEL_TASK_CHARS` characters. */
+function taskStart(task: string): string {
   const line = task.split("\n", 1)[0] ?? "";
-  const shown = line.length > LABEL_TASK_CHARS ? `${line.slice(0, LABEL_TASK_CHARS - 1)}…` : line;
-  return `${agent.name}: ${shown}`;
+  return line.length > LABEL_TASK_CHARS ? `${line.slice(0, LABEL_TASK_CHARS - 1)}…` : line;
 }
 
 /** The run's model and thinking level: the call's, else the agent's; `inherit` leaves them to the parent's. */
@@ -177,6 +207,22 @@ function startJob(
 
   const text = `Started ${label} as job ${job.info.id}. You'll get a message with the answer when it ends.`;
   return { content: [{ type: "text" as const, text }], details: { jobId: job.info.id } };
+}
+
+/** A running foreground call's steps: the last few, or all of them when expanded. */
+function formatProgress(steps: string[], expanded: boolean, theme: Theme): string {
+  const visible = expanded ? steps : steps.slice(-PROGRESS_LINES);
+  const lines = visible.map((step) => `  ${step}`).join("\n");
+  if (expanded || steps.length <= PROGRESS_LINES) return `\n${lines}`;
+
+  const hint = theme.fg("dim", `(${expandKey()} to expand)`);
+  return `\n… ${steps.length - PROGRESS_LINES} earlier steps\n${lines} ${hint}`;
+}
+
+/** A finished foreground call's text: its start, or all of it when expanded. */
+function formatOutput(output: string, expanded: boolean, theme: Theme): string {
+  if (expanded || output.length <= PREVIEW_CHARS) return `\n${output}`;
+  return `\n${output.slice(0, PREVIEW_CHARS)}… ${theme.fg("dim", `(${expandKey()} to expand)`)}`;
 }
 
 /** The model's text for a result: the answer, then usage, the session file, and the files the run changed. */
