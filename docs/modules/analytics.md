@@ -132,6 +132,12 @@ Dated, with the window and model; newest last. Each says what was decided.
   (7 → 16), two growing classes, and untested wiring (`/worktree list`/`remove`, the subagents module). Every
   behavior bug of milestone 3 came from reviews and live checks instead. Security triage clean. Decided: one cleanup
   row for the five; run the full pass after each milestone.
+- **2026-10-26, the cleanup row** (row 16, 2 checkpoints, gpt-6-luna, high): one pass each, nothing rebuilt, cost per
+  checkpoint $0.105 (against milestone 3's $0.50) with no compaction, net −18 lines. The `subagent` tool's `execute`
+  went from 16 to 7 branches. Each review still found something: a lost comment, a defensive guard, a two-line `if`
+  without braces. Removing one copy exposed another (the dialog list, hidden behind the theme). pi made 0 `lsp` and
+  0 `ripwire` calls in both checkpoints, with 10 code searches: refactoring known files didn't need lookups. pi's
+  reviewer subagent can't run the tests (read-only, no one to approve). Decided: small checkpoints are the default.
 
 ## What pi offers
 
