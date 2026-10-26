@@ -32,7 +32,8 @@ const DELEGATION =
   "being asked when it pays off: a search that will take more than about three queries, or spans many files or " +
   "another package (`explore`); a check that doesn't need this conversation; a whole task that would flood this " +
   "context. Do quick lookups and questions about one known file yourself. A run goes in the background: keep " +
-  "working, and its answer arrives as a message.";
+  "working, and its answer arrives as a message. If a child reports a refused call, tell the user what it needed " +
+  "and why, and offer to take that step here, where the user can approve it. Don't retry the child with the same call.";
 
 /** The agent list in the prompt: when delegating pays off, then one line per agent. */
 export function promptSection(agents: AgentDefinition[]): string {

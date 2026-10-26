@@ -112,7 +112,7 @@ someone is logged in to. I set models once ("make reviewer use luna 6"), which s
 | `general` | generic | write | Carries out a multi-step task handed off whole; reports what it did and how it checked it. |
 | `architect` | named | read-only | Designs and plans before building; challenges the approach. |
 | `developer` | named | write | Implements a written brief. |
-| `reviewer` | named | read-only | Checks a change against its task: correctness, tests, edge cases, simplicity. |
+| `reviewer` | named | read-only | Checks a change against its task: correctness, tests, edge cases, simplicity; when given a plan or checklist, checks each box and reports any unmet or differently met box. |
 
 ### Writing agent files
 
@@ -194,7 +194,9 @@ it here (no UI). Tell the user what you needed and why: …").
   same check as Plan, so `git log` runs and `touch` is refused.
 - **`write`:** pi's normal tools.
 - **Clearer refusals:** when there's no UI, `ToolGuard` says the call needs the user's approval and no one can give
-  it here, then includes what needed confirming. The child reports a refusal the parent can take to the user.
+  it here, then includes what needed confirming. When a child reports a refused call, the prompt tells the parent to
+  explain what it needed and why, offer to take the step here where the user can approve it, and not retry the child
+  with the same call.
 - **The folder guard, in every child** (gap found 2026-10-25 planning milestone 1): MyPi's `FolderRule` doesn't run
   in a child either, so an `explore` run could read `~/.ssh` unasked. The child's guard runs it; a call reaching
   outside the session's folder is refused with the reason, and the child reports it in its answer so the parent can

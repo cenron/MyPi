@@ -15,4 +15,7 @@ it("says when to delegate, then lists each agent with its run settings", () => {
     expect.stringContaining("more than about three queries"),
     "- explore: Search widely (model: inherit; thinking: inherit; access: read-only)",
   ]);
+  expect(promptSection([explore])).toContain(
+    "offer to take that step here, where the user can approve it. Don't retry the child with the same call",
+  );
 });
