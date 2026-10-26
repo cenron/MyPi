@@ -37,6 +37,25 @@ Asked for 2026-10-25. Deferred until everything in **Next up** is done; a list, 
 | Readable question dialogs | The dialogs that ask me things are hard to read. | Covers `ask_user`'s question and options, and the tool guard's permission dialog (`previewAsk`, several `folder-guard:` lines in a row). Revisit spacing, wrapping, and what stands out; compare Claude Code's. |
 | A drill-in for running work | Claude Code shows "1 shell", and opening it shows what that shell is doing. Most useful for sub-agents. | **Done 2026-10-26:** `/jobs` opens any session job's output and can stop running jobs; the below-editor line shows running jobs. |
 | Auto mode | Plan, Build, and Auto: a mode that runs without asking for each call, but not unchecked. | Research Claude Code's auto mode first (a classifier reviews each action instead of me; what it sees, what it blocks, how it's turned on), then decide how it fits [plan-build](modules/plan-build.md) and the [folder guard](rules/folder-guard.md). |
+| Theme picker | Switch how pi looks from a menu: themes of colors **and** layout, each its own module, added or removed freely. | Asked for 2026-10-26. A first theme in Claude Code's look (the `❯` prompt line, dots and connectors on tool rows, grouped calls, collapsed thinking, diffs on edits; see [pi-cc-tools](inspiration/pi-cc-tools.md)); Codex or Gemini themes later if wanted. pi 1.2.0's seams cover most of it: `registerToolRenderer` restyles any tool without owning it, plus `setFooter`, `setHeader`, `setEditorComponent`, `setWorkingIndicator`, `setWidget`, and `setTheme`. Following the terminal's colors needs pi 1.4. |
+
+
+## Future discussions
+
+Ideas from [inspiration](inspiration/README.md) that don't fold cleanly into the roadmap and aren't needed for it
+(the user's rule, 2026-10-26: inspiration is built into MyPi, never installed, and is post-MVP). To talk about once
+**Next up** is done; each notes where it would fit.
+
+| Idea | From | Would fit |
+|---|---|---|
+| Workflows: agents in a chain, each step's output the next one's input (`$INPUT`, `$ORIGINAL`) | [pi-vs-claude-code](inspiration/pi-vs-claude-code.md), pi-subagents | [subagents](modules/subagents.md), after milestone 3 |
+| Teams: named groups of agents, and a dispatcher that only delegates | pi-vs-claude-code | subagents milestone 3 (creating agents) |
+| Per-area expert agents for improving MyPi itself (extensions, TUI, themes…), each pointed at the right pi docs | pi-vs-claude-code (`pi-pi`) | subagents milestone 3, with [identity](core/identity.md) |
+| Load Claude Code's agent files (`.claude/agents/*.md`) as MyPi agents | pi-vs-claude-code (`cross-agent`) | subagents' agent loader |
+| Peer-to-peer messaging between agents (list, send, get, await; a hop limit) | pi-vs-claude-code (`coms`) | subagents' [external agents](modules/subagents.md#external-agents-later) |
+| Protected paths inside the project: no access (`.env`, keys) and no delete (`.git/`) | pi-vs-claude-code (`damage-control`) | [folder guard](rules/folder-guard.md) |
+| A live tool tally, such as the code-navigation mix | pi-vs-claude-code (`tool-counter`) | [analytics](modules/analytics.md)' summary |
+| A timeline of the session | pi-vs-claude-code (`session-replay`) | — (pi's `/tree` covers navigation) |
 
 ## Deferred
 
