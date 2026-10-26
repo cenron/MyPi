@@ -11,7 +11,7 @@ const read = (path: string) =>
 describe("registerRules", () => {
   it("puts the folder rule on the session's guard", async () => {
     const { session } = fakeSession([], "/project");
-    registerRules(session);
+    registerRules(session.toolGuard);
     await expect(session.toolGuard.check(read("src/a.ts"), ctx)).resolves.toBeUndefined();
     await expect(session.toolGuard.check(read("/home/me/notes.md"), ctx)).resolves.toEqual({
       block: true,
@@ -21,7 +21,7 @@ describe("registerRules", () => {
 
   it("approves trees across tools until a fresh session registers its rules", async () => {
     const { session } = fakeSession([], "/project");
-    registerRules(session);
+    registerRules(session.toolGuard);
     const select = vi.fn(async () => "Allow for this session");
     const interactive = { ...ctx, hasUI: true, ui: { select } } as unknown as ExtensionContext;
     const bash = (command: string) => ({ ...read(""), toolName: "bash", input: { command } }) as ToolCallEvent;
@@ -38,14 +38,14 @@ describe("registerRules", () => {
     expect(select).toHaveBeenCalledTimes(2);
 
     const fresh = fakeSession([], "/project").session;
-    registerRules(fresh);
+    registerRules(fresh.toolGuard);
     await fresh.toolGuard.check(bash("ls /elsewhere/tree"), interactive);
     expect(select).toHaveBeenCalledTimes(3);
   });
 
   it("allows the places pi's prompt points at, once they're filled in", async () => {
     const { session } = fakeSession([], "/project");
-    const prompt = registerRules(session);
+    const prompt = registerRules(session.toolGuard);
     await expect(session.toolGuard.check(read("/home/me/AGENTS.md"), ctx)).resolves.toMatchObject({ block: true });
 
     updatePromptPaths(prompt, promptWith(["/home/me/AGENTS.md"]));

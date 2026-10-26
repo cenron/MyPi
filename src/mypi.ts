@@ -43,7 +43,7 @@ export class MyPi {
     }
 
     this.session = new Session(ctx, this.pi, project);
-    this.prompt = registerRules(this.session);
+    this.prompt = registerRules(this.session.toolGuard);
     if (discoveryError) this.session.logWarning(discoveryError);
 
     loadModules(this.session, ev.reason);

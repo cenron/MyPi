@@ -10,13 +10,14 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { childAccess } from "./access";
 import type { AgentDefinition } from "./agents";
 
 /** How long one run may take before it's stopped. */
 export const RUN_TIMEOUT_MINUTES = 30;
 
 /** The tools a `read-only` agent gets when its file names none. */
-const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
+const READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "bash"];
 
 export type ThinkingLevel = NonNullable<ExtensionContext["thinkingLevel"]>;
 
@@ -138,6 +139,7 @@ async function childResources(cwd: string, agent: AgentDefinition): Promise<Defa
     settingsManager: SettingsManager.create(cwd, getAgentDir()),
     noExtensions: true,
     noContextFiles: agent.name === "explore",
+    extensionFactories: [childAccess(agent)],
     systemPrompt: agent.prompt,
   });
   await loader.reload();

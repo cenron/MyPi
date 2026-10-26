@@ -216,7 +216,7 @@ describe("/worktree", () => {
   // Memories and plans belong to the project, not a branch, so every checkout uses the main checkout's folders.
   it("lets a worktree session write only the main checkout's memories and plans", async () => {
     const { session } = fakeSession([], "/repo/.pi/worktrees/task", { main: "/repo", commonDir: "/repo/.git" });
-    registerRules(session);
+    registerRules(session.toolGuard);
     new MemoryModule(session).init();
     new PlanBuildModule(session).init();
     const write = (path: string) =>

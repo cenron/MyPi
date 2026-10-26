@@ -1,7 +1,8 @@
 # Sub-agents
 
-**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–3 done
-2026-10-26: the spike, agent definitions with the five builtins and the agent list, and the `subagent` tool)
+**Status:** building (design agreed 2026-10-23; foundational since 2026-10-25; milestone 1 checkpoints 1–4 done
+2026-10-26: the spike, agent definitions with the five builtins and the agent list, the `subagent` tool, and access
+in the child with the Plan rule)
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -177,20 +178,27 @@ comes back to yours"), and naming what to do yourself.
 
 ## Access and Plan mode
 
-MyPi isn't loaded in the child, so MyPi's `ToolGuard` never sees the child's tool calls. The child enforces its own
-access:
+MyPi isn't loaded in the child, so the parent's `ToolGuard` never sees the child's tool calls. The child gets its own:
+an inline extension (`access.ts`, through `DefaultResourceLoader`'s `extensionFactories`) builds a `ToolGuard` with
+MyPi's own rules (`registerRules`, as the parent does), fills their prompt paths from the child's
+`before_agent_start`, and checks every `tool_call`. A child has no UI (`ctx.hasUI` is false, seen live), so the
+guard turns any ask into a block with the reason ("Confirmation needed, no UI to ask: …"); nothing new was needed
+for that.
 
-- **`read-only`:** read tools only (`read`, `grep`, `find`, `ls`), plus `bash` checked by plan-build's `planRule`
-  through a small inline extension in the child (`DefaultResourceLoader`'s `extensionFactories`, checked in pi 1.2.0).
+- **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with plan-build's `planRule` on the child's guard: the
+  same check as Plan, so `git log` runs and `touch` is refused.
 - **`write`:** pi's normal tools.
 - **The folder guard, in every child** (gap found 2026-10-25 planning milestone 1): MyPi's `FolderRule` doesn't run
-  in a child either, so an `explore` run could read `~/.ssh` unasked. The same inline extension runs it; a child has no
-  UI to ask on, so a call reaching outside the session's folder is refused with the reason, and the child reports it
-  in its answer so the parent can ask the user.
-- **In the parent's Plan mode**, the module's own `onToolCall` rule allows a `subagent` run of a `read-only` agent and
-  blocks a `write` agent with a reason. pi's generic rule would ask every time, since `subagent` isn't read-only.
+  in a child either, so an `explore` run could read `~/.ssh` unasked. The child's guard runs it; a call reaching
+  outside the session's folder is refused with the reason, and the child reports it in its answer so the parent can
+  ask the user. Like the parent, it allows the temp folder.
+- **In the parent's Plan mode** a `read-only` agent runs without asking and a `write` agent is refused with the
+  reason. A rule can't do this: no rule can override `planRule`'s ask on a tool not marked read-only. So `subagent`
+  carries `readOnlyHint: true`, and its `execute` asks plan-build for the mode on the event bus (as the done check
+  does) and refuses a `write` agent in Plan. With plan-build off, nobody answers, which counts as Build.
 - **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
-  Without one, only one `write` run works in the main checkout at a time, and the main agent leaves its files alone.
+  Without one, only one `write` run works in the main checkout at a time (counted in the tool, foreground and
+  background alike), and the main agent leaves its files alone.
 - **Children don't commit. A writer's work comes back as a patch:**
   1. The worktree branches from the **calling checkout's committed `HEAD`** (decided 2026-10-25), matching
      `Session.worktrees.create`. If the parent works inside a worktree, the writer branches from that checkout,

@@ -1,5 +1,5 @@
 import type { NormalizedBuildSystemPromptOptions } from "@earendil-works/pi-coding-agent";
-import type { Session } from "#core/session";
+import type { ToolGuard } from "#core/tool-guard";
 import type { BaseRule, PromptPaths } from "./base";
 import { FolderRule } from "./folder";
 
@@ -7,9 +7,9 @@ import { FolderRule } from "./folder";
  * Sets MyPi's own tool rules on the session's guard, next to the modules' rules, by `info.name`. Always on: they're
  * not a module. Returns the prompt paths the rules share, for `updatePromptPaths`.
  */
-export function registerRules(session: Session): PromptPaths {
+export function registerRules(guard: ToolGuard): PromptPaths {
   const prompt: PromptPaths = { paths: [] };
-  for (const rule of createRules(prompt)) session.toolGuard.set(rule.info.name, (call, env) => rule.check(call, env));
+  for (const rule of createRules(prompt)) guard.set(rule.info.name, (call, env) => rule.check(call, env));
   return prompt;
 }
 

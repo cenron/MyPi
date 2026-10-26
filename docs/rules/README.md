@@ -4,7 +4,7 @@ MyPi's own tool rules: checks the tool guard runs on every tool call, next to th
 `BaseModule.onToolCall`. They're core, so they're always on. The code is in `src/rule/`, one file per rule. Each
 extends `BaseRule` (`base.ts`), like modules extend `BaseModule`: an `info` getter (`name`, the prefix of its
 questions, and `description`) and a `check(call, env)` that returns a `Verdict`. Rules are listed in `createRules`
-(`src/rule/index.ts`), and `registerRules` sets them on each session's guard.
+(`src/rule/index.ts`), and `registerRules` sets them on each session's guard, and on each subagent child's.
 
 Every rule gets the session's one `PromptPaths` (`rule.prompt.paths`): the skill folders and context files pi listed
 in the prompt, the places outside the folder pi itself points the agent at. pi hands them over only in

@@ -1,5 +1,6 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
+import { ask } from "#core/events";
 import type { Session } from "#core/session";
 import { jobNotice, NOTICE_LINES, noticeOnEnd } from "#tool/jobs/notice";
 import { jobDuration, jobEnding } from "#tool/utils";
@@ -48,6 +49,8 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
   session.pi.on("input", (event) => {
     if (event.source !== "extension") runsThisPrompt = 0;
   });
+  /** `write` runs going now, foreground or background: one at a time until parallel writers get worktrees. */
+  let writeRuns = 0;
 
   return defineTool({
     name: "subagent",
@@ -58,15 +61,30 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
       "list: above all `explore`, for searches of more than a few queries. The agent can't see this conversation: " +
       "give it the whole task.",
     promptSnippet: "Hand a wide search, an independent check, or a whole task to a subagent",
+    // In Plan, execute refuses write agents; calls that reach planRule only run read-only agents.
+    annotations: { readOnlyHint: true },
     parameters,
     async execute(_id, args, signal, _onUpdate, ctx) {
       const agent = findAgent(agents(), args.agent);
+      const writes = agent.access === "write";
+      if (writes && (await isPlanMode(session))) {
+        throw new Error(`Plan mode is on: ${agent.name} can change files. Switch to Build, or use a read-only agent.`);
+      }
+      if (writes && writeRuns > 0) {
+        throw new Error("Only one write subagent runs at a time; wait for the other to end.");
+      }
+
       const background = args.background !== false;
       requireCapacity(session, background, runsThisPrompt);
       runsThisPrompt++;
 
+      // Counted from here until the run ends, however it ends.
+      if (writes) writeRuns++;
       const start = (runSignal: AbortSignal, onStep: (step: string) => void) =>
-        run(ctx, agent, args.task, runSettings(agent, args), runSignal, onStep);
+        run(ctx, agent, args.task, runSettings(agent, args), runSignal, onStep).finally(() => {
+          if (writes) writeRuns--;
+        });
+
       if (!background) {
         const result = await start(signal ?? new AbortController().signal, () => {});
         return { content: [{ type: "text", text: formatResult(result) }], details: result };
@@ -74,6 +92,12 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
       return startJob(session, jobLabel(agent, args.task), start);
     },
   });
+}
+
+/** Whether plan-build says Plan is on. With plan-build off, nobody answers, which counts as Build. */
+async function isPlanMode(session: Session): Promise<boolean> {
+  const answers = await ask(session.pi.events, "mode", undefined);
+  return answers.some((answer) => answer.kind === "answer" && answer.value === "plan");
 }
 
 function findAgent(agents: AgentDefinition[], name: string): AgentDefinition {

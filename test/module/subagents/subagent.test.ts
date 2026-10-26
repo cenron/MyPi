@@ -1,5 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { answer } from "#core/events";
+import { planRule } from "#module/plan-build/rule";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { type ChildResult, changedPath, runChild, runUsage } from "#module/subagents/child";
 import { subagentTool } from "#module/subagents/tools/subagent";
@@ -31,7 +33,7 @@ function setup(agents: AgentDefinition[] = [explore], run = vi.fn<typeof runChil
     const response = await call({ background: false, ...args });
     return response.content.map((block) => (block.type === "text" ? block.text : "")).join("");
   };
-  return { ...fake, call, text, run };
+  return { ...fake, tool, call, text, run };
 }
 
 /** Resolves once job `id` has ended and its notice, if any, has gone out. */
@@ -121,6 +123,49 @@ describe("subagent", () => {
     await call({ agent: "explore", task: "Find" });
     await settled(session, "1");
     expect(sendMessage.mock.calls[0]?.[0].content).toContain("Error: No model is selected.");
+  });
+
+  // Plan asks before any tool not marked read-only; the tool itself refuses a write agent in Plan.
+  it("runs in Plan without asking", () => {
+    const { tool } = setup();
+    const env = { cwd: "/project", home: "/home/me", writableDirs: [], writableTools: new Set<string>() };
+    expect(planRule({ toolName: "subagent", input: {}, annotations: tool.annotations }, env)).toEqual({
+      kind: "allow",
+    });
+  });
+
+  it("blocks write agents in Plan and allows read-only agents", async () => {
+    const { call, session } = setup([explore, { ...explore, name: "developer", access: "write" }]);
+    answer(session.pi.events, "mode", "plan-test", () => "plan");
+    await expect(call({ agent: "developer", task: "Change it" })).rejects.toThrow(
+      "Plan mode is on: developer can change files",
+    );
+    await expect(call({ agent: "explore", task: "Search" })).resolves.toMatchObject({ details: expect.any(Object) });
+  });
+
+  it("allows only one write run at once, while read-only runs can proceed", async () => {
+    let finish: (() => void) | undefined;
+    const write = { ...explore, name: "developer", access: "write" as const };
+    const { call, text, session } = setup(
+      [explore, write],
+      vi.fn((_ctx, agent) =>
+        agent.access === "write"
+          ? new Promise<ChildResult>((resolve) => {
+              finish = () => resolve(result);
+            })
+          : Promise.resolve(result),
+      ),
+    );
+    await call({ agent: "developer", task: "Hold" });
+    await expect(call({ agent: "developer", task: "Second" })).rejects.toThrow(
+      "Only one write subagent runs at a time",
+    );
+    await expect(text({ agent: "explore", task: "Search" })).resolves.toContain("Found it");
+    finish?.();
+    await settled(session, "1");
+    await expect(call({ agent: "developer", task: "Now allowed" })).resolves.toMatchObject({
+      details: expect.any(Object),
+    });
   });
 
   it("runs at most three in the background at once", async () => {

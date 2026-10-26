@@ -25,7 +25,7 @@ index.ts               default factory: new MyPi(pi), then pi.on("session_start"
 └─ src/mypi.ts         MyPi.onSessionStart(ev, ctx)
    ├─ await new Worktrees(ctx.cwd).project()     main checkout and git common folder; a git failure warns and leaves none
    ├─ new Session(ctx, pi, project)              src/core/session.ts: readonly project and per-session services
-   ├─ registerRules(session)                    src/rule/index.ts: core rules, before module loading
+   ├─ registerRules(session.toolGuard)          src/rule/index.ts: core rules, before module loading
    ├─ loadModules(session, ev.reason)            src/module/index.ts: new each module, moduleManager.start() picks the running ones
    ├─ registerTools(pi, session)                 src/tool/index.ts: the built-in tools + the running modules'
    ├─ initTools(tools)                           init() on the built-in tools that have one
@@ -106,8 +106,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   - **MyPi's own rules** live in `src/rule/` (`#rule/<file>`), next to `src/command/` and `src/tool/`, one file each,
     each a class extending `BaseRule` (`rule/base.ts`): an
     `info` getter (`name`, `description`) and `check(call, env)`, like a module's `info`. They're listed in
-    `createRules` (`rule/index.ts`); `registerRules(session)` sets each on the guard under `info.name` on every
-    `session_start`, before the modules load, so they're always on. Every rule shares the session's one
+    `createRules` (`rule/index.ts`); `registerRules(guard)` sets each on the guard under `info.name` on every
+    `session_start`, before the modules load, so they're always on. A subagent's child sets them on its own guard
+    the same way ([subagents](modules/subagents.md#access-and-plan-mode)). Every rule shares the session's one
     `PromptPaths`, which `registerRules` creates and returns to `MyPi`: the skill folders and context files pi listed
     in the prompt. pi hands those over only in `before_agent_start`, so `MyPi.onBeforeAgentStart` calls
     `updatePromptPaths` (`rule/index.ts`), which fills them once; they change only on `/reload`, which starts over. The first rule is the [folder guard](rules/folder-guard.md)
