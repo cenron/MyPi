@@ -12,6 +12,7 @@ import { git } from "#core/worktree/git";
 import { FooterColor } from "#ui/footer";
 import { BaseModule } from "../base";
 import { doneCheckCmd } from "./commands/done-check";
+import { reportedDuplicates } from "./duplicates";
 import {
   approvalKey,
   approve,
@@ -21,7 +22,7 @@ import {
   readCommands,
   runCommand,
 } from "./project-commands";
-import { changesNotIgnored, doneCheckPassed, doneCheckReport, filesToCheck, MAX_REPORTED_DUPLICATES } from "./report";
+import { changesNotIgnored, doneCheckPassed, doneCheckReport, filesToCheck } from "./report";
 
 /** Most times one run is sent back; after that the agent may stop with whatever is left. */
 const MAX_ROUNDS = 3;
@@ -51,7 +52,7 @@ export class DoneCheckModule extends BaseModule {
   /** Warnings already shown this session, each shown once. */
   private readonly warned = new Set<string>();
   /** Duplicate names already reported this session. */
-  private readonly reportedDuplicates = new Set<string>();
+  private reported = new Set<string>();
   // Built once: `info` lists its info.
   private readonly doneCheckCommand = doneCheckCmd(this.session);
 
@@ -155,15 +156,9 @@ export class DoneCheckModule extends BaseModule {
         this.session.logWarning(`Done check: ${answer.from} couldn't check duplicates: ${answer.error}`);
     }
     const duplicates = answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
-    let reported = 0;
-    return duplicates.filter(({ name }) => {
-      if (this.reportedDuplicates.has(name)) return false;
-      if (reported < MAX_REPORTED_DUPLICATES) {
-        this.reportedDuplicates.add(name);
-        reported++;
-      }
-      return true;
-    });
+    const result = reportedDuplicates(duplicates, this.reported);
+    this.reported = result.reported;
+    return result.duplicates;
   }
 
   /** The tasks still open according to todo, or none when that module is turned off. */

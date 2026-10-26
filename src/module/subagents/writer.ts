@@ -1,13 +1,12 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
 import { keepOutOfGit } from "#core/util/git";
 import { slugify } from "#core/util/slug";
 import { git } from "#core/worktree/git";
 import type { AgentDefinition } from "./agents";
-import type { ChildResult, RunSettings } from "./child";
+import type { ChildResult, ChildRun } from "./child";
 import { runChild } from "./child";
 
 /** A writer's isolated checkout and the commit its patch must include changes from. */
@@ -66,20 +65,12 @@ export async function prepareWriter(session: Session, agent: AgentDefinition): P
 }
 
 /** Runs a writer in a private checkout when possible, and captures its work even when its run is stopped. */
-export async function runWriter(
-  session: Session,
-  parent: ExtensionContext,
-  agent: AgentDefinition,
-  task: string,
-  settings: RunSettings,
-  signal: AbortSignal,
-  onStep: (step: string) => void,
-  run = runChild,
-): Promise<WriterResult> {
+export async function runWriter(session: Session, run: ChildRun, runChildSession = runChild): Promise<WriterResult> {
   if (!session.project) {
-    return { ...(await run(parent, agent, task, settings, signal, onStep)), inPlace: true };
+    return { ...(await runChildSession(run)), inPlace: true };
   }
 
+  const { agent, task, signal } = run;
   const prepared = await prepareWriter(session, agent);
   const writerTask =
     "You work in your own worktree of this project. Make the changes directly in its files. Don't commit, and don't " +
@@ -87,7 +78,7 @@ export async function runWriter(
     task;
   let result: ChildResult;
   try {
-    result = await run(parent, agent, writerTask, settings, signal, onStep, prepared.path);
+    result = await runChildSession({ ...run, task: writerTask }, prepared.path);
   } catch (error) {
     const captured = await captureWork(
       session,

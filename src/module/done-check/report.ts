@@ -1,6 +1,7 @@
 import { isAbsolute, relative, sep } from "node:path";
 import type { Duplicate, OpenTask, Problem } from "#core/channels";
 import { type FileChange, FileChangeKind } from "#core/util/walk";
+import { MAX_REPORTED_DUPLICATES } from "./duplicates";
 import { COMMAND_TIMEOUT_SECONDS, type CommandFailure } from "./project-commands";
 
 /** Most changed files one check asks about; a large `git checkout` shouldn't open hundreds of files in a server. */
@@ -9,15 +10,13 @@ export const MAX_CHECKED_FILES = 50;
 /** Most errors one report lists; the agent fixes the first ones, and the next round shows the rest. */
 const MAX_REPORTED_ERRORS = 20;
 
+/** What to do about duplicated names. */
+const DUPLICATES_NEXT_STEP = "Reuse the existing one, or say why a second one is right.";
+
 /**
  * What to do about open tasks. The last sentence keeps the report from overriding the user: seen live, a model told
  * "do only the first, then stop" was sent back and did the second too.
  */
-export const MAX_REPORTED_DUPLICATES = 10;
-
-/** What to do about duplicated names. */
-const DUPLICATES_NEXT_STEP = "Reuse the existing one, or say why a second one is right.";
-
 const OPEN_TASKS_NEXT_STEP =
   "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.";
 

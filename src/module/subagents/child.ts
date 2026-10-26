@@ -23,6 +23,16 @@ const READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "bash"];
 /** A run's model and thinking level, each undefined to inherit the parent's. */
 export type RunSettings = { model?: string; thinking?: ThinkingLevel };
 
+/** Inputs shared by every child session, bundled to keep the run contract readable. */
+export type ChildRun = {
+  readonly parent: ExtensionContext;
+  readonly agent: AgentDefinition;
+  readonly task: string;
+  readonly settings: RunSettings;
+  readonly signal: AbortSignal;
+  readonly onStep: (step: string) => void;
+};
+
 /** What a run used over all its model calls: tokens, and cost in dollars. */
 export type RunUsage = { tokens: number; cost: number };
 
@@ -38,15 +48,8 @@ export type ChildResult = {
  * Runs `task` in a new child session of `parent`: the agent's prompt and the task, not the conversation. Calls
  * `onStep` as each tool call starts. Stops when `signal` aborts or after `RUN_TIMEOUT_MINUTES`.
  */
-export async function runChild(
-  parent: ExtensionContext,
-  agent: AgentDefinition,
-  task: string,
-  settings: RunSettings,
-  signal: AbortSignal,
-  onStep: (step: string) => void,
-  cwd = parent.cwd,
-): Promise<ChildResult> {
+export async function runChild(run: ChildRun, cwd = run.parent.cwd): Promise<ChildResult> {
+  const { parent, agent, task, settings, signal, onStep } = run;
   if (signal.aborted) throw new Error("aborted");
   if (!settings.model && !parent.model) {
     throw new Error("No model is selected. Select one with /model, or pass `model`.");

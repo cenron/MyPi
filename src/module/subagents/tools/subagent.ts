@@ -6,7 +6,7 @@ import { isPlanMode } from "#core/util/mode";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
 import { expandKey, reuseText, textOf } from "#tool/utils";
 import { type AgentDefinition, THINKING_SETTINGS } from "../agents";
-import { type RunSettings, runChild } from "../child";
+import { type ChildRun, type RunSettings, runChild } from "../child";
 import { runWriter, type WriterResult } from "../writer";
 import { formatResult } from "./outcome";
 
@@ -65,6 +65,22 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
   /** Write runs going now, foreground or background, split by their isolation mode. */
   let worktreeWriters = 0;
   let inPlaceWriters = 0;
+  /** Counts a write run, or throws when the limit for its isolation mode is reached. Returns the release. */
+  function claimWriter(project: boolean): () => void {
+    if (project && worktreeWriters >= MAX_BACKGROUND) {
+      throw new Error(`At most ${MAX_BACKGROUND} worktree writers at once; wait for one to end.`);
+    }
+    if (!project && inPlaceWriters > 0) {
+      throw new Error("Only one write subagent runs at a time outside a git project; wait for it to end.");
+    }
+    if (project) worktreeWriters++;
+    else inPlaceWriters++;
+
+    return () => {
+      if (project) worktreeWriters--;
+      else inPlaceWriters--;
+    };
+  }
   const noticeGroup = new NoticeGroup(session, GROUP_WAIT_MS);
 
   return defineTool({
@@ -100,28 +116,27 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
       if (writes && (await isPlanMode(session.pi.events))) {
         throw new Error(`Plan mode is on: ${agent.name} can change files. Switch to Build, or use a read-only agent.`);
       }
-      if (writes && session.project && worktreeWriters >= MAX_BACKGROUND) {
-        throw new Error(`At most ${MAX_BACKGROUND} worktree writers at once; wait for one to end.`);
-      }
-      if (writes && !session.project && inPlaceWriters > 0) {
-        throw new Error("Only one write subagent runs at a time outside a git project; wait for it to end.");
-      }
-
+      const releaseWriter = writes ? claimWriter(session.project !== undefined) : () => {};
       const background = args.background !== false;
-      requireCapacity(session, background, runsThisPrompt);
+      try {
+        requireCapacity(session, background, runsThisPrompt);
+      } catch (error) {
+        releaseWriter();
+        throw error;
+      }
       runsThisPrompt++;
 
-      // Counted from here until the run ends, however it ends.
-      if (writes && session.project) worktreeWriters++;
-      if (writes && !session.project) inPlaceWriters++;
       const start = (runSignal: AbortSignal, onStep: (step: string) => void) => {
-        const childRun = writes
-          ? runWriter(session, ctx, agent, args.task, runSettings(agent, args), runSignal, onStep, run)
-          : run(ctx, agent, args.task, runSettings(agent, args), runSignal, onStep);
-        return childRun.finally(() => {
-          if (writes && session.project) worktreeWriters--;
-          if (writes && !session.project) inPlaceWriters--;
-        });
+        const childRun: ChildRun = {
+          parent: ctx,
+          agent,
+          task: args.task,
+          settings: runSettings(agent, args),
+          signal: runSignal,
+          onStep,
+        };
+        const child = writes ? runWriter(session, childRun, run) : run(childRun);
+        return child.finally(releaseWriter);
       };
 
       if (!background) {

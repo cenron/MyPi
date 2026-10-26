@@ -3,6 +3,8 @@ import {
   Box,
   type Component,
   Container,
+  type SelectItem,
+  SelectList,
   type SelectListTheme,
   truncateToWidth,
   visibleWidth,
@@ -20,6 +22,26 @@ export function selectListTheme(theme: Theme): SelectListTheme {
     scrollInfo: (text) => theme.fg("dim", text),
     noMatch: (text) => theme.fg("dim", text),
   };
+}
+
+/** Builds the shared list used inside centered dialogs. */
+export function dialogList(
+  rows: SelectItem[],
+  theme: Theme,
+  selectedValue: string | undefined,
+  onSelect: (item: SelectItem) => void,
+  onCancel: () => void,
+): SelectList {
+  const list = new SelectList(rows, DIALOG_LIST_ROWS, selectListTheme(theme));
+  list.setSelectedIndex(
+    Math.max(
+      0,
+      rows.findIndex((row) => row.value === selectedValue),
+    ),
+  );
+  list.onSelect = onSelect;
+  list.onCancel = onCancel;
+  return list;
 }
 
 /** Dialog settings. */

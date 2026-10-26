@@ -1,8 +1,8 @@
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, matchesKey, SelectList, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
+import { type Component, matchesKey, type SelectList, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
-import { DIALOG_LIST_ROWS, Dialog, selectListTheme } from "#ui/components/dialog";
+import { Dialog, dialogList } from "#ui/components/dialog";
 import {
   type AgentDefinition,
   deleteAgent,
@@ -104,19 +104,17 @@ class AgentsView implements Component {
       value: agent.name,
       label: `${agent.name} · ${agent.source} · ${agent.model} · ${agent.thinking} · ${agent.access}`,
     }));
-    this.list = new SelectList(rows, DIALOG_LIST_ROWS, selectListTheme(theme));
     // Reopened after an edit or delete: stay on the row the user was on.
-    this.list.setSelectedIndex(
-      Math.max(
-        0,
-        rows.findIndex((row) => row.value === options.focus),
-      ),
+    this.list = dialogList(
+      rows,
+      theme,
+      options.focus,
+      (item) => {
+        this.selected = this.agents.find((agent) => agent.name === item.value);
+        this.tui.requestRender();
+      },
+      () => this.done(undefined),
     );
-    this.list.onSelect = (item) => {
-      this.selected = this.agents.find((agent) => agent.name === item.value);
-      this.tui.requestRender();
-    };
-    this.list.onCancel = () => this.done(undefined);
   }
 
   render(width: number): string[] {

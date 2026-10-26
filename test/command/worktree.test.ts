@@ -81,6 +81,35 @@ afterEach(async () => {
 });
 
 describe("/worktree", () => {
+  it("lists the main and MyPi worktrees and marks the current checkout", async () => {
+    await active.session.worktrees.create("task");
+
+    const listing = await command("list");
+
+    expect(listing).toContain(`${main} (main, current)`);
+    expect(listing).toContain(`${join(main, ".pi/worktrees/task")} (mypi: task)`);
+  });
+
+  it("lists worktrees without marking one current when outside every checkout", async () => {
+    const outside = join(root, "outside");
+    await mkdir(outside);
+    const ctx = { ...active.ctx, cwd: outside } as ExtensionCommandContext;
+
+    const listing = await worktreeCmd(active.session).execute(ctx, ["list"]);
+
+    expect(listing).toContain(`${main} (main)`);
+    expect(listing).not.toContain(", current)");
+  });
+
+  it("removes a clean named worktree and says so", async () => {
+    await active.session.worktrees.create("task");
+
+    const result = await command("remove", "task");
+
+    expect(result).toContain("Removed worktree task.");
+    expect((await active.session.worktrees.list()).map(({ managedName }) => managedName)).not.toContain("task");
+  });
+
   it("enters with a fork of the selected branch, whose parent is the entering session", async () => {
     const a = active.manager;
     const selected = a.appendCustomEntry("selected", {});

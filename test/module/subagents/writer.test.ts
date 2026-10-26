@@ -99,15 +99,7 @@ describe("writer work", () => {
 
   it("captures a writer's partial work when its run is stopped", async () => {
     const fake = fakeSession([], main, { main, commonDir: join(main, ".git") });
-    const run = async (
-      _parent: unknown,
-      _agent: AgentDefinition,
-      task: string,
-      _settings: unknown,
-      signal: AbortSignal,
-      _step: (step: string) => void,
-      cwd?: string,
-    ) => {
+    const run = async ({ task, signal }: { task: string; signal: AbortSignal }, cwd?: string) => {
       expect(task).toContain("don't write patch files");
       expect(cwd).toContain("sub-developer-");
       await put(cwd as string, "partial.txt", "partial work\\n");
@@ -125,12 +117,14 @@ describe("writer work", () => {
 
     const result = await runWriter(
       fake.session,
-      fake.session.ctx,
-      developer,
-      "Add a file",
-      {},
-      controller.signal,
-      () => {},
+      {
+        parent: fake.session.ctx,
+        agent: developer,
+        task: "Add a file",
+        settings: {},
+        signal: controller.signal,
+        onStep: () => {},
+      },
       run as never,
     );
 
@@ -145,7 +139,7 @@ describe("writer work", () => {
     const tool = subagentTool(
       fake.session,
       () => [developer],
-      async (_parent, _agent, _task, _settings, signal, _step, cwd) => {
+      async ({ signal }, cwd) => {
         await put(cwd as string, "partial.txt", "partial work\\n");
         began();
         return await new Promise((resolve) => {
@@ -184,15 +178,7 @@ describe("writer work", () => {
   });
 
   it("keeps partial work and names its patch when the child fails", async () => {
-    const run = async (
-      _parent: unknown,
-      _agent: AgentDefinition,
-      _task: string,
-      _settings: unknown,
-      _signal: AbortSignal,
-      _step: (step: string) => void,
-      cwd?: string,
-    ) => {
+    const run = async (_run: unknown, cwd?: string) => {
       await put(cwd as string, "partial.txt", "partial work\\n");
       throw new Error("Child failed");
     };
@@ -200,12 +186,14 @@ describe("writer work", () => {
 
     const result = await runWriter(
       fake.session,
-      fake.session.ctx,
-      developer,
-      "Partial change",
-      {},
-      new AbortController().signal,
-      () => {},
+      {
+        parent: fake.session.ctx,
+        agent: developer,
+        task: "Partial change",
+        settings: {},
+        signal: new AbortController().signal,
+        onStep: () => {},
+      },
       run as never,
     );
 
@@ -217,15 +205,7 @@ describe("writer work", () => {
 
   it("runs in place outside a git project", async () => {
     const fake = fakeSession();
-    const run = async (
-      _parent: unknown,
-      _agent: AgentDefinition,
-      _task: string,
-      _settings: unknown,
-      _signal: AbortSignal,
-      _step: (step: string) => void,
-      cwd?: string,
-    ) => {
+    const run = async (_run: unknown, cwd?: string) => {
       expect(cwd).toBeUndefined();
       return {
         answer: "Done",
@@ -238,12 +218,14 @@ describe("writer work", () => {
 
     const result = await runWriter(
       fake.session,
-      fake.session.ctx,
-      developer,
-      "Change",
-      {},
-      new AbortController().signal,
-      () => {},
+      {
+        parent: fake.session.ctx,
+        agent: developer,
+        task: "Change",
+        settings: {},
+        signal: new AbortController().signal,
+        onStep: () => {},
+      },
       run as never,
     );
 
@@ -255,7 +237,7 @@ describe("writer work", () => {
     const tool = subagentTool(
       fake.session,
       () => [developer],
-      async (_parent, _agent, _task, _settings, _signal, _step, cwd) => {
+      async (_run, cwd) => {
         await put(cwd as string, `writer-${cwd?.split("-").at(-1)}.txt`);
         return {
           answer: "Done",
@@ -273,6 +255,8 @@ describe("writer work", () => {
     await call("Two");
     await call("Three");
     await expect(call("Four")).rejects.toThrow("At most 3");
+    await Promise.all(fake.session.jobs.list().map((job) => fake.session.jobs.get(job.id)?.done));
+    await expect(call("Four")).resolves.toMatchObject({ details: expect.any(Object) });
     await Promise.all(fake.session.jobs.list().map((job) => fake.session.jobs.get(job.id)?.done));
 
     expect(

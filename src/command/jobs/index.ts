@@ -1,16 +1,9 @@
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
-import {
-  type Component,
-  matchesKey,
-  SelectList,
-  type SelectListTheme,
-  type TUI,
-  truncateToWidth,
-} from "@earendil-works/pi-tui";
+import { type Component, matchesKey, type SelectList, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Session } from "#core/session";
 import type { Command, JobInfo } from "#core/types";
 import { jobDuration, jobEnding } from "#core/util/jobs";
-import { DIALOG_LIST_ROWS, Dialog, selectListTheme } from "#ui/components/dialog";
+import { Dialog, dialogList } from "#ui/components/dialog";
 
 const OUTPUT_LINES = 100;
 
@@ -67,7 +60,6 @@ class JobsView implements Component {
   private message: string | undefined;
   private jobs: JobInfo[] = [];
   private list: SelectList;
-  private readonly listTheme: SelectListTheme;
 
   constructor(
     private readonly theme: Theme,
@@ -76,7 +68,6 @@ class JobsView implements Component {
     private readonly done: (result: undefined) => void,
     private readonly onStop: (job: JobInfo) => void,
   ) {
-    this.listTheme = selectListTheme(theme);
     this.list = this.createList();
     this.refreshList();
   }
@@ -141,19 +132,16 @@ class JobsView implements Component {
       // No description column: SelectList gives it half the width, and the log path is in the opened view.
       label: `${job.id} · ${job.kind} · ${jobEnding(job).replace("exit code ", "exit ")} · ${jobDuration(job)} · ${job.label}`,
     }));
-    const list = new SelectList(rows, DIALOG_LIST_ROWS, this.listTheme);
-    list.setSelectedIndex(
-      Math.max(
-        0,
-        rows.findIndex((row) => row.value === selectedId),
-      ),
+    return dialogList(
+      rows,
+      this.theme,
+      selectedId,
+      (item) => {
+        this.opened = this.jobs.find((job) => job.id === item.value);
+        this.tui.requestRender();
+      },
+      () => this.done(undefined),
     );
-    list.onSelect = (item) => {
-      this.opened = this.jobs.find((job) => job.id === item.value);
-      this.tui.requestRender();
-    };
-    list.onCancel = () => this.done(undefined);
-    return list;
   }
 
   private refreshList() {

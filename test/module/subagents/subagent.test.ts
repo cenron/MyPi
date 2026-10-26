@@ -74,7 +74,7 @@ describe("subagent", () => {
   ])("gives the child %s model and thinking", async (_name, agentFields, callFields, settings) => {
     const { text, run } = setup([{ ...explore, ...agentFields } as AgentDefinition]);
     await text({ agent: "explore", task: "Find", ...callFields });
-    expect(run.mock.calls[0]?.[3]).toEqual(settings);
+    expect(run.mock.calls[0]?.[0].settings).toEqual(settings);
   });
 
   describe("drawing", () => {
@@ -95,7 +95,7 @@ describe("subagent", () => {
     it("streams a foreground run's steps, the last five until expanded", async () => {
       const steps = Array.from({ length: 7 }, (_, step) => `read: ${step + 1}.ts`);
       const run = vi.fn<typeof runChild>(async (...args) => {
-        for (const step of steps) args[5](step);
+        for (const step of steps) args[0].onStep(step);
         return result;
       });
       const { tool, session } = setup([explore], run);
@@ -161,7 +161,7 @@ describe("subagent", () => {
 
   it("brings background runs that end together in one message", async () => {
     vi.useFakeTimers();
-    const run = vi.fn<typeof runChild>(async (_ctx, _agent, task) => ({ ...result, answer: `answer to ${task}` }));
+    const run = vi.fn<typeof runChild>(async ({ task }) => ({ ...result, answer: `answer to ${task}` }));
     const { call, session, sendMessage } = setup([explore], run);
     await call({ agent: "explore", task: "one" });
     await call({ agent: "explore", task: "two" });
@@ -215,7 +215,7 @@ describe("subagent", () => {
     const write = { ...explore, name: "developer", access: "write" as const };
     const { call, text, session } = setup(
       [explore, write],
-      vi.fn((_ctx, agent) =>
+      vi.fn(({ agent }) =>
         agent.access === "write"
           ? new Promise<ChildResult>((resolve) => {
               finish = () => resolve(result);
@@ -269,7 +269,14 @@ describe("runChild", () => {
       cwd: "/project",
       sessionManager: { getSessionFile: () => undefined },
     } as unknown as ExtensionContext;
-    const running = runChild(parent, explore, "Find", {}, controller.signal, () => {});
+    const running = runChild({
+      parent,
+      agent: explore,
+      task: "Find",
+      settings: {},
+      signal: controller.signal,
+      onStep: () => {},
+    });
 
     controller.abort();
     finishRuntime({} as ModelRuntime);
@@ -279,9 +286,16 @@ describe("runChild", () => {
 
   it("fails with what to do when neither the parent nor the run names a model", async () => {
     const parent = { model: undefined } as ExtensionContext;
-    await expect(runChild(parent, explore, "Find", {}, new AbortController().signal, () => {})).rejects.toThrow(
-      "No model is selected. Select one with /model, or pass `model`.",
-    );
+    await expect(
+      runChild({
+        parent,
+        agent: explore,
+        task: "Find",
+        settings: {},
+        signal: new AbortController().signal,
+        onStep: () => {},
+      }),
+    ).rejects.toThrow("No model is selected. Select one with /model, or pass `model`.");
   });
 
   it.each([
