@@ -204,6 +204,12 @@ Checked 2026-10-25, for slice 4.
 - Both modes, Plan and Build.
 - pi's opening `find .. -name AGENTS.md` prompts like any other outside call.
 
+7. **Done 2026-10-26: forwarded Herdr text isn't a path here.** `herdr pane send-text` and `herdr agent prompt`
+   pass their remaining words to another program, so this guard skips those words instead of asking about text such as
+   `/plan build`. Its `<` targets are still checked. With an output redirect (`>`), `tokenize` gives up and the raw
+   split checks the text like any word: a rare false prompt, kept rather than a second scanner. A plain shell
+   receiving the text isn't covered by this guard; a pi in the other pane checks its own calls.
+
 ## Decided 2026-10-25
 
 - "Allow for this session" on a path allows everything under it (slice 4), before the worktree tool.

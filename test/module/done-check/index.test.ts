@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenTask, Problem } from "#core/channels";
 import { answer } from "#core/events";
@@ -10,6 +12,7 @@ import { approve } from "#module/done-check/project-commands";
 import { fakeSession } from "../../fakes";
 
 let dir: string;
+const execute = promisify(execFile);
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "mypi-done-check-"));
@@ -63,6 +66,31 @@ const error = (file: string, message = "Cannot find name 'x'."): Problem => ({
 const writeNew = (name = "new.ts") => writeFile(join(dir, name), "");
 
 describe("DoneCheckModule", () => {
+  it("doesn't check files ignored by the project's Git repository", async () => {
+    await execute("git", ["init"], { cwd: dir });
+    await writeFile(join(dir, ".gitignore"), "coverage/\n");
+    const { runTurn, diagnostics } = start({ project: { main: dir, commonDir: dir } });
+
+    await runTurn(async () => {
+      await writeNew("src.ts");
+      await mkdir(join(dir, "coverage"));
+      await writeNew("coverage/index.js");
+    });
+
+    expect(diagnostics).toHaveBeenCalledWith(expect.objectContaining({ files: [join(dir, "src.ts")] }));
+  });
+
+  it("warns once when Git cannot list ignored files and still checks the changes", async () => {
+    const { runTurn, notify, diagnostics } = start({ project: { main: dir, commonDir: dir } });
+    await runTurn(() => writeNew("a.ts"));
+    await runTurn(() => writeNew("b.ts"));
+
+    expect(diagnostics).toHaveBeenCalledTimes(2);
+    expect(
+      notify.mock.calls.filter(([message]) => String(message).includes("couldn't list ignored files")),
+    ).toHaveLength(1);
+  });
+
   it("sends the errors in the files a Build run changed back, and asks for one more model request", async () => {
     const { runTurn, diagnostics } = start({ problems: (files) => files.map((file) => error(file)) });
 

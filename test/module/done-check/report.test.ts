@@ -2,12 +2,30 @@ import { describe, expect, it } from "vitest";
 import type { OpenTask, Problem } from "#core/channels";
 import { FileChangeKind } from "#core/util/walk";
 import type { CommandFailure } from "#module/done-check/project-commands";
-import { doneCheckPassed, doneCheckReport, filesToCheck, MAX_CHECKED_FILES } from "#module/done-check/report";
+import {
+  changesNotIgnored,
+  doneCheckPassed,
+  doneCheckReport,
+  filesToCheck,
+  MAX_CHECKED_FILES,
+} from "#module/done-check/report";
 
 /** A problem in `file` at `line`, an error unless `severity` says otherwise. */
 function problem(file: string, line: number, severity: Problem["severity"] = "error"): Problem {
   return { file, line, column: 1, severity, message: `bad ${line}`, origin: "ts 1" };
 }
+
+describe("changesNotIgnored", () => {
+  it("drops ignored files and folders on path boundaries", () => {
+    const changes = [
+      { file: "/p/coverage/index.js", kind: FileChangeKind.CREATED },
+      { file: "/p/local.log", kind: FileChangeKind.CHANGED },
+      { file: "/p/src/app.ts", kind: FileChangeKind.CHANGED },
+      { file: "/p/coverage-report.md", kind: FileChangeKind.CREATED },
+    ];
+    expect(changesNotIgnored(changes, ["coverage/", "local.log"], "/p")).toEqual([changes[2], changes[3]]);
+  });
+});
 
 describe("filesToCheck", () => {
   it("keeps created and changed files, not deleted ones", () => {

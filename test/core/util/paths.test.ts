@@ -62,6 +62,17 @@ describe("commandPaths", () => {
     ["a < target, whatever its shape", "wc -l < notes.txt", ["/home/me/work/app/notes.txt"]],
     ["quoted and braced words, as bash sees them", "cat '/a b' /x/{c,d}", ["/a b", "/x/c", "/x/d"]],
     ["words in every segment", "ls /a | grep x && cat /b", ["/a", "/b"]],
+    ["herdr pane send-text forwards text", "herdr pane send-text wN:p5 '/plan build'", []],
+    ["herdr agent prompt forwards text", 'herdr agent prompt todo-check "/plan implement .pi/plans/x.md" --wait', []],
+    ["herdr send-text still checks < targets", "herdr pane send-text wN:p5 '/reload' < /etc/passwd", ["/etc/passwd"]],
+    // An output redirect makes tokenize give up; the raw split then checks the text like any word.
+    [
+      "herdr send-text with a > falls back to the raw split",
+      "herdr pane send-text wN:p5 '/reload' > /etc/x",
+      ["/reload", "/etc/x"],
+    ],
+    ["a redirect-looking payload stays opaque", "herdr pane send-text wN:p5 'echo > /etc/x'", []],
+    ["other herdr commands still check paths", "herdr pane read wN:p5 /etc/hosts", ["/etc/hosts"]],
     ["the cd target", "cd sub && ls", ["/home/me/work/app/sub"]],
     ["a bare cd, which goes home", "cd && ls", ["/home/me"]],
     ["cd's options skipped", "cd -P /x", ["/x"]],

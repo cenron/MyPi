@@ -8,6 +8,12 @@ const UNICODE_SPACES = /[  -   　]/g;
 /** `name=value` words, such as `--file=x`, `if=x` (dd), or `VAR=x`: the value is what may be a path. */
 const ASSIGNMENT = /^[-\w.]+=(.*)$/s;
 
+/** Commands whose words are text for another program, not paths: a pi there runs its own folder guard. */
+const FORWARDED_TEXT_COMMANDS = [
+  ["herdr", "pane", "send-text"],
+  ["herdr", "agent", "prompt"],
+];
+
 /** `$HOME` and `${HOME}` where they start a path, for commands `tokenize` gives up on. */
 const HOME_VARIABLE = /\$(?:HOME|\{HOME\})(?=\/|$|[\s;|&)'"`])/g;
 
@@ -62,7 +68,8 @@ export function tempFilePath(prefix: string, extension: string): string {
 /**
  * The places a bash command names, resolved to absolute paths: every word that reads as a path (see `isPathWord`),
  * every `<` target, and every `cd` target, with later words resolved from the folder a `cd` moved to. When `tokenize`
- * gives up (`$(…)`, variables, redirects to files), the raw text is split instead and `$HOME` counts as `~`.
+ * gives up (`$(…)`, variables, redirects to files), the raw text is split instead and `$HOME` counts as `~`. The words
+ * of a command that forwards text to another pane (`herdr pane send-text`) aren't paths; its `<` targets are.
  */
 export function commandPaths(command: string, cwd: string, home: string): string[] {
   const segments = tokenize(command);
@@ -71,12 +78,19 @@ export function commandPaths(command: string, cwd: string, home: string): string
   return segmentPaths(segments, cwd, home);
 }
 
+/** True for a command that sends its words to another program as text (`FORWARDED_TEXT_COMMANDS`). */
+function isForwardedTextCommand(words: readonly string[]): boolean {
+  return FORWARDED_TEXT_COMMANDS.some((prefix) => prefix.every((word, index) => words[index] === word));
+}
+
 function segmentPaths(segments: Segment[], cwd: string, home: string): string[] {
   const paths: string[] = [];
   let dir = cwd;
 
   for (const { words, inputs } of segments) {
     for (const input of inputs) paths.push(resolveToolPath(input, dir, home));
+
+    if (isForwardedTextCommand(words)) continue;
 
     const [name, ...args] = words;
     if (name === "cd") {

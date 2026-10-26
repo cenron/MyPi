@@ -7,6 +7,7 @@ import type { OpenTask } from "#core/channels";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { fileChanges, fileTimes } from "#core/util/walk";
+import { git } from "#core/worktree/git";
 import { FooterColor } from "#ui/footer";
 import { BaseModule } from "../base";
 import { doneCheckCmd } from "./commands/done-check";
@@ -19,7 +20,7 @@ import {
   readCommands,
   runCommand,
 } from "./project-commands";
-import { doneCheckPassed, doneCheckReport, filesToCheck } from "./report";
+import { changesNotIgnored, doneCheckPassed, doneCheckReport, filesToCheck } from "./report";
 
 /** Most times one run is sent back; after that the agent may stop with whatever is left. */
 const MAX_ROUNDS = 3;
@@ -28,6 +29,9 @@ const MAX_ROUNDS = 3;
 const REPORT_TYPE = "mypi-done-check";
 
 const YES = "Yes";
+
+/** Untracked files git ignores, a whole ignored folder as one `name/` entry, relative to the folder it runs in. */
+const IGNORED_FILES_ARGS = ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"];
 
 /** A Build run's file times at its start, how many times it was sent back, and the last report it got. */
 type Run = { before: Map<string, number>; rounds: number; lastReport?: string };
@@ -87,7 +91,9 @@ export class DoneCheckModule extends BaseModule {
     if (!(await this.inBuild())) return undefined;
 
     const openTasks = await this.openTasks();
-    const { files, skipped } = filesToCheck(fileChanges(run.before, await fileTimes(ctx.cwd)));
+    const changes = fileChanges(run.before, await fileTimes(ctx.cwd));
+    const ignored = changes.length > 0 ? await this.ignoredFiles(ctx) : [];
+    const { files, skipped } = filesToCheck(changesNotIgnored(changes, ignored, ctx.cwd));
     if (files.length === 0) {
       return this.continueWithReport(run, doneCheckReport({ problems: [], failures: [], skipped, openTasks }, ctx.cwd));
     }
@@ -114,6 +120,21 @@ export class DoneCheckModule extends BaseModule {
       return { report: doneCheckReport({ problems, failures, skipped, openTasks }, ctx.cwd), sources, commands };
     } finally {
       this.setFooter(undefined);
+    }
+  }
+
+  /**
+   * What git ignores under the session's folder, files and whole folders (`coverage/`), so generated files aren't
+   * checked. None outside a git project. When git fails, the user is told once and every change is checked.
+   */
+  private async ignoredFiles(ctx: ExtensionContext): Promise<string[]> {
+    if (this.session.project === undefined) return [];
+
+    try {
+      return (await git(ctx.cwd, IGNORED_FILES_ARGS)).split("\0").filter(Boolean);
+    } catch (error) {
+      this.warnOnce(`Done check: couldn't list ignored files; checking all changed files: ${errorMessage(error)}`);
+      return [];
     }
   }
 

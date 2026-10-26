@@ -20,9 +20,10 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 ## Behavior
 
 - **When:** at the end of a run in Build that finished normally (not aborted, no error), when files changed or todo
-  has open tasks. Plan makes no edits, so it's never checked. A `/plan implement` run is a Build run, so it ends with
-  the check too. The mode is plan-build's, so the check asks for it on the [event bus](#the-event-bus) (`mode`); with
-  no answer (no plan-build), it counts as Build.
+  has open tasks. In a Git repository, changed files Git ignores are left out before the 50-file limit; if Git cannot
+  list ignored files, the check warns once and checks every changed file. Plan makes no edits, so it's never checked.
+  A `/plan implement` run is a Build run, so it ends with the check too. The mode is plan-build's, so the check asks
+  for it on the [event bus](#the-event-bus) (`mode`); with no answer (no plan-build), it counts as Build.
 - **Changed files:** every file whose modification time differs from the start of the run, or that was created or
   deleted since, skipping hidden folders and `node_modules`. That catches `bash` (`sed -i`, code generators,
   `git checkout`), not only `edit`, `write`, and `lsp_edit`. Two scans per Build run: 4 ms for MyPi, 245 ms for a
@@ -200,6 +201,12 @@ with another extension").
    `pending` or `in_progress`, the report lists them and the run continues, as for a failed command, even when no files
    changed, unless the user asked to stop before them. The done check asks todo on the event bus (`openTasks`). With
    todo off, no one answers and behavior is unchanged. Aimed at milestone 1's main failure: stopping partway.
+
+6. **Done 2026-10-26: skip Git-ignored changes.** `git ls-files -z --others --ignored --exclude-standard --directory`
+   lists ignored untracked files and whole ignored folders once, before the done check's 50-file limit. This avoids
+   handing the 50 generated `coverage/` files rewritten by `npm run check` to LSP. It runs only in a Git project and
+   only when files changed; if Git fails, the check warns once and checks all changes. The shared `fileTimes` walk
+   stays unchanged for LSP.
 
 ## Decided 2026-10-24
 

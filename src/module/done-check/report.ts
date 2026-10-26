@@ -1,4 +1,4 @@
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 import type { OpenTask, Problem } from "#core/channels";
 import { type FileChange, FileChangeKind } from "#core/util/walk";
 import { COMMAND_TIMEOUT_SECONDS, type CommandFailure } from "./project-commands";
@@ -42,6 +42,21 @@ export function doneCheckPassed(
     ...commands.map((command) => `${command} passed`),
   ];
   return `Done check passed: ${parts.join("; ")}.`;
+}
+
+/** Changed files Git doesn't ignore; directory entries from `git ls-files --directory` end in `/`. */
+export function changesNotIgnored(
+  changes: readonly FileChange[],
+  ignored: readonly string[],
+  cwd: string,
+): FileChange[] {
+  return changes.filter((change) => {
+    const path = relative(cwd, change.file).split(sep).join("/");
+    return !ignored.some((entry) => {
+      const ignoredPath = entry.endsWith("/") ? entry.slice(0, -1) : entry;
+      return path === ignoredPath || path.startsWith(`${ignoredPath}/`);
+    });
+  });
 }
 
 /** The files a run changed that are still there to check, at most `MAX_CHECKED_FILES`, and how many were left out. */
