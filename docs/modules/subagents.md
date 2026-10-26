@@ -110,7 +110,7 @@ someone is logged in to. I set models once ("make reviewer use luna 6"), which s
 | `general` | generic | write | Carries out a multi-step task handed off whole; reports what it did and how it checked it. |
 | `architect` | named | read-only | Designs and plans before building; challenges the approach. |
 | `developer` | named | write | Implements a written brief. |
-| `reviewer` | named | read-only | Checks a change against its task: correctness, tests, edge cases, simplicity; searches for existing helpers by name and behavior and lists duplicates; when given a plan or checklist, checks each box and reports any unmet or differently met box. |
+| `reviewer` | named | read-only | Checks a change against its task: correctness, tests, edge cases, simplicity; searches for existing helpers and constants by name and behavior and lists duplicates; when given a plan or checklist, checks each box and reports any unmet or differently met box. |
 
 ### Writing agent files
 

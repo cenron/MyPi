@@ -117,6 +117,21 @@ Dated, with the window and model; newest last. Each says what was decided.
   would, the model wrote its own `formatPrice` next to an existing one; the done check named both and the model
   imported the existing one. The first time a done-check report changed what a model did. Measure from here: the
   "rebuilt instead of reused" count in milestone 3 (with ripwire's skills on) against milestone 2's 4.
+- **2026-10-26, ripwire's skills on** (subagents milestone 3, 2 checkpoints, gpt-6-luna, high, no nudge): 11 `ripwire`
+  calls, all `--help`, `--quality-delta`, or `--quality-panel` after writing; none of the lookups that find an
+  existing helper (`--for`, `--clones`). Rebuilt helpers 4 → 4; `lsp` share 53% → 60% (6/4); cost per checkpoint
+  $0.181 → $0.50, mostly from the first compactions (3). Decided: no change to MyPi; ripwire stays hands-off, and the
+  duplicate check stays MyPi's way to catch rebuilds. Over $0.2 a checkpoint, so checkpoints get smaller.
+- **2026-10-26, the duplicate check's false alarms and their fix.** On pi's own work it reported imported names and a
+  private `parameters` constant every tool file has. Fixed by checking only names declared in the file and only
+  functions, classes, interfaces, and enums; the next checkpoint copied a constant (`LIST_HEIGHT`) it then missed.
+  Decided: keep constants out (a name lookup can't tell a copy from a common name); the reviewer agent looks for
+  copied constants.
+- **2026-10-26, a full ripwire pass over MyPi** (at `d3b4844`): it found what the reviews didn't, all shapes: two
+  copies of a toggle dialog (`/lsp`, `/modules`), `inBuild` and `isPlanMode`, the `subagent` tool's complexity
+  (7 → 16), two growing classes, and untested wiring (`/worktree list`/`remove`, the subagents module). Every
+  behavior bug of milestone 3 came from reviews and live checks instead. Security triage clean. Decided: one cleanup
+  row for the five; run the full pass after each milestone.
 
 ## What pi offers
 
