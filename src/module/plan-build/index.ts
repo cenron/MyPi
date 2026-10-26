@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AgentSettledEvent, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { isThinkingLevel, type ThinkingLevel } from "#core/util/thinking";
 import { FooterColor, type FooterItem } from "#ui/footer";
 import { BaseModule } from "../base";
 import { planCmd } from "./commands/plan";
@@ -23,7 +24,7 @@ const FOOTER_ITEMS: Record<Mode, FooterItem> = {
 };
 
 /** The prompt section for each mode. */
-export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string }> {
+export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thinking?: ThinkingLevel }> {
   private readonly plansDir = join(this.session.project?.main ?? this.session.ctx.cwd, PLANS_DIR);
   private mode: Mode = Mode.PLAN;
   /** The plan file a Build session is implementing: named in its prompt section, saved with the mode, dropped on Plan. */
@@ -35,7 +36,9 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string }> {
   private readonly planCommand = planCmd(this.plansDir, {
     toggleMode: () => this.toggleMode(),
     setMode: (mode) => this.setMode(mode),
-    saveBuildTo: (sessionManager, plan) => this.saveStateTo(sessionManager, { mode: Mode.BUILD, plan }),
+    saveBuildTo: (sessionManager, plan, thinking) =>
+      this.saveStateTo(sessionManager, { mode: Mode.BUILD, plan, thinking }),
+    getThinkingLevel: () => this.session.pi.getThinkingLevel(),
     jobs: this.session.jobs,
   });
 
@@ -52,6 +55,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string }> {
     const saved = this.loadState();
     this.mode = isMode(saved?.mode) ? saved.mode : Mode.PLAN;
     this.plan = typeof saved?.plan === "string" ? saved.plan : undefined;
+    this.restoreThinking(saved?.thinking);
     this.setFooter(FOOTER_ITEMS[this.mode]);
     this.setPrompt(this.currentPrompt());
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
@@ -107,6 +111,17 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string }> {
         }),
     };
     await offerPlan(ctx, plan, actions);
+  }
+
+  /**
+   * Sets the thinking level `/plan implement` carried over from the session it left, then drops it from the saved
+   * state: pi records the level itself, so a later resume keeps any level the user picked since.
+   */
+  private restoreThinking(thinking: unknown) {
+    if (thinking === undefined) return;
+
+    if (isThinkingLevel(thinking)) this.session.pi.setThinkingLevel(thinking);
+    this.saveState({ mode: this.mode, plan: this.plan });
   }
 
   private toggleMode() {

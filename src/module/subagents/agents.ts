@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { errorMessage, isNodeError } from "#core/util/errors";
+import { THINKING_LEVELS } from "#core/util/thinking";
 
 /** Access allowed to an agent's child session. */
 export type AgentAccess = "read-only" | "write";
@@ -18,9 +19,9 @@ export type AgentDefinition = {
 };
 
 /** pi's thinking levels, plus `inherit` (the parent's), the default. */
-export const THINKING_LEVELS = ["inherit", "off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export const THINKING_SETTINGS = ["inherit", ...THINKING_LEVELS] as const;
 
-export type ThinkingSetting = (typeof THINKING_LEVELS)[number];
+export type ThinkingSetting = (typeof THINKING_SETTINGS)[number];
 
 /** Parses one agent file and reports invalid values with the source path. */
 export function parseAgentFile(file: string, source: string): AgentDefinition {
@@ -43,7 +44,9 @@ export function parseAgentFile(file: string, source: string): AgentDefinition {
   if (access !== "read-only" && access !== "write") throw new Error(`${file}: invalid field 'access'`);
 
   const model = optionalString(frontmatter, "model", "inherit", file);
-  const thinking = THINKING_LEVELS.find((level) => level === optionalString(frontmatter, "thinking", "inherit", file));
+  const thinking = THINKING_SETTINGS.find(
+    (level) => level === optionalString(frontmatter, "thinking", "inherit", file),
+  );
   if (!thinking) throw new Error(`${file}: invalid field 'thinking'`);
   const tools = frontmatter.tools;
   if (tools !== undefined && (!Array.isArray(tools) || tools.some((tool) => typeof tool !== "string"))) {

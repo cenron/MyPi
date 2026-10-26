@@ -4,7 +4,7 @@ import { ask } from "#core/events";
 import type { Session } from "#core/session";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
 import { expandKey, jobDuration, jobEnding, reuseText, textOf } from "#tool/utils";
-import { type AgentDefinition, THINKING_LEVELS } from "../agents";
+import { type AgentDefinition, THINKING_SETTINGS } from "../agents";
 import { type ChildResult, RUN_TIMEOUT_MINUTES, type RunSettings, runChild } from "../child";
 
 /** Most background runs at once. */
@@ -33,7 +33,7 @@ const parameters = Type.Object({
   model: Type.Optional(Type.String({ description: "A model for this run only, as `provider/id`." })),
   thinking: Type.Optional(
     Type.Union(
-      THINKING_LEVELS.map((level) => Type.Literal(level)),
+      THINKING_SETTINGS.map((level) => Type.Literal(level)),
       { description: "A thinking level for this run only." },
     ),
   ),

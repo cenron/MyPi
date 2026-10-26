@@ -68,9 +68,25 @@ describe("implementInNewSession", () => {
     return path;
   };
 
+  it("seeds the new session with the current thinking level", async () => {
+    const { ctx, newSession, newManager } = fakeCommandContext(cwd);
+    const seed = vi.fn();
+    const getThinkingLevel = vi.fn(() => "low" as const);
+    await implementInNewSession(ctx, await writePlan(), jobs, getThinkingLevel, seed);
+    expect(getThinkingLevel).toHaveBeenCalledOnce();
+    expect(seed).toHaveBeenCalledWith(newManager, "low");
+    expect(newSession.mock.invocationCallOrder[0]).toBeGreaterThan(getThinkingLevel.mock.invocationCallOrder[0] ?? 0);
+  });
+
   it("starts a new session with this one as its parent, once the agent is idle", async () => {
     const { ctx, newSession, waitForIdle } = fakeCommandContext(cwd);
-    await implementInNewSession(ctx, await writePlan(), jobs, () => {});
+    await implementInNewSession(
+      ctx,
+      await writePlan(),
+      jobs,
+      () => "high",
+      () => {},
+    );
     expect(newSession).toHaveBeenCalledWith(expect.objectContaining({ parentSession: "/sessions/old.jsonl" }));
     expect(waitForIdle.mock.invocationCallOrder[0]).toBeLessThan(newSession.mock.invocationCallOrder[0] ?? 0);
   });
@@ -78,7 +94,13 @@ describe("implementInNewSession", () => {
   it("sends the hand-off text, the plan's path, and the plan as the new session's first message", async () => {
     const { ctx, sendUserMessage } = fakeCommandContext(cwd);
     const path = await writePlan();
-    await implementInNewSession(ctx, path, jobs, () => {});
+    await implementInNewSession(
+      ctx,
+      path,
+      jobs,
+      () => "high",
+      () => {},
+    );
     expect(sendUserMessage).toHaveBeenCalledWith(implementMessage(path, "# T\n\nSteps.\n"));
     expect(implementMessage(path, "P")).toMatch(
       /^A previous agent produced the plan below[\s\S]*\nPlan file: .*\n\nP$/,
@@ -87,15 +109,27 @@ describe("implementInNewSession", () => {
 
   it("shows a failed first message in the new session", async () => {
     const { ctx, notify } = fakeCommandContext(cwd, { send: () => Promise.reject(new Error("no model")) });
-    await implementInNewSession(ctx, await writePlan(), jobs, () => {});
+    await implementInNewSession(
+      ctx,
+      await writePlan(),
+      jobs,
+      () => "high",
+      () => {},
+    );
     await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("no model", "error"));
   });
 
   it("says so when the new session is cancelled", async () => {
     const { ctx } = fakeCommandContext(cwd, { cancelled: true });
-    await expect(implementInNewSession(ctx, await writePlan(), jobs, () => {})).resolves.toBe(
-      "New session cancelled; still in this one.",
-    );
+    await expect(
+      implementInNewSession(
+        ctx,
+        await writePlan(),
+        jobs,
+        () => "high",
+        () => {},
+      ),
+    ).resolves.toBe("New session cancelled; still in this one.");
   });
 
   it("refuses to switch sessions while a background job is running", async () => {
@@ -105,13 +139,29 @@ describe("implementInNewSession", () => {
         throw new Error("Stop or wait for running jobs first: 1 (test).");
       },
     } as unknown as JobManager;
-    await expect(implementInNewSession(ctx, await writePlan(), runningJobs, () => {})).rejects.toThrow("1 (test)");
+    await expect(
+      implementInNewSession(
+        ctx,
+        await writePlan(),
+        runningJobs,
+        () => "high",
+        () => {},
+      ),
+    ).rejects.toThrow("1 (test)");
     expect(newSession).not.toHaveBeenCalled();
   });
 
   it("fails before leaving the session when the plan can't be read", async () => {
     const { ctx, newSession } = fakeCommandContext(cwd);
-    await expect(implementInNewSession(ctx, join(cwd, "missing.md"), jobs, () => {})).rejects.toMatchObject({
+    await expect(
+      implementInNewSession(
+        ctx,
+        join(cwd, "missing.md"),
+        jobs,
+        () => "high",
+        () => {},
+      ),
+    ).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(newSession).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@ import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi
 import type { JobManager } from "#core/job-manager";
 import { errorMessage } from "#core/util/errors";
 import { resolveToolPath } from "#core/util/paths";
+import type { ThinkingLevel } from "#core/util/thinking";
 import { latestPlan } from "../../plan-file";
 import { implementMessage } from "../../prompts";
 
@@ -24,16 +25,18 @@ export async function implementInNewSession(
   ctx: ExtensionCommandContext,
   path: string,
   jobs: JobManager,
-  seed: (sessionManager: SessionManager) => void,
+  getThinkingLevel: () => ThinkingLevel,
+  seed: (sessionManager: SessionManager, thinking: ThinkingLevel) => void,
 ): Promise<string | undefined> {
   const plan = await readFile(path, "utf8");
+  const thinking = getThinkingLevel();
   // Typed during a run, the command runs at once; the dialog's comes once the run has settled, so this returns.
   await ctx.waitForIdle();
   jobs.requireNoneRunning();
 
   const result = await ctx.newSession({
     parentSession: ctx.sessionManager.getSessionFile(),
-    setup: async (sessionManager) => seed(sessionManager),
+    setup: async (sessionManager) => seed(sessionManager, thinking),
     withSession: async (newCtx) => {
       // sendUserMessage resolves when the run ends, so awaiting it would hold the command for the whole run.
       newCtx.sendUserMessage(implementMessage(path, plan)).catch((error: unknown) => {

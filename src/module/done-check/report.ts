@@ -12,6 +12,26 @@ const MAX_REPORTED_ERRORS = 20;
 /** What one check found: the sources' problems and the commands that failed, and how many changed files it left out. */
 export type Findings = { problems: readonly Problem[]; failures: readonly CommandFailure[]; skipped: number };
 
+/**
+ * The line the agent gets when a check found nothing, naming what ran so a pass isn't mistaken for no check. Undefined
+ * when nothing ran: no source checked the `files` changed files and no command is approved.
+ */
+export function doneCheckPassed(
+  sources: readonly string[],
+  commands: readonly string[],
+  files: number,
+): string | undefined {
+  if (sources.length === 0 && commands.length === 0) return undefined;
+
+  const parts = [
+    ...(sources.length > 0
+      ? [`${sources.join(", ")} checked ${files === 1 ? "1 changed file" : `${files} changed files`}`]
+      : []),
+    ...commands.map((command) => `${command} passed`),
+  ];
+  return `Done check passed: ${parts.join("; ")}.`;
+}
+
 /** The files a run changed that are still there to check, at most `MAX_CHECKED_FILES`, and how many were left out. */
 export function filesToCheck(changes: readonly FileChange[]): { files: string[]; skipped: number } {
   const present = changes.filter((change) => change.kind !== FileChangeKind.DELETED).map((change) => change.file);

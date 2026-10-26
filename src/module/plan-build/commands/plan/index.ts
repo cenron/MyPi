@@ -1,6 +1,7 @@
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { JobManager } from "#core/job-manager";
 import type { Command } from "#core/types";
+import type { ThinkingLevel } from "#core/util/thinking";
 import { isMode, type Mode } from "../../types";
 import { findPlan, implementInNewSession } from "./implement";
 
@@ -8,7 +9,8 @@ import { findPlan, implementInNewSession } from "./implement";
 export type PlanCmdActions = {
   toggleMode: () => void;
   setMode: (mode: Mode) => void;
-  saveBuildTo: (sessionManager: SessionManager, plan: string) => void;
+  saveBuildTo: (sessionManager: SessionManager, plan: string, thinking: ThinkingLevel) => void;
+  getThinkingLevel: () => ThinkingLevel;
   jobs: JobManager;
 };
 
@@ -25,7 +27,9 @@ export function planCmd(plansDir: string, actions: PlanCmdActions): Command {
       switch (arg) {
         case "implement": {
           const path = await findPlan(plansDir, ctx.cwd, file);
-          return implementInNewSession(ctx, path, actions.jobs, (manager) => actions.saveBuildTo(manager, path));
+          return implementInNewSession(ctx, path, actions.jobs, actions.getThinkingLevel, (manager, thinking) =>
+            actions.saveBuildTo(manager, path, thinking),
+          );
         }
 
         case undefined:

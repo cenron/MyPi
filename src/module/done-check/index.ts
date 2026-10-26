@@ -18,7 +18,7 @@ import {
   readCommands,
   runCommand,
 } from "./project-commands";
-import { doneCheckReport, filesToCheck } from "./report";
+import { doneCheckPassed, doneCheckReport, filesToCheck } from "./report";
 
 /** Most times one run is sent back; after that the agent may stop with whatever is left. */
 const MAX_ROUNDS = 3;
@@ -88,24 +88,34 @@ export class DoneCheckModule extends BaseModule {
     const { files, skipped } = filesToCheck(fileChanges(run.before, await fileTimes(ctx.cwd)));
     if (files.length === 0) return undefined;
 
-    const report = await this.check(files, skipped, ctx);
-    if (report === undefined || report === run.lastReport) return undefined;
+    const result = await this.check(files, skipped, ctx);
+    if (result.report !== undefined) {
+      if (result.report === run.lastReport) return undefined;
 
-    run.rounds++;
-    run.lastReport = report;
-    return {
-      entries: [{ type: "custom_message", customType: REPORT_TYPE, content: report, display: true }],
-      continue: true,
-    };
+      run.rounds++;
+      run.lastReport = result.report;
+      return {
+        entries: [{ type: "custom_message", customType: REPORT_TYPE, content: result.report, display: true }],
+        continue: true,
+      };
+    }
+
+    const passed = doneCheckPassed(result.sources, result.commands, files.length);
+    if (passed === undefined) return undefined;
+    return { entries: [{ type: "custom_message", customType: REPORT_TYPE, content: passed, display: true }] };
   }
 
   /** The report for `files` and the project's commands, or undefined when nothing is broken. */
-  private async check(files: string[], skipped: number, ctx: ExtensionContext): Promise<string | undefined> {
+  private async check(
+    files: string[],
+    skipped: number,
+    ctx: ExtensionContext,
+  ): Promise<{ report: string | undefined; sources: string[]; commands: string[] }> {
     this.setFooter({ text: "checking…", color: FooterColor.MUTED });
     try {
-      const problems = await this.problemsIn(files, ctx);
-      const failures = await this.runCommands(ctx);
-      return doneCheckReport({ problems, failures, skipped }, ctx.cwd);
+      const { problems, sources } = await this.problemsIn(files, ctx);
+      const { failures, commands } = await this.runCommands(ctx);
+      return { report: doneCheckReport({ problems, failures, skipped }, ctx.cwd), sources, commands };
     } finally {
       this.setFooter(undefined);
     }
@@ -118,17 +128,21 @@ export class DoneCheckModule extends BaseModule {
       if (answer.kind === "failed")
         this.session.logWarning(`Done check: ${answer.from} couldn't check: ${answer.error}`);
     }
-    return answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
+    return {
+      problems: answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : [])),
+      sources: answers.filter((answer) => answer.kind === "answer").map((answer) => answer.from),
+    };
   }
 
   /** Runs the project's approved commands one after another, in its folder; the ones that failed. */
-  private async runCommands(ctx: ExtensionContext): Promise<CommandFailure[]> {
+  private async runCommands(ctx: ExtensionContext): Promise<{ failures: CommandFailure[]; commands: string[] }> {
+    const commands = await this.approvedCommands(ctx);
     const failures: CommandFailure[] = [];
-    for (const command of await this.approvedCommands(ctx)) {
+    for (const command of commands) {
       const failure = await runCommand(command, ctx.cwd, ctx.signal);
       if (failure) failures.push(failure);
     }
-    return failures;
+    return { failures, commands };
   }
 
   /**

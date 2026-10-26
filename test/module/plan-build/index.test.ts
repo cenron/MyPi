@@ -10,8 +10,8 @@ import { PlanBuildModule } from "#module/plan-build/index";
 import { buildPrompt, PLAN_PROMPT } from "#module/plan-build/prompts";
 import { customEntry, fakeSession } from "../../fakes";
 
-const saved = (mode: unknown, plan?: string) =>
-  customEntry("mypi-module-plan-build", { mode, ...(plan ? { plan } : {}) });
+const saved = (mode: unknown, plan?: string, thinking?: unknown) =>
+  customEntry("mypi-module-plan-build", { mode, ...(plan ? { plan } : {}), ...(thinking ? { thinking } : {}) });
 
 /** The module's prompt section, as the next run would send it. */
 function promptSection(session: Session) {
@@ -68,6 +68,22 @@ describe("PlanBuildModule", () => {
   });
 
   // init() runs on every /reload, so saving there would add an entry each time.
+  it("restores a saved thinking level once, then saves state without it", () => {
+    const { session, appendEntry } = fakeSession([saved("build", ".pi/plans/p.md", "low")]);
+    new PlanBuildModule(session).init();
+
+    expect(session.pi.setThinkingLevel).toHaveBeenCalledWith("low");
+    expect(appendEntry).toHaveBeenCalledWith("mypi-module-plan-build", { mode: "build", plan: ".pi/plans/p.md" });
+  });
+
+  it("drops an invalid saved thinking level without restoring it", () => {
+    const { session, appendEntry } = fakeSession([saved("build", undefined, "extreme")]);
+    new PlanBuildModule(session).init();
+
+    expect(session.pi.setThinkingLevel).not.toHaveBeenCalled();
+    expect(appendEntry).toHaveBeenCalledWith("mypi-module-plan-build", { mode: "build", plan: undefined });
+  });
+
   it("doesn't save on init", () => {
     const { session, appendEntry } = fakeSession([saved("build")]);
     new PlanBuildModule(session).init();
@@ -147,6 +163,7 @@ describe("PlanBuildModule", () => {
         expect(appendCustomEntry).toHaveBeenCalledWith("mypi-module-plan-build", {
           mode: "build",
           plan: join(cwd, ".pi", "plans", "p.md"),
+          thinking: "high",
         });
         expect(sendUserMessage).toHaveBeenCalledWith(expect.stringContaining("# P"));
       } finally {

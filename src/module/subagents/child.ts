@@ -10,6 +10,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import type { ThinkingLevel } from "#core/util/thinking";
 import { childAccess } from "./access";
 import type { AgentDefinition } from "./agents";
 
@@ -18,8 +19,6 @@ export const RUN_TIMEOUT_MINUTES = 30;
 
 /** The tools a `read-only` agent gets when its file names none. */
 const READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "bash"];
-
-export type ThinkingLevel = NonNullable<ExtensionContext["thinkingLevel"]>;
 
 /** A run's model and thinking level, each undefined to inherit the parent's. */
 export type RunSettings = { model?: string; thinking?: ThinkingLevel };

@@ -128,8 +128,25 @@ describe("DoneCheckModule", () => {
     answer(session.pi.events, "diagnostics", "broken", () => {
       throw new Error("server crashed");
     });
-    expect(await runTurn(() => writeNew())).toBeUndefined();
+    expect(await runTurn(() => writeNew())).toMatchObject({
+      entries: [{ content: expect.stringContaining("Done check passed") }],
+    });
     expect(notify).toHaveBeenCalledWith("Done check: broken couldn't check: server crashed", "warning");
+  });
+
+  it("appends a pass line without continuing when the checks found nothing", async () => {
+    const { runTurn } = start();
+
+    expect(await runTurn(() => writeNew())).toEqual({
+      entries: [
+        {
+          type: "custom_message",
+          customType: "mypi-done-check",
+          content: expect.stringContaining("Done check passed"),
+          display: true,
+        },
+      ],
+    });
   });
 
   it("shows checking… in the footer while it checks", async () => {
@@ -205,8 +222,12 @@ describe("the project's commands", () => {
     const { runTurn, select } = start();
     select.mockResolvedValue("No");
 
-    expect(await runTurn(() => writeNew())).toBeUndefined();
-    expect(await runTurn(() => writeNew("other.ts"))).toBeUndefined();
+    expect(await runTurn(() => writeNew())).toMatchObject({
+      entries: [{ content: expect.stringContaining("Done check passed") }],
+    });
+    expect(await runTurn(() => writeNew("other.ts"))).toMatchObject({
+      entries: [{ content: expect.stringContaining("Done check passed") }],
+    });
     expect(select).toHaveBeenCalledOnce();
   });
 
@@ -223,7 +244,7 @@ describe("the project's commands", () => {
       await writeNew(name);
       expect(
         await emit("agent_before_settle", { type: "agent_before_settle", outcome: "completed" }, ctx),
-      ).toBeUndefined();
+      ).toMatchObject({ entries: [{ content: expect.stringContaining("Done check passed") }] });
     }
     expect(notify.mock.calls).toEqual([[expect.stringContaining(warning), "warning"]]);
   });

@@ -63,6 +63,8 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: 
       mcpServers.set(name, config);
     }),
     getActiveTools: () => [...activeTools],
+    getThinkingLevel: vi.fn(() => "high" as const),
+    setThinkingLevel: vi.fn(),
     setActiveTools: vi.fn((names: string[]) => {
       activeTools = names.filter((name) => builtins.includes(name) || tools.has(name));
     }),

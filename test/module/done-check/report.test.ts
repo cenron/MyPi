@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Problem } from "#core/channels";
 import { FileChangeKind } from "#core/util/walk";
 import type { CommandFailure } from "#module/done-check/project-commands";
-import { doneCheckReport, filesToCheck, MAX_CHECKED_FILES } from "#module/done-check/report";
+import { doneCheckPassed, doneCheckReport, filesToCheck, MAX_CHECKED_FILES } from "#module/done-check/report";
 
 /** A problem in `file` at `line`, an error unless `severity` says otherwise. */
 function problem(file: string, line: number, severity: Problem["severity"] = "error"): Problem {
@@ -33,6 +33,23 @@ describe("filesToCheck", () => {
 /** The report for `problems` and `failures` in /p, with `skipped` changed files left out. */
 const report = (problems: Problem[], failures: CommandFailure[] = [], skipped = 0) =>
   doneCheckReport({ problems, failures, skipped }, "/p");
+
+describe("doneCheckPassed", () => {
+  it.each([
+    [
+      "diagnostics and commands",
+      ["lsp"],
+      ["npm run check"],
+      3,
+      "Done check passed: lsp checked 3 changed files; npm run check passed.",
+    ],
+    ["diagnostics alone", ["lsp", "typescript"], [], 1, "Done check passed: lsp, typescript checked 1 changed file."],
+    ["commands alone", [], ["true"], 2, "Done check passed: true passed."],
+    ["nothing ran", [], [], 2, undefined],
+  ])("reports %s only", (_case, sources, commands, files, expected) => {
+    expect(doneCheckPassed(sources, commands, files)).toBe(expected);
+  });
+});
 
 describe("doneCheckReport", () => {
   it("lists the errors by file and line, with what to do", () => {
