@@ -5,6 +5,7 @@ import { jobDuration, jobEnding } from "#core/util/jobs";
 import { isPlanMode } from "#core/util/mode";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
 import { expandKey, reuseText, textOf } from "#tool/utils";
+import { approvedChecks } from "../access";
 import { type AgentDefinition, THINKING_SETTINGS } from "../agents";
 import { type ChildRun, type RunSettings, runChild } from "../child";
 import { runWriter, type WriterResult } from "../writer";
@@ -125,6 +126,8 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
         throw error;
       }
       runsThisPrompt++;
+      // A read-only agent may run the checks the user approved; a writer has no Plan rule to lift.
+      const checks = writes ? undefined : await approvedChecks(session);
 
       const start = (runSignal: AbortSignal, onStep: (step: string) => void) => {
         const childRun: ChildRun = {
@@ -134,6 +137,7 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
           settings: runSettings(agent, args),
           signal: runSignal,
           onStep,
+          checks,
         };
         const child = writes ? runWriter(session, childRun, run) : run(childRun);
         return child.finally(releaseWriter);

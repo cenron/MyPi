@@ -189,7 +189,12 @@ guard turns any ask into a block with the reason ("Refused: this call needs the 
 it here (no UI). Tell the user what you needed and why: …").
 
 - **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with plan-build's `planRule` on the child's guard: the
-  same check as Plan, so `git log` runs and `touch` is refused.
+  same check as Plan, so `git log` runs and `touch` is refused. One exception: the project's check commands the user
+  already approved for the done check (`.pi/done-check.json`) run exactly as written, so a `reviewer` can run the
+  tests. Before a read-only run, `subagent` asks the done check for them on the event bus (`checkCommands`); it
+  answers only with a list the user approved on this machine, and never asks. The child's prompt names them, with
+  nothing added (a pipe or another argument is a different command, refused as before). With the done check off,
+  nobody answers and a child runs no checks.
 - **`write`:** pi's normal tools.
 - **Clearer refusals:** when there's no UI, `ToolGuard` says the call needs the user's approval and no one can give
   it here, then includes what needed confirming. When a child reports a refused call, the prompt tells the parent to
@@ -229,6 +234,8 @@ it here (no UI). Tell the user what you needed and why: …").
      the result lists the files. Drop deletes both files; Cancel changes nothing. Unknown names list the available
      patches, and without a UI the tool refuses because my approval is required. The prompt says never to use
      `git apply` through `bash`, which wouldn't ask me. Patches are applied one at a time.
+- **A repository with no commit refuses a worktree writer**, saying to make a first commit: a worktree starts from a
+  commit. Found 2026-10-26 in a live check, where git's raw "ambiguous argument 'HEAD'" left the model guessing.
 - **Uncommitted changes in the calling checkout refuse a worktree writer:** the worktree comes from its `HEAD`, so
   the child wouldn't see work I haven't committed, and its patch could clash with it. Before launch, `git status --porcelain` must be empty
   (MyPi's own state folders aside); otherwise the run is refused with the list of files. Nothing falls back to the

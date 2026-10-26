@@ -37,6 +37,20 @@ export type WriterResult = ChildResult & {
   readonly stopped?: boolean;
 };
 
+/** `git rev-parse --verify --quiet`'s exit code, with no message, when the name isn't a commit. */
+const NOT_A_COMMIT = 1;
+
+/** Whether the checkout's HEAD points at a commit; a new repository's doesn't until its first commit. */
+async function hasCommit(cwd: string): Promise<boolean> {
+  try {
+    await git(cwd, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === NOT_A_COMMIT) return false;
+    throw error;
+  }
+}
+
 /** Longest agent-name part of a worktree name, leaving room for `sub-` and the number. */
 const MAX_SLUG_CHARS = 40;
 
@@ -50,6 +64,12 @@ const writerStarts = new WeakMap<Session, Promise<void>>();
 export async function prepareWriter(session: Session, agent: AgentDefinition): Promise<PreparedWriter> {
   const project = session.project;
   if (!project) throw new Error("A worktree writer needs a git project.");
+  if (!(await hasCommit(session.ctx.cwd))) {
+    throw new Error(
+      `Cannot start ${agent.name} in a worktree: this repository has no commit yet, and a worktree starts from one. ` +
+        "Ask the user to make a first commit, then try again.",
+    );
+  }
 
   const status = await git(session.ctx.cwd, ["status", "--porcelain"]);
   if (status) {

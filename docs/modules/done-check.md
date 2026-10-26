@@ -94,6 +94,7 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 | Mode | `ask("mode")` on the [event bus](#the-event-bus) | plan-build answers with `"plan"` or `"build"`. |
 | Diagnostics | `ask("diagnostics", { files, signal })` on the event bus | The LSP module answers in `init()` (`problems.ts`), for each file a server serves, through the same `fileProblems` as its `diagnostics` action; each server is brought up to date with the disk once first. Files no server serves are skipped; a server not yet running starts then, as on any first use. See [lsp](lsp.md#design-in-pi). |
 | Open tasks | `ask("openTasks", undefined)` on the event bus | Todo answers with pending and in-progress tasks; no answer means todo is off. Open tasks are reported even with no changed files. |
+| Approved checks, for subagents | `answer("checkCommands")` on the event bus | The project's commands when the user already approved exactly this list on this machine, else none; never asks. A read-only subagent may run them as written (see [subagents](subagents.md#access-and-plan-mode)). |
 | Duplicate names | `ask("duplicates", { files, signal })` on the event bus | LSP reports new top-level declarations that also occur elsewhere; only in Git projects and non-test files. Each name is reported once per session, at most 10 per report. |
 | Commands | `project-commands.ts`: `readCommands`, `approvalKey`, `isApproved`, `approve`, `runCommand` | The list is validated at the boundary (`{ "commands": string[] }`, else an error saying so); approvals in pi's agent dir (`getAgentDir()`), never the project. |
 | Approval | `ctx.ui.select` with Yes and No, in `approvedCommands` (`index.ts`) | Like the tool guard's dialog. |
@@ -147,6 +148,8 @@ with another extension").
     duplicates: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Duplicate[] };
     /** Tasks still open at the end of a Build run. The done check asks; todo answers. */
     openTasks: { request: undefined; answer: OpenTask[] };
+    /** The project's check commands the user already approved on this machine. Subagents ask; the done check answers. */
+    checkCommands: { request: undefined; answer: string[] };
   };
   ```
 
@@ -158,10 +161,11 @@ with another extension").
 | Channel | Kind | Publishes or asks | Listens or answers |
 |---|---|---|---|
 | `jobs` | notice: how many jobs are running | `JobManager` | `Session`'s footer item; later the subagents fleet view |
-| `mode` | ask | done check | plan-build |
+| `mode` | ask | done check, subagents | plan-build |
 | `diagnostics` | ask | done check | LSP |
 | `duplicates` | ask | done check | LSP |
 | `openTasks` | ask | done check | todo |
+| `checkCommands` | ask | subagents | done check |
 
 - **`jobs` moved over from `JobManager.onChange`**, its own listener list, which is gone. `stopAll` stops publishing
   before the jobs end, as `onChange` dropped its listeners first: a job ending after the session has would otherwise

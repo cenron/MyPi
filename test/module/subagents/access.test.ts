@@ -1,6 +1,6 @@
 import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { childAccess } from "#module/subagents/access";
+import { checksPrompt, childAccess } from "#module/subagents/access";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { fakeSession } from "../../fakes";
 
@@ -15,9 +15,14 @@ const agent = (access: AgentDefinition["access"]): AgentDefinition => ({
   path: "/builtins/test-agent.md",
 });
 
-async function call(access: AgentDefinition["access"], toolName: string, input: Record<string, unknown>) {
+async function call(
+  access: AgentDefinition["access"],
+  toolName: string,
+  input: Record<string, unknown>,
+  checks: readonly string[] = [],
+) {
   const fake = fakeSession();
-  childAccess(agent(access))(fake.session.pi);
+  childAccess(agent(access), checks)(fake.session.pi);
   return fake.emit(
     "tool_call",
     { toolName, input } as ToolCallEvent,
@@ -57,5 +62,30 @@ describe("child access", () => {
         hasUI: false,
       } as ExtensionContext),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("a read-only child's checks", () => {
+  const CHECKS = ["npm run check"];
+
+  it.each([
+    ["an approved check, as written", "npm run check", true],
+    ["an approved check with spaces around it", "  npm run check ", true],
+    ["an approved check piped", "npm run check | tail -5", false],
+    ["an approved check with more arguments", "npm run check -- --watch", false],
+    ["a command that isn't approved", "npm test", false],
+    ["a read-only command, as before", "ls", true],
+  ])("runs %s: %s", async (_name, command, runs) => {
+    const verdict = await call("read-only", "bash", { command }, CHECKS);
+    if (runs) {
+      expect(verdict).toBeUndefined();
+    } else {
+      expect(verdict).toMatchObject({ block: true });
+    }
+  });
+
+  it("names the checks in the prompt, and adds nothing without them", () => {
+    expect(checksPrompt([])).toBe("");
+    expect(checksPrompt(["npm test", "npm run lint"])).toContain("`npm test`, `npm run lint`");
   });
 });

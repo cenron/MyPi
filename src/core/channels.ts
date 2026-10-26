@@ -34,7 +34,7 @@ export type OpenTask = { id: string; subject: string; status: "pending" | "in_pr
  * who answers.
  */
 export type MyPiQuestions = {
-  /** Plan or Build. The done check asks; plan-build answers. */
+  /** Plan or Build. The done check and subagents ask; plan-build answers. */
   mode: { request: undefined; answer: "plan" | "build" };
   /** The problems in `files`. The done check asks; the LSP module answers. */
   diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
@@ -42,4 +42,6 @@ export type MyPiQuestions = {
   duplicates: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Duplicate[] };
   /** Tasks still open at the end of a Build run. The done check asks; todo answers. */
   openTasks: { request: undefined; answer: OpenTask[] };
+  /** The project's check commands the user already approved on this machine. Subagents ask; the done check answers. */
+  checkCommands: { request: undefined; answer: string[] };
 };

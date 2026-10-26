@@ -70,6 +70,7 @@ export class DoneCheckModule extends BaseModule {
     // before_agent_start fires once per run; the check's own continuation stays in the same run, keeping its count.
     this.session.pi.on("before_agent_start", (_ev, ctx) => this.onRunStart(ctx));
     this.session.pi.on("agent_before_settle", (ev, ctx) => this.onBeforeSettle(ev, ctx));
+    this.answer("checkCommands", () => this.alreadyApprovedCommands());
   }
 
   commands(): Command[] {
@@ -243,6 +244,14 @@ export class DoneCheckModule extends BaseModule {
 
     await approve(key, commands);
     return commands;
+  }
+
+  /** The project's commands when the user already approved exactly this list; never asks. */
+  private async alreadyApprovedCommands(): Promise<string[]> {
+    const cwd = this.session.ctx.cwd;
+    const commands = await readCommands(cwd);
+    if (commands === undefined || commands.length === 0) return [];
+    return (await isApproved(await approvalKey(this.session.project, cwd), commands)) ? commands : [];
   }
 
   private warnOnce(message: string) {

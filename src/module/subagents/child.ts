@@ -11,7 +11,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { ThinkingLevel } from "#core/util/thinking";
-import { childAccess } from "./access";
+import { checksPrompt, childAccess } from "./access";
 import type { AgentDefinition } from "./agents";
 
 /** How long one run may take before it's stopped. */
@@ -31,6 +31,8 @@ export type ChildRun = {
   readonly settings: RunSettings;
   readonly signal: AbortSignal;
   readonly onStep: (step: string) => void;
+  /** The project's approved check commands a read-only child may run; see `childAccess`. */
+  readonly checks?: readonly string[];
 };
 
 /** What a run used over all its model calls: tokens, and cost in dollars. */
@@ -61,7 +63,7 @@ export async function runChild(run: ChildRun, cwd = run.parent.cwd): Promise<Chi
   const manager = SessionManager.create(cwd, join(getAgentDir(), "subagents", "sessions"), {
     parentSession: parent.sessionManager.getSessionFile(),
   });
-  const resources = await childResources(cwd, agent);
+  const resources = await childResources(cwd, agent, run.checks ?? []);
   if (signal.aborted) throw new Error("aborted");
   const { session } = await createAgentSession({
     cwd,
@@ -140,15 +142,19 @@ function childModel(parent: ExtensionContext, settings: RunSettings, runtime: Mo
  * The child's prompt and context: the agent's prompt, and the project's AGENTS.md except for `explore`. No
  * extensions: MyPi loaded in a child would look for the parent's session.
  */
-async function childResources(cwd: string, agent: AgentDefinition): Promise<DefaultResourceLoader> {
+async function childResources(
+  cwd: string,
+  agent: AgentDefinition,
+  checks: readonly string[],
+): Promise<DefaultResourceLoader> {
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir: getAgentDir(),
     settingsManager: SettingsManager.create(cwd, getAgentDir()),
     noExtensions: true,
     noContextFiles: agent.name === "explore",
-    extensionFactories: [childAccess(agent)],
-    systemPrompt: agent.prompt,
+    extensionFactories: [childAccess(agent, checks)],
+    systemPrompt: agent.access === "read-only" ? agent.prompt + checksPrompt(checks) : agent.prompt,
   });
   await loader.reload();
   return loader;

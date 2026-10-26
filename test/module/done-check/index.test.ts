@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Duplicate, OpenTask, Problem } from "#core/channels";
-import { answer } from "#core/events";
+import { answer, ask } from "#core/events";
 import type { Project } from "#core/worktree/index";
 import { DoneCheckModule } from "#module/done-check/index";
 import { approve } from "#module/done-check/project-commands";
@@ -289,6 +289,17 @@ describe("the project's commands", () => {
     expect(await runTurn(() => writeNew())).toMatchObject({
       entries: [{ content: expect.stringContaining(await realpath(dir)) }],
     });
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it("tells subagents the project's checks only once the user approved them, without asking", async () => {
+    await listCommands("npm run check");
+    const { session, select } = start();
+    const checks = () => ask(session.pi.events, "checkCommands", undefined);
+
+    expect(await checks()).toEqual([{ from: "done-check", kind: "answer", value: [] }]);
+    await approve(`folder:${await realpath(dir)}`, ["npm run check"]);
+    expect(await checks()).toEqual([{ from: "done-check", kind: "answer", value: ["npm run check"] }]);
     expect(select).not.toHaveBeenCalled();
   });
 

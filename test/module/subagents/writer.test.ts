@@ -71,6 +71,16 @@ describe("writer work", () => {
     expect(await session.worktrees.list()).toHaveLength(1);
   });
 
+  it("refuses, saying what to do, in a repository with no commit yet", async () => {
+    const fresh = join(root, "fresh");
+    await mkdir(fresh);
+    await git(fresh, "init", "-b", "main");
+    await put(fresh, "new.txt");
+    const freshSession = fakeSession([], fresh, { main: fresh, commonDir: join(fresh, ".git") }).session;
+
+    await expect(prepareWriter(freshSession, developer)).rejects.toThrow("no commit yet");
+  });
+
   it("captures a patch that applies cleanly to the base and discards its worktree", async () => {
     const prepared = await prepareWriter(session, developer);
     await put(prepared.path, "new.txt", "writer change\n");

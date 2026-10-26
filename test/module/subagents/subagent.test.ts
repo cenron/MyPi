@@ -77,6 +77,18 @@ describe("subagent", () => {
     expect(run.mock.calls[0]?.[0].settings).toEqual(settings);
   });
 
+  it("lets a read-only agent run the project's approved checks, and doesn't pass them to a writer", async () => {
+    const developer = { ...explore, name: "developer", access: "write" as const };
+    const { text, run, session } = setup([explore, developer]);
+    answer(session.pi.events, "checkCommands", "done-check", () => ["npm run check"]);
+
+    await text({ agent: "explore", task: "Review" });
+    await text({ agent: "developer", task: "Build" });
+
+    expect(run.mock.calls[0]?.[0].checks).toEqual(["npm run check"]);
+    expect(run.mock.calls[1]?.[0].checks).toBeUndefined();
+  });
+
   describe("drawing", () => {
     const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
     const context = { lastComponent: undefined, isPartial: true } as never;
