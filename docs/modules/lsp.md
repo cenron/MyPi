@@ -105,7 +105,8 @@ dispatches; each action's code is in `find.ts`, `navigate.ts`, or `diagnostics.t
 and prints the full name path, ready to pass to `find_symbol`; what's declared inside a function or method (its
 locals) is left out (`namedSymbols`). A match with `include_body` is followed by its source.
 A project-wide search names the projects it searched, and adds "Not searched: …" for a server of the project that
-couldn't answer.
+couldn't answer. For the done check, `duplicate-check.ts` uses the same server lookup and disk synchronization to find
+new top-level declarations in changed files that have exact-name matches elsewhere; test files are excluded.
 
 - Answers are capped at about 20,000 characters (`MAX_ANSWER_CHARS`). A cut answer says how many symbols it left out
   and how to narrow the call (a file or folder as `path`, a longer name path, no `include_body`), following the

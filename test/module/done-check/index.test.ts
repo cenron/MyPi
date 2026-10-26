@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenTask, Problem } from "#core/channels";
+import type { Duplicate, OpenTask, Problem } from "#core/channels";
 import { answer } from "#core/events";
 import type { Project } from "#core/worktree/index";
 import { DoneCheckModule } from "#module/done-check/index";
@@ -29,6 +29,7 @@ function start(
     mode?: "plan" | "build";
     problems?: (files: readonly string[]) => Problem[];
     openTasks?: OpenTask[];
+    duplicates?: Duplicate[];
     project?: Project;
   } = {},
 ) {
@@ -38,6 +39,8 @@ function start(
   answer(events, "mode", "plan-build", () => mode);
   const diagnostics = vi.fn(({ files }: { files: readonly string[] }) => options.problems?.(files) ?? []);
   answer(events, "diagnostics", "lsp", diagnostics);
+  const duplicates = vi.fn(() => options.duplicates ?? []);
+  answer(events, "duplicates", "lsp", duplicates);
   answer(events, "openTasks", "todo-test", () => options.openTasks ?? []);
   new DoneCheckModule(fake.session).init();
 
@@ -51,7 +54,7 @@ function start(
   const setMode = (next: "plan" | "build") => {
     mode = next;
   };
-  return { ...fake, diagnostics, runTurn, settle, setMode };
+  return { ...fake, diagnostics, duplicates, runTurn, settle, setMode };
 }
 
 const error = (file: string, message = "Cannot find name 'x'."): Problem => ({
@@ -89,6 +92,50 @@ describe("DoneCheckModule", () => {
     expect(
       notify.mock.calls.filter(([message]) => String(message).includes("couldn't list ignored files")),
     ).toHaveLength(1);
+  });
+
+  it("reports duplicate names once per session and continues the run", async () => {
+    const duplicate: Duplicate = {
+      name: "formatPrice",
+      file: join(dir, "src/cart.ts"),
+      line: 2,
+      elsewhere: { file: join(dir, "src/price.ts"), line: 1 },
+    };
+    const { runTurn, duplicates } = start({
+      project: { main: dir, commonDir: dir },
+      duplicates: [duplicate],
+    });
+
+    expect(await runTurn(() => writeNew("cart.ts"))).toMatchObject({
+      continue: true,
+      entries: [{ content: expect.stringContaining("Reuse the existing one") }],
+    });
+    const repeated = await runTurn(() => writeNew("second.ts"));
+    expect(repeated).not.toMatchObject({ continue: true });
+    expect(duplicates).toHaveBeenCalledTimes(2);
+    expect(await runTurn(() => writeNew("third.ts"))).toMatchObject({
+      entries: [{ content: expect.stringContaining("Done check passed") }],
+    });
+  });
+
+  it("does not suppress names omitted by the report limit", async () => {
+    const duplicates = Array.from(
+      { length: 12 },
+      (_, index): Duplicate => ({
+        name: `format${index}`,
+        file: join(dir, `src/cart${index}.ts`),
+        line: 1,
+        elsewhere: { file: join(dir, "src/price.ts"), line: 1 },
+      }),
+    );
+    const { runTurn } = start({ project: { main: dir, commonDir: dir }, duplicates });
+
+    const first = await runTurn(() => writeNew("cart.ts"));
+    expect(first).toMatchObject({ entries: [{ content: expect.stringContaining("… and 2 more.") }] });
+    expect(await runTurn(() => writeNew("cart2.ts"))).toMatchObject({
+      continue: true,
+      entries: [{ content: expect.stringContaining("`format10`") }],
+    });
   });
 
   it("sends the errors in the files a Build run changed back, and asks for one more model request", async () => {

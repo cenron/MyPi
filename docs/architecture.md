@@ -180,13 +180,13 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   who publishes or asks and who listens or answers. Modules use `BaseModule`'s `publish`, `subscribe`, `ask`, and
   `answer`; core calls the functions with `session.pi.events`. For messages between parts that core doesn't combine;
   the services below stay services. See [done check](modules/done-check.md#the-event-bus).
-  - **`channels.ts`** holds the contracts: `MyPiNotices`, `MyPiQuestions`, and what they carry (`Problem` and
+  - **`channels.ts`** holds the contracts: `MyPiNotices`, `MyPiQuestions`, and what they carry (`Problem`, `Duplicate`, and
     `OpenTask`), each naming who publishes or asks and who listens or answers. `events.ts` is only the mechanism and
     never changes for a feature.
   - **Deleting a part that owns a channel:** delete its folder, then remove the channels only it asks or publishes
     from `channels.ts`. Every `ask`, `answer`, `publish`, and `subscribe` left on them fails the typecheck, which
     lists what to delete in the other parts (for the done check's channels: `mode` in plan-build, `diagnostics` in
-    lsp's `problems.ts`, and `openTasks` if todo is removed). The bus's own tests use the current channels, so they
+    lsp's `problems.ts` and `duplicate-check.ts`, and `openTasks` if todo is removed). The bus's own tests use the current channels, so they
     change with them.
 - **`JobManager`** (`job-manager.ts`) is `session.jobs`: long-running work that goes on after the tool call that
   started it. A job is a `JobSpec` (`kind`, `label`, `run(signal, write)`; in `types.ts` with `JobInfo` and

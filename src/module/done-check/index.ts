@@ -20,7 +20,7 @@ import {
   readCommands,
   runCommand,
 } from "./project-commands";
-import { changesNotIgnored, doneCheckPassed, doneCheckReport, filesToCheck } from "./report";
+import { changesNotIgnored, doneCheckPassed, doneCheckReport, filesToCheck, MAX_REPORTED_DUPLICATES } from "./report";
 
 /** Most times one run is sent back; after that the agent may stop with whatever is left. */
 const MAX_ROUNDS = 3;
@@ -49,6 +49,8 @@ export class DoneCheckModule extends BaseModule {
   private readonly declined = new Set<string>();
   /** Warnings already shown this session, each shown once. */
   private readonly warned = new Set<string>();
+  /** Duplicate names already reported this session. */
+  private readonly reportedDuplicates = new Set<string>();
   // Built once: `info` lists its info.
   private readonly doneCheckCommand = doneCheckCmd(this.session);
 
@@ -116,8 +118,13 @@ export class DoneCheckModule extends BaseModule {
     this.setFooter({ text: "checking…", color: FooterColor.MUTED });
     try {
       const { problems, sources } = await this.problemsIn(files, ctx);
+      const duplicates = await this.duplicatesIn(files, ctx);
       const { failures, commands } = await this.runCommands(ctx);
-      return { report: doneCheckReport({ problems, failures, skipped, openTasks }, ctx.cwd), sources, commands };
+      return {
+        report: doneCheckReport({ problems, failures, skipped, openTasks, duplicates }, ctx.cwd),
+        sources,
+        commands,
+      };
     } finally {
       this.setFooter(undefined);
     }
@@ -136,6 +143,26 @@ export class DoneCheckModule extends BaseModule {
       this.warnOnce(`Done check: couldn't list ignored files; checking all changed files: ${errorMessage(error)}`);
       return [];
     }
+  }
+
+  /** New duplicate declarations, only in a Git project and once per name each session. */
+  private async duplicatesIn(files: string[], ctx: ExtensionContext) {
+    if (this.session.project === undefined) return [];
+    const answers = await this.ask("duplicates", { files, signal: ctx.signal });
+    for (const answer of answers) {
+      if (answer.kind === "failed")
+        this.session.logWarning(`Done check: ${answer.from} couldn't check duplicates: ${answer.error}`);
+    }
+    const duplicates = answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
+    let reported = 0;
+    return duplicates.filter(({ name }) => {
+      if (this.reportedDuplicates.has(name)) return false;
+      if (reported < MAX_REPORTED_DUPLICATES) {
+        this.reportedDuplicates.add(name);
+        reported++;
+      }
+      return true;
+    });
   }
 
   /** The tasks still open according to todo, or none when that module is turned off. */

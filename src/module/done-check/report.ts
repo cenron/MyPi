@@ -1,5 +1,5 @@
 import { isAbsolute, relative, sep } from "node:path";
-import type { OpenTask, Problem } from "#core/channels";
+import type { Duplicate, OpenTask, Problem } from "#core/channels";
 import { type FileChange, FileChangeKind } from "#core/util/walk";
 import { COMMAND_TIMEOUT_SECONDS, type CommandFailure } from "./project-commands";
 
@@ -13,6 +13,11 @@ const MAX_REPORTED_ERRORS = 20;
  * What to do about open tasks. The last sentence keeps the report from overriding the user: seen live, a model told
  * "do only the first, then stop" was sent back and did the second too.
  */
+export const MAX_REPORTED_DUPLICATES = 10;
+
+/** What to do about duplicated names. */
+const DUPLICATES_NEXT_STEP = "Reuse the existing one, or say why a second one is right.";
+
 const OPEN_TASKS_NEXT_STEP =
   "Finish these tasks, or mark each completed or deleted and say why. If the user asked you to stop before them, leave them open and say so.";
 
@@ -22,6 +27,7 @@ export type Findings = {
   failures: readonly CommandFailure[];
   skipped: number;
   openTasks?: readonly OpenTask[];
+  duplicates?: readonly Duplicate[];
 };
 
 /**
@@ -70,13 +76,14 @@ export function filesToCheck(changes: readonly FileChange[]): { files: string[];
  * when there is nothing to report, so the check stays quiet. Warnings and hints never count.
  */
 export function doneCheckReport(
-  { problems, failures, skipped, openTasks = [] }: Findings,
+  { problems, failures, skipped, openTasks = [], duplicates = [] }: Findings,
   cwd: string,
 ): string | undefined {
   const errors = problems
     .filter((problem) => problem.severity === "error")
     .toSorted((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column);
-  if (errors.length === 0 && failures.length === 0 && openTasks.length === 0) return undefined;
+  if (errors.length === 0 && failures.length === 0 && openTasks.length === 0 && duplicates.length === 0)
+    return undefined;
 
   const shown = errors.slice(0, MAX_REPORTED_ERRORS).map((error) => errorLine(error, cwd));
   const hidden = errors.length - shown.length;
@@ -88,7 +95,9 @@ export function doneCheckReport(
     ...(errors.length > 0 && skipped > 0 ? [`${skipped} more changed files weren't checked.`] : []),
     ...failures.map(failureBlock),
     ...(openTasks.length > 0 ? [openTasksBlock(openTasks)] : []),
+    ...(duplicates.length > 0 ? [duplicatesBlock(duplicates, cwd)] : []),
     ...(errors.length > 0 || failures.length > 0 ? ["Fix these, or say why they're fine."] : []),
+    ...(duplicates.length > 0 ? [DUPLICATES_NEXT_STEP] : []),
     ...(openTasks.length > 0 ? [OPEN_TASKS_NEXT_STEP] : []),
   ].join("\n");
 }
@@ -103,6 +112,19 @@ function summary(errors: number, failures: number): string {
 }
 
 /** The pending work that keeps a Build run from passing. */
+function duplicatesBlock(duplicates: readonly Duplicate[], cwd: string): string {
+  const shown = duplicates.slice(0, MAX_REPORTED_DUPLICATES);
+  const lines = shown.map(
+    ({ name, file, line, elsewhere }) =>
+      `\`${name}\` (${relative(cwd, file)}:${line}) is also in ${relative(cwd, elsewhere.file)}:${elsewhere.line}`,
+  );
+  const hidden = duplicates.length - shown.length;
+  return `${duplicates.length} new ${duplicates.length === 1 ? "name" : "names"} already ${duplicates.length === 1 ? "exists" : "exist"} elsewhere:\n${[
+    ...lines,
+    ...(hidden > 0 ? [`… and ${hidden} more.`] : []),
+  ].join("\n")}`;
+}
+
 function openTasksBlock(tasks: readonly OpenTask[]): string {
   const lines = tasks.map(({ id, subject, status }) => `#${id} [${status}] ${subject.replace(/[\r\n]+/g, " ")}`);
   return `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"} still open:\n${lines.join("\n")}`;

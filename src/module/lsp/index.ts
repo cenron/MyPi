@@ -11,6 +11,7 @@ import { resolveToolPath } from "#core/util/paths";
 import { BaseModule } from "../base";
 import { availableLanguages } from "./available";
 import { lspCmd } from "./commands/lsp";
+import { duplicatesIn } from "./duplicate-check";
 import { type Lookup, ServerManager } from "./manager";
 import { problemsIn } from "./problems";
 import { SERVERS } from "./servers";
@@ -56,6 +57,7 @@ export class LspModule extends BaseModule<LspState> {
     this.session.pi.on("session_shutdown", () => this.servers.stopAll());
 
     this.answer("diagnostics", ({ files, signal }) => this.diagnosticsFor(files, signal));
+    this.answer("duplicates", ({ files, signal }) => this.duplicatesFor(files, signal));
   }
 
   commands(): Command[] {
@@ -89,6 +91,11 @@ export class LspModule extends BaseModule<LspState> {
     const path = ev.input.path;
     if (typeof path !== "string") return;
     await this.servers.fileChanged(resolveToolPath(path, ctx.cwd, homedir()), isWriteToolResult(ev));
+  }
+
+  /** New declarations already found elsewhere by the servers, for the done check. */
+  private duplicatesFor(files: readonly string[], signal?: AbortSignal) {
+    return duplicatesIn(this.servers, files, (lookup, extension) => this.warnUnavailable(lookup, extension), signal);
   }
 
   /** The problems the servers find in `files`, for whoever asks on the bus (the done check). */

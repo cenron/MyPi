@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenTask, Problem } from "#core/channels";
+import type { Duplicate, OpenTask, Problem } from "#core/channels";
 import { FileChangeKind } from "#core/util/walk";
 import type { CommandFailure } from "#module/done-check/project-commands";
 import {
@@ -49,8 +49,13 @@ describe("filesToCheck", () => {
 });
 
 /** The report for `problems` and `failures` in /p, with `skipped` changed files left out. */
-const report = (problems: Problem[], failures: CommandFailure[] = [], skipped = 0, openTasks: OpenTask[] = []) =>
-  doneCheckReport({ problems, failures, skipped, openTasks }, "/p");
+const report = (
+  problems: Problem[],
+  failures: CommandFailure[] = [],
+  skipped = 0,
+  openTasks: OpenTask[] = [],
+  duplicates: Duplicate[] = [],
+) => doneCheckReport({ problems, failures, skipped, openTasks, duplicates }, "/p");
 
 describe("doneCheckPassed", () => {
   it.each([
@@ -70,6 +75,20 @@ describe("doneCheckPassed", () => {
 });
 
 describe("doneCheckReport", () => {
+  it("lists duplicate names with their source locations and reuse guidance", () => {
+    expect(
+      report(
+        [],
+        [],
+        0,
+        [],
+        [{ name: "formatPrice", file: "/p/src/cart.ts", line: 4, elsewhere: { file: "/p/src/price.ts", line: 2 } }],
+      ),
+    ).toBe(
+      "1 new name already exists elsewhere:\n`formatPrice` (src/cart.ts:4) is also in src/price.ts:2\n" +
+        "Reuse the existing one, or say why a second one is right.",
+    );
+  });
   it("lists the errors by file and line, with what to do", () => {
     const problems = [problem("/p/src/b.ts", 4), problem("/p/src/a.ts", 9), problem("/p/src/a.ts", 2)];
     expect(report(problems)).toBe(

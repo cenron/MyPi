@@ -20,7 +20,7 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 ## Behavior
 
 - **When:** at the end of a run in Build that finished normally (not aborted, no error), when files changed or todo
-  has open tasks. In a Git repository, changed files Git ignores are left out before the 50-file limit; if Git cannot
+  has open tasks. Duplicate-name checks run only in Git projects and only for changed non-test files. In a Git repository, changed files Git ignores are left out before the 50-file limit; if Git cannot
   list ignored files, the check warns once and checks every changed file. Plan makes no edits, so it's never checked.
   A `/plan implement` run is a Build run, so it ends with the check too. The mode is plan-build's, so the check asks
   for it on the [event bus](#the-event-bus) (`mode`); with no answer (no plan-build), it counts as Build.
@@ -68,6 +68,7 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
   Fix these, or say why they're fine.
   ```
 
+- **Duplicate names:** when LSP answers, new top-level declarations in changed files that already exist by exact name elsewhere are reported, excluding test files. Each name is reported once per session, up to 10 names per report, and the run continues; a missing LSP answer means no duplicate check.
 - **Open tasks** (todo slice): pending and in-progress tasks are reported even when no files changed. The report
   lists each task's id, status, and subject, then asks the model to finish them or mark each completed or deleted and
   say why, and to leave them open if the user asked it to stop before them. Without that last sentence, a model told
@@ -93,6 +94,7 @@ back to fix it or say why it's fine; if nothing is, say nothing. A module, so it
 | Mode | `ask("mode")` on the [event bus](#the-event-bus) | plan-build answers with `"plan"` or `"build"`. |
 | Diagnostics | `ask("diagnostics", { files, signal })` on the event bus | The LSP module answers in `init()` (`problems.ts`), for each file a server serves, through the same `fileProblems` as its `diagnostics` action; each server is brought up to date with the disk once first. Files no server serves are skipped; a server not yet running starts then, as on any first use. See [lsp](lsp.md#design-in-pi). |
 | Open tasks | `ask("openTasks", undefined)` on the event bus | Todo answers with pending and in-progress tasks; no answer means todo is off. Open tasks are reported even with no changed files. |
+| Duplicate names | `ask("duplicates", { files, signal })` on the event bus | LSP reports new top-level declarations that also occur elsewhere; only in Git projects and non-test files. Each name is reported once per session, at most 10 per report. |
 | Commands | `project-commands.ts`: `readCommands`, `approvalKey`, `isApproved`, `approve`, `runCommand` | The list is validated at the boundary (`{ "commands": string[] }`, else an error saying so); approvals in pi's agent dir (`getAgentDir()`), never the project. |
 | Approval | `ctx.ui.select` with Yes and No, in `approvedCommands` (`index.ts`) | Like the tool guard's dialog. |
 | `/done-check` | `commands/done-check.ts` | Shows the list and its approval. |
@@ -141,6 +143,8 @@ with another extension").
     mode: { request: undefined; answer: "plan" | "build" };
     /** The problems in `files`. The done check asks; the LSP module answers. */
     diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
+    /** New declarations already found elsewhere in changed files. The done check asks; the LSP module answers. */
+    duplicates: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Duplicate[] };
     /** Tasks still open at the end of a Build run. The done check asks; todo answers. */
     openTasks: { request: undefined; answer: OpenTask[] };
   };
@@ -156,6 +160,7 @@ with another extension").
 | `jobs` | notice: how many jobs are running | `JobManager` | `Session`'s footer item; later the subagents fleet view |
 | `mode` | ask | done check | plan-build |
 | `diagnostics` | ask | done check | LSP |
+| `duplicates` | ask | done check | LSP |
 | `openTasks` | ask | done check | todo |
 
 - **`jobs` moved over from `JobManager.onChange`**, its own listener list, which is gone. `stopAll` stops publishing
@@ -208,6 +213,11 @@ with another extension").
    handing the 50 generated `coverage/` files rewritten by `npm run check` to LSP. It runs only in a Git project and
    only when files changed; if Git fails, the check warns once and checks all changes. The shared `fileTimes` walk
    stays unchanged for LSP.
+7. **Built 2026-10-26: duplicate-name check.** When files changed in a Git project, the done check asks LSP for new top-level declarations and reports exact-name matches in other non-test project files. It continues the Build run, suppresses names reported earlier in the session, and caps each report at 10 names. The reviewer also checks new helpers by name and behavior. **New** means the name
+   doesn't appear in the file's last commit at all (plain text, so a local copy of a helper the file already imported
+   isn't caught, and neither is a copy under another name: accepted limits). Seen live: asked to "add a helper that
+   formats a price" next to an existing `formatPrice`, the model wrote its own, the report named both, and the model
+   imported the existing one instead. Aimed at pi rebuilding helpers it was told about (4 in subagents milestone 2).
 
 ## Decided 2026-10-24
 

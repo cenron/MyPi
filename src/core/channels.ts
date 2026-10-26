@@ -5,6 +5,8 @@
  */
 
 /** A problem a diagnostics source found in a file, 1-based, such as a type error. */
+export type Duplicate = { name: string; file: string; line: number; elsewhere: { file: string; line: number } };
+
 export type Problem = {
   file: string;
   line: number;
@@ -36,6 +38,8 @@ export type MyPiQuestions = {
   mode: { request: undefined; answer: "plan" | "build" };
   /** The problems in `files`. The done check asks; the LSP module answers. */
   diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
+  /** New top-level names already declared elsewhere in changed files. The done check asks; the LSP module answers. */
+  duplicates: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Duplicate[] };
   /** Tasks still open at the end of a Build run. The done check asks; todo answers. */
   openTasks: { request: undefined; answer: OpenTask[] };
 };
