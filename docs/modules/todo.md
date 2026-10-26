@@ -45,9 +45,12 @@ to the next model request. It includes the current task list, if any, and is not
 - This is an `ON_LOAD` module, not a built-in tool: it owns the prompt, context handler, and UI, and can be turned off
   in `/modules`. Its own context handler keeps the module independently removable.
 - State is the full task list in each tool result's `details`, rebuilt from the last task result on the active branch
-  at startup and on `session_tree`. No external file. When a run starts with every task completed, the list
-  starts over (ids from 1); the finished list stays in view until then. Not when a task is created: the model often
-  creates one task, finishes it, then creates the next (seen live 2026-10-26), and that wiped the list.
+  at startup and on `session_tree`. No external file. When a run settles with every task completed, the list
+  is cleared and the widget goes away; the next task starts over at id 1. A finished list restored on resume or
+  `/reload` is cleared the same way. A list with open tasks stays until they're done or deleted. Never cleared when
+  a task is created: the model often creates one task, finishes it, then creates the next (seen live 2026-10-26),
+  and that wiped the list. (Until 2026-10-26 the finished list stayed until the next prompt, so in an idle session
+  it never went away.)
 - The tools are named `task_create`, `task_update`, `task_list`, and `task_get`; "task" does not conflict with MyPi's
   background "jobs".
 - `readOnlyHint: true` is accurate: these tools change only session context and are available in Plan.

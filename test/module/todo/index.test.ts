@@ -16,7 +16,7 @@ describe("TodoModule", () => {
         message: {
           role: "toolResult",
           toolName: "task_create",
-          details: { tasks: [{ id: "1", subject: "Run tests", description: "Run tests", status: "completed" }] },
+          details: { tasks: [{ id: "1", subject: "Run tests", description: "Run tests", status: "pending" }] },
         },
       },
     ];
@@ -25,14 +25,14 @@ describe("TodoModule", () => {
     expect(module.info.loadType).toBe("on_load");
     expect(module.tools().map((tool) => tool.name)).toEqual(["task_create", "task_update", "task_list", "task_get"]);
     module.init();
-    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<dim><strike>✔ Run tests"], {
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<muted>◻ Run tests"], {
       placement: "aboveEditor",
     });
 
     await expect(
       toolCall(module, "task_list")?.execute("id", {}, undefined, undefined, fake.session.ctx as ExtensionToolContext),
     ).resolves.toMatchObject({
-      content: [{ text: "#1 [completed] Run tests" }],
+      content: [{ text: "#1 [pending] Run tests" }],
     });
   });
 
@@ -210,7 +210,39 @@ describe("TodoModule", () => {
     });
   });
 
-  it("starts a new list when a run starts with every task completed", async () => {
+  it("clears a finished list when the run settles, not before", async () => {
+    const fake = fakeSession();
+    const module = new TodoModule(fake.session);
+    module.init();
+    const ctx = fake.session.ctx as ExtensionToolContext;
+    await toolCall(module, "task_create")?.execute(
+      "id",
+      { subject: "Read files", description: "Read" },
+      undefined,
+      undefined,
+      ctx,
+    );
+    await toolCall(module, "task_update")?.execute(
+      "id",
+      { taskId: "1", status: "completed" },
+      undefined,
+      undefined,
+      ctx,
+    );
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", ["<dim><strike>✔ Read files"], {
+      placement: "aboveEditor",
+    });
+
+    await fake.emit("agent_settled", { type: "agent_settled" });
+    expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", undefined, {
+      placement: "aboveEditor",
+    });
+    await expect(toolCall(module, "task_list")?.execute("id", {}, undefined, undefined, ctx)).resolves.toMatchObject({
+      content: [{ text: "No tasks." }],
+    });
+  });
+
+  it("doesn't bring back a finished list on resume", () => {
     const fake = fakeSession();
     fake.branch.push({
       type: "message",
@@ -220,12 +252,7 @@ describe("TodoModule", () => {
         details: { tasks: [{ id: "1", subject: "Read files", description: "Read files", status: "completed" }] },
       },
     });
-    const module = new TodoModule(fake.session);
-    module.init();
-    await fake.emit("before_agent_start", { type: "before_agent_start" });
-    await expect(
-      toolCall(module, "task_list")?.execute("id", {}, undefined, undefined, fake.session.ctx as ExtensionToolContext),
-    ).resolves.toMatchObject({ content: [{ text: "No tasks." }] });
+    new TodoModule(fake.session).init();
     expect(fake.session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-todo", undefined, {
       placement: "aboveEditor",
     });

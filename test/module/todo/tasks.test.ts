@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  clearedIfFinished,
   createTask,
-  listForNewRun,
   rebuildTasks,
   type Task,
   taskReminderDue,
@@ -25,13 +25,13 @@ describe("createTask", () => {
   });
 });
 
-describe("listForNewRun", () => {
+describe("clearedIfFinished", () => {
   it.each([
     ["starts over when every task is completed", [second], []],
     ["keeps a list with open tasks", [first, second], [first, second]],
     ["keeps an empty list", [], []],
   ])("%s", (_label, tasks, expected) => {
-    expect(listForNewRun(tasks)).toEqual(expected);
+    expect(clearedIfFinished(tasks)).toEqual(expected);
   });
 });
 

@@ -2,7 +2,7 @@ import type { ContextEvent, ToolDefinition } from "@earendil-works/pi-coding-age
 import type { OpenTask } from "#core/channels";
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
-import { listForNewRun, rebuildTasks, type Task, taskReminderDue, taskReminderText } from "./tasks";
+import { clearedIfFinished, rebuildTasks, type Task, taskReminderDue, taskReminderText } from "./tasks";
 import { taskTools } from "./tools";
 import { todoWidgetLines } from "./widget";
 
@@ -42,17 +42,17 @@ export class TodoModule extends BaseModule {
     this.setPrompt(TODO_PROMPT);
     this.session.pi.on("session_tree", () => this.onSessionTree());
     this.session.pi.on("context", (ev) => this.onContext(ev));
-    // before_agent_start fires once per run, not on the done check's continuations.
-    this.session.pi.on("before_agent_start", () => this.onRunStart());
+    // agent_settled fires once a run is over, after the done check's continuations.
+    this.session.pi.on("agent_settled", () => this.onAgentSettled());
     this.onKey("alt+t", () => this.toggleWidget());
 
     // The done check asks which tasks are still open when a Build run ends.
     this.answer("openTasks", () => this.openTasks());
   }
 
-  /** A finished list stays in view until the next prompt, which starts a new one. */
-  private onRunStart() {
-    this.tasks = listForNewRun(this.tasks);
+  /** A list the run finished goes away with the run. */
+  private onAgentSettled() {
+    this.tasks = clearedIfFinished(this.tasks);
     this.drawTasks();
   }
 
@@ -74,7 +74,7 @@ export class TodoModule extends BaseModule {
   }
 
   private restoreTasks() {
-    this.tasks = rebuildTasks(this.session.ctx.sessionManager.getBranch());
+    this.tasks = clearedIfFinished(rebuildTasks(this.session.ctx.sessionManager.getBranch()));
   }
 
   private openTasks(): OpenTask[] {

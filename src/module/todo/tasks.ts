@@ -43,10 +43,11 @@ export function createTask(tasks: Task[], input: Omit<Task, "id" | "status">): {
 }
 
 /**
- * The list a new run starts with: empty once every task is completed, so the next one starts over at id 1. Only at a
- * run's start: the model often creates one task, finishes it, then creates the next, and that must not wipe the list.
+ * The list with a finished one cleared: empty once every task is completed, so the widget goes away and the next task
+ * starts over at id 1. Applied when a run settles and when a list is restored, never mid-run: the model often creates
+ * one task, finishes it, then creates the next, and that must not wipe the list.
  */
-export function listForNewRun(tasks: Task[]): Task[] {
+export function clearedIfFinished(tasks: Task[]): Task[] {
   return tasks.length > 0 && tasks.every((task) => task.status === "completed") ? [] : tasks;
 }
 
