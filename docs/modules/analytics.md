@@ -101,9 +101,17 @@ Dated, with the window and model; newest last. Each says what was decided.
   catches a renamed copy with no question asked. Decided: the [duplicate check](../roadmap.md) (row 14) is MyPi's own (the LSP
   name lookup), with no ripwire in it, since not every system has ripwire; ripwire's skills are hidden from pi for the
   rest of milestone 2 and measured on their own in milestone 3 (rebuilt count, `lsp` share, `ripwire` calls).
-- **2026-10-26, LSP after the nudge** (milestone 2 checkpoints 1–3, gpt-6-luna, high): `lsp` share 50%, 50%, 80%
-  (3/3, 3/3, 8/2 `lsp` calls/code searches), against the 6.8% baseline. Three sessions; the post-mortem gives the
-  milestone's total.
+- **2026-10-26, LSP after the nudge** (subagents milestone 2, checkpoints 1–4, gpt-6-luna, high, ripwire's skills
+  hidden): `lsp` share 50%, 50%, 80%, 25%; **16 `lsp` calls against 14 code searches, 53%**, against the 6.8%
+  baseline. Same model and thinking; four sessions. Decided: keep the nudge; no third nudge for now; keep measuring.
+- **2026-10-26, self-builds, rows 11–12 → milestone 2** (6 and 5 checkpoints, gpt-6-luna, high): passes per checkpoint
+  1.2 → 1.2; early stops 0 → 0; rebuilt helpers 1 → 4 (3 in one checkpoint); real problems caught by pi's own
+  reviewer subagent 1 → 6 (after it started checking the plan's boxes); bugs past all of pi's checks 2 → 2, both
+  visible only on screen or in the model's behavior (literal `<accent>` tags; a parent asking writers for their own
+  patches); per-box task tracking from the plan wording; false folder-guard prompts 10 → about 0; cost per checkpoint
+  $0.094 → $0.181; context at the end 42% → 48%. The open-task report never fired in 11 checkpoints (pi always
+  finished its list). Decided: the duplicate check (row 14) next; live checks read the screen with colors and phrase
+  prompts as a user would.
 
 ## What pi offers
 
