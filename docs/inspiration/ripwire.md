@@ -37,6 +37,21 @@ task skills. So it needs no MyPi code: install the binary, install the skills, a
 Its MCP server stays off, per its own advice. Check whether it helps with the analytics module before building
 anything around it. The install is deferred: I'll do it myself later (see the [roadmap](../roadmap.md#deferred)).
 
+**Installed 2026-10-26** (0.6.8, with its skills in `~/.agents/skills/`, so every pi session lists them). A first
+test on MyPi itself, at the commit before subagents milestone 2's checkpoint 3, where pi rebuilt `isPlanMode`, the
+worktree name rule, and its own way to run git:
+
+- **Asked about the whole task** (`--for="subagent_apply tool: …"`, 0.1 s, about 6,000 tokens): 2 of the 3 in the
+  ranked list (`validateName` 6th, `git` 25th); `isPlanMode` not; ripwire rated its own confidence "low".
+- **Asked the narrow question at the moment of writing** ("is plan mode on", "validate a worktree name"): the right
+  helper first every time; "run git and get its output" found a different `git` (Plan's shell check).
+- **`--clones`** flagged a planted copy of `isPlanMode` under another name as an exact clone, and found two real
+  duplicates nobody had seen: the done check's `inBuild` (90% the same as `isPlanMode`) and `writerSlug`, written in
+  that checkpoint's review (83% the same as plan-build's `slugify`; now one function in core).
+
+So it answers well when asked; the model still has to think to ask, the same problem as `lsp`. The clone check needs
+no question at all, which is why it fits the [duplicate check](../roadmap.md) (row 14) better than a nudge does.
+
 ripwire and the LSP module overlap (callers, references) but differ: LSP is exact and per-language with a server
 running; ripwire is fast, offline, cross-language, and ranks by task.
 

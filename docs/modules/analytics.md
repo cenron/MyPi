@@ -95,6 +95,16 @@ Dated, with the window and model; newest last. Each says what was decided.
   If the share barely moves, try the third nudge (a hint on the result of an `rg` or whole-file `read`); if that
   doesn't move it either, remove the nudges.
 
+- **2026-10-26, rebuilt instead of reused.** pi rebuilt helpers the plan named minutes earlier: 3 in milestone 1, 1
+  in rows 11–12, 3 in milestone 2's checkpoint 3 alone (the reviewer rebuilt one too). ripwire, tested on that
+  checkpoint: the narrow question finds the helper first every time, the whole-task question 2 of 3, and `--clones`
+  catches a renamed copy with no question asked. Decided: the [duplicate check](../roadmap.md) (row 14) uses the clone
+  check where ripwire is installed and the LSP name lookup otherwise, measured by the "rebuilt" count. Confounder from
+  here on: ripwire's 17 skills are in every pi session's prompt (including one for "about to write one symbol").
+- **2026-10-26, LSP after the nudge** (milestone 2 checkpoints 1–3, gpt-6-luna, high): `lsp` share 50%, 50%, 80%
+  (3/3, 3/3, 8/2 `lsp` calls/code searches), against the 6.8% baseline. Three sessions; the post-mortem gives the
+  milestone's total.
+
 ## What pi offers
 
 Checked against the installed pi 1.2.0 (2026-10-22):
