@@ -2,8 +2,8 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Session } from "#core/session";
 import type { Job } from "#core/types";
+import { jobDuration, jobEnding } from "#core/util/jobs";
 import type { Tool } from "#tool/types";
-import { jobDuration, jobEnding } from "#tool/utils";
 import { releaseNotice, reserveNotice, takeNotice } from "./notice";
 
 /** `job_list`: every background job of this session, running or ended, oldest first, with its log file. */

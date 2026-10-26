@@ -4,7 +4,8 @@ import { Text } from "@earendil-works/pi-tui";
 import type { Session } from "#core/session";
 import type { Job, JobInfo } from "#core/types";
 import { errorMessage } from "#core/util/errors";
-import { expandKey, jobDuration, jobEnding } from "#tool/utils";
+import { jobDuration, jobEnding } from "#core/util/jobs";
+import { expandKey } from "#tool/utils";
 
 /** The custom message type of a job's exit notice. */
 export const JOB_NOTICE = "mypi-job";

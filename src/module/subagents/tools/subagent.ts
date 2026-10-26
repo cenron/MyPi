@@ -1,8 +1,9 @@
 import { defineTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import type { Session } from "#core/session";
+import { jobDuration, jobEnding } from "#core/util/jobs";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
-import { expandKey, jobDuration, jobEnding, reuseText, textOf } from "#tool/utils";
+import { expandKey, reuseText, textOf } from "#tool/utils";
 import { type AgentDefinition, THINKING_SETTINGS } from "../agents";
 import { type RunSettings, runChild } from "../child";
 import { isPlanMode } from "../mode";

@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { JobInfo } from "#core/types";
-import { jobDuration } from "#tool/utils";
+import { jobDuration } from "#core/util/jobs";
 
 /** Most characters of a job's label on the line; the rest is in `/jobs`. */
 const LABEL_CHARS = 24;

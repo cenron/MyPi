@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { Session } from "#core/session";
 import type { Command, JobInfo } from "#core/types";
-import { jobDuration, jobEnding } from "#tool/utils";
+import { jobDuration, jobEnding } from "#core/util/jobs";
 import { Dialog } from "#ui/components/dialog";
 
 const LIST_HEIGHT = 12;
