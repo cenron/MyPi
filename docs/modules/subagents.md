@@ -193,6 +193,10 @@ for that.
 - **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with plan-build's `planRule` on the child's guard: the
   same check as Plan, so `git log` runs and `touch` is refused.
 - **`write`:** pi's normal tools.
+- **Clearer refusals (planned 2026-10-26, roadmap "Self-build fixes"):** when there's no UI, `ToolGuard` answers
+  "Confirmation needed, no UI to ask", which reads as if someone could confirm; the child in milestone 1 reported
+  "requires confirmation". Say instead that the call is refused because it needs the user's approval and no one can
+  give it here, so the child reports a refusal the parent can take to the user.
 - **The folder guard, in every child** (gap found 2026-10-25 planning milestone 1): MyPi's `FolderRule` doesn't run
   in a child either, so an `explore` run could read `~/.ssh` unasked. The child's guard runs it; a call reaching
   outside the session's folder is refused with the reason, and the child reports it in its answer so the parent can

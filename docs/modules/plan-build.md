@@ -279,6 +279,11 @@ built it in a sub-folder.
    - **Tests:** the dialog's first choice is Clear context; `PLAN_PROMPT` holds both new lines (one test, key phrases);
      `/plan implement` with a running job refuses and names it. Live: submit a plan, press Enter, land in a fresh
      Build session seeded with the plan.
+10. **Planned 2026-10-26 (roadmap "Self-build fixes").** Keep the thinking level across the hand-off. `/plan
+    implement` and the dialog's Clear context start a new session at the default thinking level, not the session's
+    (found when subagents checkpoint 6 was meant to run on high and started on medium). Save the level with the Build
+    state, as the plan path is, and set it in the new session. With [todo](../tools/todo.md) slice 4, `buildPrompt(plan)`
+    also gains one line: create tasks from the plan's next step before starting.
 
 ## Open questions
 

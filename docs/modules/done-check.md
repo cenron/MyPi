@@ -182,6 +182,13 @@ with another extension").
 3. Moved to [analytics](analytics.md#measuring-what-mypi-adds) (2026-10-24): counting how often the check caught
    something, to show whether it pays. The done check would publish a notice on the bus for each report, and
    analytics would listen; the channel comes with analytics, its first listener.
+4. **Planned 2026-10-26 (roadmap "Self-build fixes").** Say when it passed. Today a passing check is silent, so the
+   model can't tell it ran: in subagents milestone 1, pi's reports said "the done check didn't run" while the footer
+   showed it running. On a pass, add one short line the model sees ("Done check passed: npm run check"), without
+   starting a new turn. Keep it to one line: it lands after every Build run.
+5. **Planned 2026-10-26, with [todo](../tools/todo.md) slice 4.** Open tasks: when a Build run ends with todo tasks
+   still `pending` or `in_progress`, the report lists them and the run continues, as for a failed command. It asks the
+   todo tool on the event bus (an `open-tasks` question). Aimed at milestone 1's main failure: stopping partway.
 
 ## Decided 2026-10-24
 
