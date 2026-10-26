@@ -2,8 +2,8 @@
 
 **Status:** milestone 1 done 2026-10-26 (design agreed 2026-10-23; foundational since 2026-10-25): agent
 definitions with the five builtins and the agent list, the `subagent` tool, access in the child with the Plan rule,
-grouped completions with `job_wait`, and rendering. Milestones 2 (the fleet view, parallel writers) and 3 (creating
-agents) are next.
+grouped completions with `job_wait`, and rendering. Milestone 2's jobs view is done; parallel writers and milestone 3
+(creating agents) are next.
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -248,18 +248,17 @@ it here (no UI). Tell the user what you needed and why: …").
 - **Builtins** can't be deleted. Editing one saves my copy; deleting my copy brings the builtin back.
 - **Allowed in Plan mode:** a definition isn't project code.
 
-## Fleet view
+## Jobs view
 
-One place to see and manage agents and their runs:
+The user's `/jobs` view covers every `JobManager` job, including shell jobs and subagents:
 
-- **Collapsed**, a line below the editor: `2 running · reviewer 38s · developer 4m 10s`.
-- **Runs** (expanded, a key on the empty editor or `/agents`): one row per run with agent, model, thinking, state,
-  time, and tokens. Actions: open (the output and transcript), stop. Later: steer.
-- **Agents:** the definitions, with create, edit, and delete. The model list is only models I can use
-  (`modelRegistry.getAvailable()`), and the thinking list only the levels the chosen model supports. Saving goes
-  through the same rules as `agent_manage`.
-- **Data:** every run is a `JobManager` job with run details on it, so `job_list`, `job_stop`, the footer, and the
-  fleet view read one list.
+- **Collapsed**, a `mypi-jobs` line below the editor while jobs run: count, each running job's label (cut to 24
+  characters) and elapsed time, then `/jobs`. It redraws each second and disappears when jobs end. This replaces the
+  footer's job count.
+- **`/jobs`** lists every job newest first with id, kind, state, time, and label. Enter opens its last 100 output
+  lines and log path; Escape goes back or closes. `x` stops the selected running job.
+- **Model tools remain:** `job_list`, `job_stop`, and `job_wait` are still available to the model. The jobs view is
+  for the user; it uses the same session `JobManager`.
 
 ## External agents (later)
 
@@ -304,8 +303,8 @@ Deferred until internal agents work. The design so far:
 | `subagent_apply` | Same folder | Applies or drops a writer's patch after a dialog with the diff stat and summary; never applies without my answer. |
 | Plan rule | `onToolCall` in `init()` | Read-only runs allowed, write runs blocked, while the parent is in Plan. |
 | Child session | `createAgentSession`, `ModelRuntime`, `SessionManager`, `resolveCliModel`, `DefaultResourceLoader` | All exported by pi 1.2.0; see "Spike results" below. Dispose a child with `session.dispose()`. |
-| Background | `session.jobs` (`JobManager`), with run details on the job | One list for `job_list`, `job_stop`, the footer, and the fleet view. |
-| Fleet view | `src/ui/` widget through `ctx.ui.setWidget`, plus `/agents` | Built from `src/ui/components/`. |
+| Background | `session.jobs` (`JobManager`), with run details on the job | One list for `job_list`, `job_stop`, `job_wait`, and `/jobs`. |
+| Jobs view | `src/ui/` widget through `ctx.ui.setWidget`, plus `/jobs` | Lists every job, opens output, and stops running jobs; agent-definition management remains milestone 3. |
 | Rendering | `renderCall` / `renderResult` | The agent and the task's first line; the child's last few steps; Ctrl+O expands. |
 
 ### Spike results (milestone 1 checkpoint 1, 2026-10-26)
@@ -340,16 +339,17 @@ A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscrip
 5. Grouped completions, and waiting on purpose.
 6. Rendering: progress under a foreground call; Ctrl+O expands.
 
-**Milestone 2: the fleet view and parallel writers**
+**Milestone 2: the jobs view and parallel writers**
 
-7. The fleet view's runs: the collapsed line, the expanded list, open, stop.
+7. **Done 2026-10-26: Jobs view.** The below-editor line and `/jobs` list every session job, open output, and stop
+   running jobs. Agent-definition management remains milestone 3.
 8. Parallel writers, each in its own worktree (refused while the checkout has uncommitted changes); their work comes
    back as a patch and a handoff file, applied through `subagent_apply` after I approve.
 
 **Milestone 3: creating agents**
 
 9. `agent_manage` (deferred): create, edit, delete, the confirm, model resolution, the actual thinking level.
-10. The fleet view's agents: create, edit, delete from the menu.
+10. The agents view: create, edit, delete from the menu.
 
 **Later**
 
@@ -367,7 +367,7 @@ Answered for milestone 1 (2026-10-25), as defaults to revisit with real use:
 
 Still open:
 
-- The fleet view's key, and whether `/agents` replaces `job_list` for runs (milestone 2).
+- The `/agents` view for managing agent definitions (milestone 3).
 - Should the [done check](done-check.md) run when a `developer` run finishes?
 - External agents: keep Radian's rule that Anthropic models only run on Claude Code?
 

@@ -192,7 +192,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   `JobStatus`); `start` gives it an id counting up from 1, a log file (`pi-job-<hex>.log` in `os.tmpdir()`, `0600`,
   kept after it ends), and a 50K-character tail in memory, and records how it ended: `completed`, `failed` (an exit
   code or a thrown error), or `stopped`. It publishes the running count on the bus's `jobs` channel on every start and
-  end; `Session` listens for the `jobs` footer item, and `stopAll()` stops publishing. Generic on purpose: shell
+  end; `Session` listens to update the below-editor jobs line, and `stopAll()` stops publishing. Generic on purpose: shell
   commands are one kind (`shellJob` in `src/tool/bash/`, through pi's own `createLocalBashOperations().exec`, which
   kills the process tree on abort), and subagent runs are a second. Every kind's end goes through `noticeOnEnd` in
   `src/tool/jobs/notice.ts`, which also feeds `job_wait` and the subagents' grouped completions. `MyPi.onSessionEnd` calls `stopAll()` before the

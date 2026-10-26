@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 import type { Session } from "#core/session";
 import type { Command } from "#core/types";
 import { errorMessage } from "#core/util/errors";
+import { jobsCmd } from "./jobs";
 import { modulesCmd } from "./modules";
 import { worktreeCmd } from "./worktree";
 
@@ -20,7 +21,7 @@ export function registerCommands(pi: ExtensionAPI, session: Session) {
 
 /** MyPi's own commands. Add new ones here. */
 function createCommands(session: Session): Command[] {
-  return [modulesCmd(session), worktreeCmd(session)];
+  return [jobsCmd(session), modulesCmd(session), worktreeCmd(session)];
 }
 
 /**

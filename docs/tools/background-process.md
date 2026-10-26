@@ -69,7 +69,10 @@ asks for.
   the notice starts a turn, so the model never polls.
 - A background job has no time limit. Every job still running stops when the pi session ends (quit, `/reload`, a
   session switch); none survive a restart. Log files stay in the temp directory.
-- The footer shows how many jobs are running.
+- While jobs run, the below-editor `mypi-jobs` line shows the count, truncated labels, elapsed times, and `/jobs`; it
+  redraws every second and disappears when none run. `/jobs` lists every session job newest first. Enter opens its last
+  100 output lines and log path, `x` stops a running job, and Escape goes back or closes. The model's `job_list`,
+  `job_stop`, and `job_wait` tools remain available.
 - Works in Plan mode under the same rule as `bash`: plan-build checks the command, background or not.
 
 ## Design in pi
@@ -84,7 +87,7 @@ Decided 2026-10-22.
 | Output | The log file, read with pi's `read` | No output tool, as in Claude Code. `pi-job-<hex>.log` in `os.tmpdir()`, mode `0600`, kept after the job ends. |
 | `job_list`, `job_stop` | Two small tools | The model can stop what it started, as with Claude Code's `TaskStop`. |
 | Exit notice | `pi.sendMessage({ customType: "mypi-job", … }, { deliverAs: "followUp", triggerTurn: true })` | Queued for after the current run while the agent works; starts a turn when idle. The `bash` description says not to poll. |
-| Footer | `session.footer` | The number of running jobs, shown only while there are any, published on the `jobs` channel of the [event bus](../modules/done-check.md#the-event-bus). |
+| Jobs line | `ctx.ui.setWidget` below the editor | Replaces the old footer count. `Session` listens on the `jobs` channel and refreshes each second while jobs run; `/jobs` uses the same `JobManager`. |
 | Cleanup | `MyPi.onSessionEnd` calls `session.jobs.stopAll()` | pi also kills tracked children on an emergency exit. |
 
 ## Slices
@@ -95,8 +98,10 @@ Decided 2026-10-22.
    are pi's `bash` unchanged.
 3. **Done.** **The exit notice** through `sendMessage`, with its own message renderer.
 4. **Done.** **`job_list` and `job_stop`**, and plan-build's rule for them.
-5. **Done.** **The footer item, and rendering** for background starts (the job tools kept pi's default drawing).
-6. **Later:** Monitor (output lines streamed back as events, with a deadline), and a foreground command that hits its
+5. **Done.** Rendering for background starts (the job tools kept pi's default drawing).
+6. **Done 2026-10-26.** The below-editor jobs line and `/jobs` view, including output drill-in and stop; the line
+   replaces the footer's job count.
+7. **Later:** Monitor (output lines streamed back as events, with a deadline), and a foreground command that hits its
    timeout moving to the background, as in Claude Code.
 
 ## Slice 1: the job registry

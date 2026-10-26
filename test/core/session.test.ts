@@ -10,12 +10,24 @@ function fakeContext(hasUI: boolean) {
   return { ctx, notify };
 }
 
-const pi = { events: createEventBus() } as unknown as ExtensionAPI;
+function fakePi() {
+  const handlers = new Map<string, (event: unknown, context: ExtensionContext) => unknown>();
+  return {
+    api: {
+      events: createEventBus(),
+      on: (event: string, handler: (event: unknown, context: ExtensionContext) => unknown) => {
+        handlers.set(event, handler);
+        return () => {};
+      },
+    } as unknown as ExtensionAPI,
+    emit: (event: string) => handlers.get(event)?.({}, {} as ExtensionContext),
+  };
+}
 
 describe("Session", () => {
   it("sends each log level as the matching notify type", () => {
     const { ctx, notify } = fakeContext(true);
-    const session = new Session(ctx, pi, undefined);
+    const session = new Session(ctx, fakePi().api, undefined);
 
     session.log("hello");
     session.logWarning("careful");
@@ -30,7 +42,7 @@ describe("Session", () => {
 
   it("sends nothing without a UI", () => {
     const { ctx, notify } = fakeContext(false);
-    const session = new Session(ctx, pi, undefined);
+    const session = new Session(ctx, fakePi().api, undefined);
 
     session.log("hello");
     session.logWarning("careful");
@@ -58,8 +70,9 @@ describe("Session", () => {
     expect(session.load("modules")).toEqual({ loaded: ["a"] });
   });
 
-  it("shows how many jobs are running in the footer, only while some are", async () => {
+  it("draws the jobs widget while jobs run, updates it each second, and clears it when they end", async () => {
     const { session, setStatus } = fakeSession();
+    const clear = vi.spyOn(globalThis, "clearInterval");
     let finish!: (code: number) => void;
     const first = session.jobs.start({
       kind: "test",
@@ -70,12 +83,57 @@ describe("Session", () => {
     await second.done;
     finish(0);
     await first.done;
-    expect(setStatus.mock.calls).toEqual([
-      ["mypi-jobs", "<accent>1 job"],
-      ["mypi-jobs", "<accent>2 jobs"],
-      ["mypi-jobs", "<accent>1 job"],
-      ["mypi-jobs", undefined],
-    ]);
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(session.ctx.ui.setWidget).toHaveBeenCalledWith(
+      "mypi-jobs",
+      expect.arrayContaining([expect.stringContaining("2 running")]),
+      {
+        placement: "belowEditor",
+      },
+    );
+    expect(session.ctx.ui.setWidget).toHaveBeenLastCalledWith("mypi-jobs", undefined, { placement: "belowEditor" });
+    expect(clear).toHaveBeenCalledOnce();
     await Promise.all([first, second].map((job) => rm(job.info.logPath, { force: true })));
+  });
+
+  it("does not draw a jobs widget without a UI", async () => {
+    const setWidget = vi.fn();
+    const ctx = { cwd: "/project", hasUI: false, ui: { setWidget } } as unknown as ExtensionContext;
+    const session = new Session(ctx, fakePi().api, undefined);
+    const job = session.jobs.start({ kind: "test", label: "short", run: async () => 0 });
+    await job.done;
+    expect(setWidget).not.toHaveBeenCalled();
+    await rm(job.info.logPath, { force: true });
+  });
+
+  it("clears the jobs interval on session shutdown", async () => {
+    vi.useFakeTimers();
+    const fake = fakePi();
+    const setWidget = vi.fn();
+    const theme = { fg: (_color: string, text: string) => text };
+    const ctx = { cwd: "/project", hasUI: true, ui: { setWidget, theme } } as unknown as ExtensionContext;
+    const session = new Session(ctx, fake.api, undefined);
+    let stop!: () => void;
+    const job = session.jobs.start({
+      kind: "test",
+      label: "running",
+      run: (signal) =>
+        new Promise<number>((_resolve, reject) => {
+          stop = () => reject(new Error("stopped"));
+          signal.addEventListener("abort", stop);
+        }),
+    });
+    const clear = vi.spyOn(globalThis, "clearInterval");
+
+    await vi.advanceTimersByTimeAsync(1000);
+    fake.emit("session_shutdown");
+    expect(setWidget).toHaveBeenLastCalledWith("mypi-jobs", undefined, { placement: "belowEditor" });
+    expect(clear).toHaveBeenCalledOnce();
+
+    session.jobs.stopAll();
+    stop();
+    await job.done;
+    await rm(job.info.logPath, { force: true });
+    vi.useRealTimers();
   });
 });

@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Editor } from "#ui/editor";
-import { Footer, FooterColor } from "#ui/footer";
+import { Footer } from "#ui/footer";
+import { jobsLine } from "#ui/jobs-line";
 import { subscribe } from "./events";
 import { JobManager } from "./job-manager";
 import { ModuleManager } from "./module-manager";
@@ -26,6 +27,7 @@ export class Session {
   /** Lazy Git worktree operations rooted in this session's cwd; never switch the session. */
   readonly worktrees: Worktrees;
   private readonly notifier: Notifier;
+  private jobsInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     readonly ctx: ExtensionContext,
@@ -41,13 +43,32 @@ export class Session {
     this.toolGuard = new ToolGuard(pi);
     this.jobs = new JobManager(pi.events);
     this.worktrees = new Worktrees(ctx.cwd);
-    // How many jobs are running, of any kind, shown only while there are some.
-    subscribe(pi.events, "jobs", (running) =>
-      this.footer.set(
-        "jobs",
-        running ? { text: running === 1 ? "1 job" : `${running} jobs`, color: FooterColor.ACCENT } : undefined,
-      ),
-    );
+    subscribe(pi.events, "jobs", (running) => this.updateJobsWidget(running));
+    pi.on("session_shutdown", () => this.clearJobsWidget());
+  }
+
+  private updateJobsWidget(running: number) {
+    if (!this.ctx.hasUI) return;
+
+    if (!running) {
+      this.clearJobsWidget();
+      return;
+    }
+
+    const draw = () => {
+      const jobs = this.jobs.list().filter((job) => job.status === "running");
+      this.ctx.ui.setWidget("mypi-jobs", jobsLine(jobs, this.ctx.ui.theme), { placement: "belowEditor" });
+      if (!jobs.length) this.clearJobsWidget();
+    };
+
+    draw();
+    this.jobsInterval ??= setInterval(draw, 1000);
+  }
+
+  private clearJobsWidget() {
+    if (this.jobsInterval) clearInterval(this.jobsInterval);
+    this.jobsInterval = undefined;
+    if (this.ctx.hasUI) this.ctx.ui.setWidget("mypi-jobs", undefined, { placement: "belowEditor" });
   }
 
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */

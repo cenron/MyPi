@@ -20,7 +20,7 @@ export type Problem = {
  * says who publishes and who listens.
  */
 export type MyPiNotices = {
-  /** How many jobs are running. `JobManager` publishes; `Session`'s footer item listens (later the fleet view). */
+  /** How many jobs are running. `JobManager` publishes; `Session` updates the below-editor jobs line. */
   jobs: number;
 };
 

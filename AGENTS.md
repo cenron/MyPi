@@ -106,4 +106,6 @@ Test each behavior once, at the lowest level that shows it:
   answer a dialog by sending keys.
 - Fixtures go in the throwaway repo. A fixture that must be outside the session's folder must also be outside the
   temp folder, which the folder guard allows: a fake file in the home folder, deleted afterwards.
+- For anything drawn on screen, read the pane with its colors (`herdr pane read <pane> --format ansi`): a plain read
+  shows a literal `<accent>` tag the same as a colored word.
 - Close the pane afterwards and write down what you saw.
