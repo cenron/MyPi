@@ -267,7 +267,7 @@ built it in a sub-folder.
    - Not taking: resetting the context with no choice (small plans gain nothing). A reviewer subagent on every
      `submit_plan` was left out because subagents might be off; they're foundational since 2026-10-25, so it's
      worth revisiting once they exist.
-   - Goes with [context](../core/context.md) pieces B and D: the Build section names the plan being implemented, and
+   - Goes with [context](context.md) pieces B and D: the Build section names the plan being implemented, and
      asks for a principles check before "done".
    - **Built 2026-10-25** (by pi on gpt-6-luna; the done check sent its first, unfinished pass back): Clear context
      first in `PLAN_CHOICES`; the two `PLAN_PROMPT` lines; `buildPrompt(plan)` naming the plan and asking for the

@@ -22,7 +22,7 @@ the fleet view, which also shows what's running.
 Claude Code starts small background agents freely: to look something up, to check work, to read a lot and report a
 little. Only the summary reaches the main conversation, so its context stays small. Building worktree in one pi
 session showed the cost of not having that: whole files of pi's compiled code and long command output filled the
-main context to 253k, and the code drifted as it did ([context](../core/context.md)).
+main context to 253k, and the code drifted as it did ([context](context.md)).
 
 - **The main agent hands off reads and checks,** not only writing: "find where pi resolves session cwd", "check this
   diff against `docs/principles.md`". A read-only run, in the background when it can be, returning a short answer
