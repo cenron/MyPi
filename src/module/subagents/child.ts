@@ -45,24 +45,29 @@ export async function runChild(
   settings: RunSettings,
   signal: AbortSignal,
   onStep: (step: string) => void,
+  cwd = parent.cwd,
 ): Promise<ChildResult> {
+  if (signal.aborted) throw new Error("aborted");
   if (!settings.model && !parent.model) {
     throw new Error("No model is selected. Select one with /model, or pass `model`.");
   }
 
   const runtime = await ModelRuntime.create();
+  if (signal.aborted) throw new Error("aborted");
   const { model, thinking } = childModel(parent, settings, runtime);
-  const manager = SessionManager.create(parent.cwd, join(getAgentDir(), "subagents", "sessions"), {
+  const manager = SessionManager.create(cwd, join(getAgentDir(), "subagents", "sessions"), {
     parentSession: parent.sessionManager.getSessionFile(),
   });
+  const resources = await childResources(cwd, agent);
+  if (signal.aborted) throw new Error("aborted");
   const { session } = await createAgentSession({
-    cwd: parent.cwd,
+    cwd,
     agentDir: getAgentDir(),
     modelRuntime: runtime,
     model,
     thinkingLevel: thinking,
     tools: agent.tools ?? (agent.access === "read-only" ? READ_ONLY_TOOLS : undefined),
-    resourceLoader: await childResources(parent.cwd, agent),
+    resourceLoader: resources,
     sessionManager: manager,
   });
 
@@ -94,6 +99,7 @@ export async function runChild(
   signal.addEventListener("abort", abort, { once: true });
 
   try {
+    if (signal.aborted) throw new Error("aborted");
     await session.prompt(task);
     return {
       answer: session.getLastAssistantText() ?? "The agent gave no answer.",

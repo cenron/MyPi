@@ -60,8 +60,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`Session`** wraps the `ExtensionContext` from `session_start` and the `ExtensionAPI`. It's the handle passed to
   commands and modules. It logs through `log`, `logWarning`, and `logError`, keeps state in the session through `save`
   and `load`, and owns the session's `ModuleManager` as `moduleManager`, plus the shared `footer`, `editor`, and
-  `promptManager`, and `toolGuard`. `worktrees` is the git worktree service (`/worktree` and later subagents; see
-  [worktree](tools/worktree.md#the-service)). `project` is the repository's main checkout and git common folder, or
+  `promptManager`, and `toolGuard`. `worktrees` is the git worktree service (`/worktree` and subagent writer worktrees;
+  see [worktree](tools/worktree.md#the-service) and [subagents](modules/subagents.md)). `project` is the repository's
+  main checkout and git common folder, or
   undefined outside git or when git fails: `MyPi` resolves it once before modules load and passes it in, so module
   `init()` stays synchronous. Memory and plan-build keep their folders in the main checkout through it.
 - **Saved state.** `session.save(name, data)` writes a `mypi-<name>` custom entry with `pi.appendEntry`, which pi keeps

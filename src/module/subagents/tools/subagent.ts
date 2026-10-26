@@ -4,8 +4,10 @@ import type { Session } from "#core/session";
 import { jobNotice, NOTICE_LINES, NoticeGroup, noticeOnEnd } from "#tool/jobs/notice";
 import { expandKey, jobDuration, jobEnding, reuseText, textOf } from "#tool/utils";
 import { type AgentDefinition, THINKING_SETTINGS } from "../agents";
-import { type ChildResult, RUN_TIMEOUT_MINUTES, type RunSettings, runChild } from "../child";
+import { type RunSettings, runChild } from "../child";
 import { isPlanMode } from "../mode";
+import { runWriter, type WriterResult } from "../writer";
+import { formatResult } from "./outcome";
 
 /** Most background runs at once. */
 const MAX_BACKGROUND = 3;
@@ -59,8 +61,9 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
   session.pi.on("input", (event) => {
     if (event.source !== "extension") runsThisPrompt = 0;
   });
-  /** `write` runs going now, foreground or background: one at a time until parallel writers get worktrees. */
-  let writeRuns = 0;
+  /** Write runs going now, foreground or background, split by their isolation mode. */
+  let worktreeWriters = 0;
+  let inPlaceWriters = 0;
   const noticeGroup = new NoticeGroup(session, GROUP_WAIT_MS);
 
   return defineTool({
@@ -96,8 +99,11 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
       if (writes && (await isPlanMode(session))) {
         throw new Error(`Plan mode is on: ${agent.name} can change files. Switch to Build, or use a read-only agent.`);
       }
-      if (writes && writeRuns > 0) {
-        throw new Error("Only one write subagent runs at a time; wait for the other to end.");
+      if (writes && session.project && worktreeWriters >= MAX_BACKGROUND) {
+        throw new Error(`At most ${MAX_BACKGROUND} worktree writers at once; wait for one to end.`);
+      }
+      if (writes && !session.project && inPlaceWriters > 0) {
+        throw new Error("Only one write subagent runs at a time outside a git project; wait for it to end.");
       }
 
       const background = args.background !== false;
@@ -105,11 +111,17 @@ export function subagentTool(session: Session, agents: () => AgentDefinition[], 
       runsThisPrompt++;
 
       // Counted from here until the run ends, however it ends.
-      if (writes) writeRuns++;
-      const start = (runSignal: AbortSignal, onStep: (step: string) => void) =>
-        run(ctx, agent, args.task, runSettings(agent, args), runSignal, onStep).finally(() => {
-          if (writes) writeRuns--;
+      if (writes && session.project) worktreeWriters++;
+      if (writes && !session.project) inPlaceWriters++;
+      const start = (runSignal: AbortSignal, onStep: (step: string) => void) => {
+        const childRun = writes
+          ? runWriter(session, ctx, agent, args.task, runSettings(agent, args), runSignal, onStep, run)
+          : run(ctx, agent, args.task, runSettings(agent, args), runSignal, onStep);
+        return childRun.finally(() => {
+          if (writes && session.project) worktreeWriters--;
+          if (writes && !session.project) inPlaceWriters--;
         });
+      };
 
       if (!background) {
         const steps: string[] = [];
@@ -172,16 +184,17 @@ function runSettings(agent: AgentDefinition, args: RunArgs): RunSettings {
 function startJob(
   session: Session,
   label: string,
-  start: (signal: AbortSignal, onStep: (step: string) => void) => Promise<ChildResult>,
+  start: (signal: AbortSignal, onStep: (step: string) => void) => Promise<WriterResult>,
   group: NoticeGroup,
 ) {
-  let result: ChildResult | undefined;
+  let result: WriterResult | undefined;
   const job = session.jobs.start({
     kind: "subagent",
     label,
     run: async (signal, write) => {
       result = await start(signal, (step) => write(`${step}\n`));
-      return 0;
+      if (result.stopped) throw new Error("Writer stopped after partial work was captured.");
+      return result.failure ? 1 : 0;
     },
   });
 
@@ -197,6 +210,8 @@ function startJob(
       return { ...notice, content: `${heading}\n\n${formatResult(result)}` };
     },
     group,
+    // A stopped writer still saved its work: the model needs the patch's name.
+    () => result?.patchName !== undefined,
   );
 
   const text = `Started ${label} as job ${job.info.id}. You'll get a message with the answer when it ends.`;
@@ -217,17 +232,4 @@ function formatProgress(steps: string[], expanded: boolean, theme: Theme): strin
 function formatOutput(output: string, expanded: boolean, theme: Theme): string {
   if (expanded || output.length <= PREVIEW_CHARS) return `\n${output}`;
   return `\n${output.slice(0, PREVIEW_CHARS)}… ${theme.fg("dim", `(${expandKey()} to expand)`)}`;
-}
-
-/** The model's text for a result: the answer, then usage, the session file, and the files the run changed. */
-function formatResult(result: ChildResult): string {
-  return [
-    result.timedOut ? `Stopped at the ${RUN_TIMEOUT_MINUTES}-minute limit; the answer may be incomplete.` : undefined,
-    result.answer,
-    `Usage: ${result.usage.tokens} tokens, $${result.usage.cost.toFixed(4)}`,
-    `Session: ${result.sessionFile ?? "not saved"}`,
-    `Changed files: ${result.changedFiles.length ? result.changedFiles.join(", ") : "none"}`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
 }

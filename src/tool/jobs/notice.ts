@@ -56,19 +56,23 @@ export class NoticeGroup {
 
 /**
  * Tells the model when `job` ends, starting a turn if the agent is idle. `notice` builds the message; by default it
- * carries the job's last lines. Successful jobs may join a group; failures are sent at once.
+ * carries the job's last lines. Successful jobs may join a group; failures are sent at once. A stopped job sends
+ * nothing, since the user stopped it, unless `sendWhenStopped` says it left something the model needs (a stopped
+ * writer's saved patch).
  */
 export function noticeOnEnd(
   session: Session,
   job: Job,
   notice: (ended: JobInfo) => JobNotice = (ended) => jobNotice(ended, job.tail(NOTICE_LINES)),
   group?: NoticeGroup,
+  sendWhenStopped: () => boolean = () => false,
 ): void {
   notices.set(job, { build: notice, taken: false });
   job.done
     .then((ended) => {
       const entry = notices.get(job);
-      if (session.jobs.closed || ended.status === "stopped" || entry?.taken) return;
+      if (session.jobs.closed || entry?.taken) return;
+      if (ended.status === "stopped" && !sendWhenStopped()) return;
       if (group && ended.status === "completed") {
         group.add(job);
         return;

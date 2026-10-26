@@ -21,7 +21,7 @@ Each module has a doc here, named after its folder in `src/module/`. Start a doc
 | [notifications](notifications.md) | idea | A desktop notification when the agent is done or a dialog is waiting |
 | [pair-programmer](pair-programmer.md) | idea | A pair-programming mode where the agent navigates and I drive |
 | [plan-build](plan-build.md) | done | Plan and Build modes with an "Implement this plan?" dialog |
-| [subagents](subagents.md) | milestone 1 done | Reusable agents (architect, developer, reviewer, and ones I create) run as pi sessions through pi's SDK, with a fleet view; external harnesses in herdr panes later. `ALWAYS`: foundational, for background research and checks as well as delegated work |
+| [subagents](subagents.md) | milestone 2 done (milestone 3: creating agents) | Reusable agents (architect, developer, reviewer, and ones I create) run as pi sessions through pi's SDK, with the jobs view and parallel worktree writers returning patches; external harnesses in herdr panes later. `ALWAYS`: foundational, for background research and checks as well as delegated work |
 | [todo](todo.md) | done | Claude Code-style task tools, branch-following checklist, UI, reminder, plan seeding, and open-task reporting. `ON_LOAD` |
 
 Built-in tools that don't belong to a module are documented in [`docs/tools/`](../tools/README.md).

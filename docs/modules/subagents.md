@@ -1,9 +1,8 @@
 # Sub-agents
 
-**Status:** milestone 1 done 2026-10-26 (design agreed 2026-10-23; foundational since 2026-10-25): agent
-definitions with the five builtins and the agent list, the `subagent` tool, access in the child with the Plan rule,
-grouped completions with `job_wait`, and rendering. Milestone 2's jobs view is done; parallel writers and milestone 3
-(creating agents) are next.
+**Status:** milestones 1 and 2 done 2026-10-26: agent definitions with the five builtins and the agent list, the
+`subagent` tool, access in the child with the Plan rule, grouped completions, the jobs view, and parallel writers in
+temporary worktrees whose changes return as patches. Milestone 3 (creating agents) is next.
 
 **Load type:** `ALWAYS` (decided 2026-10-25, was `ON_LOAD`): a foundational module other parts build on, like
 memory. It's still a module, with its own folder and seams, but it isn't turned off in `/modules`, so research and
@@ -35,7 +34,7 @@ Two uses (agreed 2026-10-25, following Claude Code):
    model and thinking level**, so they're as capable as the session that started them. Only the short answer comes
    back.
 2. **The user's own agents:** a reviewer, a developer, an architect, and any the user creates, by asking or in the
-   fleet view (milestones 2 and 3).
+   jobs view (milestones 2 and 3).
 - **Other parts may build on it:** a check after a slice (the reviewer against the principles), research during
   planning. That's why it's `ALWAYS`. Each still works without a subagent run in flight; they use it, they don't
   wait on it to start.
@@ -205,11 +204,12 @@ it here (no UI). Tell the user what you needed and why: …").
   reason. A rule can't do this: no rule can override `planRule`'s ask on a tool not marked read-only. So `subagent`
   carries `readOnlyHint: true`, and its `execute` asks plan-build for the mode on the event bus (as the done check
   does) and refuses a `write` agent in Plan. With plan-build off, nobody answers, which counts as Build.
-- **Writers in parallel each get a worktree** (the [worktree](../tools/worktree.md) tool comes first on the roadmap).
-  Without one, only one `write` run works in the main checkout at a time (counted in the tool, foreground and
-  background alike), and the main agent leaves its files alone.
-- **Children don't commit. A writer's work comes back as a patch:** `writer.ts` implements and tests preparation and
-  capture directly; the `subagent` run path is not wired to it yet (checkpoint 4).
+- **Writers in parallel each get a worktree.** In a git project, up to three `write` runs work in separate managed
+  worktrees; outside git, a single writer runs in place and says so (foreground and background alike).
+- **Children don't commit. A writer's work comes back as a patch:** the child runs in its worktree and is told not to
+  commit. On completion, including a stopped run, `writer.ts` captures the work, removes the worktree, and returns the
+  patch name and files; the main agent reviews it and uses `subagent_apply`. A dirty calling checkout refuses the run
+  and names the files; there is no fallback to in-place work.
   1. The worktree branches from the **calling checkout's committed `HEAD`** (decided 2026-10-25), matching
      `Session.worktrees.create`. If the parent works inside a worktree, the writer branches from that checkout,
      not the primary checkout. Storage remains under the main checkout's `.pi/worktrees/`. The clean-caller

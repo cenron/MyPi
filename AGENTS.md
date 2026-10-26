@@ -16,7 +16,7 @@ machine-specific paths out of tracked files.
 | `src/rule/`                 | MyPi's own tool rules, always on: one class per rule extending `BaseRule` (`base.ts`), listed in `createRules` in `index.ts`; `registerRules` sets them on the session's `ToolGuard`. Imported as `#rule/<file>`. |
 | `src/mcp/`                  | MCP servers MyPi registers with pi: one function per server, listed in `createMcpServers` in `index.ts`. Imported as `#mcp/<file>`.                                                                    |
 | `src/ui/`                   | Feature UI (`modules-modal.ts`), the shared `footer.ts` and `editor.ts`, and `components/`: reusable TUI components (`Dialog`, `ToggleList`). Imported as `#ui/<file>`.                                                                         |
-| `src/module/`               | Feature modules: `BaseModule`, the SDK every module extends (`base.ts`), the module list and `loadModules` (`index.ts`), and one folder per module, named after its doc. Imported as `#module/<file>`. |
+| `src/module/`               | Feature modules: `BaseModule`, the SDK every module extends (`base.ts`), the module list and `loadModules` (`index.ts`), and one folder per module, named after its doc. Subagents run readers in place and writers in worktrees, returning patches for `subagent_apply`. Imported as `#module/<file>`. |
 | `docs/modules/<name>.md`    | Module design or idea, with a status. Index: `docs/modules/README.md`.                                                                                                                                 |
 | `docs/core/<name>.md`       | Core feature design (always on, not a module: `src/core/<name>.ts`, wired from `MyPi`), with a status.                                                                                         |
 | `docs/rules/<name>.md`      | Built-in tool rule design (rules in `src/rule/`, always on), with a status. Index: `docs/rules/README.md`.                                                                                     |
@@ -102,6 +102,9 @@ Test each behavior once, at the lowest level that shows it:
   (`cd "$(mktemp -d -t mypi-<name>)" && git init -q`), start an interactive `pi --model openai/gpt-6-luna`, send the
   prompt, wait for it to finish, and read the screen.
 - Never `pi --print`: it can't answer a dialog or wait for a background notice.
+- To send a prompt, use `herdr agent prompt <pane> '<text>' --wait`, which types it, submits it, and waits for the
+  run. `herdr pane send-text` only types: follow it with `herdr pane send-keys <pane> Enter`. A new pi starts in Plan:
+  send `/plan build` as its own prompt before asking for changes.
 - Herdr reports pi as `idle` while a pi dialog is open ("Permission required", "enter select"). Read the screen and
   answer a dialog by sending keys.
 - Fixtures go in the throwaway repo. A fixture that must be outside the session's folder must also be outside the

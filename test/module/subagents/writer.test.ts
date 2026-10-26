@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentDefinition } from "#module/subagents/agents";
-import { captureWork, PATCHES_DIR, prepareWriter } from "#module/subagents/writer";
+import { subagentTool } from "#module/subagents/tools/subagent";
+import { captureWork, PATCHES_DIR, prepareWriter, runWriter } from "#module/subagents/writer";
 import { fakeSession } from "../../fakes";
 
 const execute = promisify(execFile);
@@ -92,6 +93,193 @@ describe("writer work", () => {
     await expect(readFile(join(main, ".pi", "patches", `${prepared.name}.patch`))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("captures a writer's partial work when its run is stopped", async () => {
+    const fake = fakeSession([], main, { main, commonDir: join(main, ".git") });
+    const run = async (
+      _parent: unknown,
+      _agent: AgentDefinition,
+      task: string,
+      _settings: unknown,
+      signal: AbortSignal,
+      _step: (step: string) => void,
+      cwd?: string,
+    ) => {
+      expect(task).toContain("don't write patch files");
+      expect(cwd).toContain("sub-developer-");
+      await put(cwd as string, "partial.txt", "partial work\\n");
+      expect(signal.aborted).toBe(true);
+      return {
+        answer: "Stopped",
+        usage: { tokens: 1, cost: 0 },
+        sessionFile: undefined,
+        changedFiles: [],
+        timedOut: false,
+      };
+    };
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await runWriter(
+      fake.session,
+      fake.session.ctx,
+      developer,
+      "Add a file",
+      {},
+      controller.signal,
+      () => {},
+      run as never,
+    );
+
+    expect(result.stopped).toBe(true);
+    expect(result.patchName).toBeDefined();
+    expect(result.changedFiles).toEqual(["partial.txt"]);
+    expect(await git(main, "worktree", "list", "--porcelain")).not.toContain("sub-developer-");
+  });
+
+  it("reports the saved patch when the user stops its background job", async () => {
+    const fake = fakeSession([], main, { main, commonDir: join(main, ".git") });
+    const tool = subagentTool(
+      fake.session,
+      () => [developer],
+      async (_parent, _agent, _task, _settings, signal, _step, cwd) => {
+        await put(cwd as string, "partial.txt", "partial work\\n");
+        began();
+        return await new Promise((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () =>
+              resolve({
+                answer: "Stopped",
+                usage: { tokens: 1, cost: 0 },
+                sessionFile: undefined,
+                changedFiles: [],
+                timedOut: false,
+              }),
+            { once: true },
+          );
+        });
+      },
+    );
+    let began: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    await tool.execute(
+      "call",
+      { agent: "developer", task: "Hold" } as never,
+      undefined,
+      undefined,
+      fake.session.ctx as never,
+    );
+    await started;
+    const stopped = await fake.session.jobs.stop("1");
+
+    expect(stopped?.status).toBe("stopped");
+    expect(fake.sendMessage.mock.calls.at(-1)?.[0].content).toContain("Patch: sub-developer-1");
+    expect(fake.sendMessage.mock.calls.at(-1)?.[0].content).toContain("partial.txt");
+  });
+
+  it("keeps partial work and names its patch when the child fails", async () => {
+    const run = async (
+      _parent: unknown,
+      _agent: AgentDefinition,
+      _task: string,
+      _settings: unknown,
+      _signal: AbortSignal,
+      _step: (step: string) => void,
+      cwd?: string,
+    ) => {
+      await put(cwd as string, "partial.txt", "partial work\\n");
+      throw new Error("Child failed");
+    };
+    const fake = fakeSession([], main, { main, commonDir: join(main, ".git") });
+
+    const result = await runWriter(
+      fake.session,
+      fake.session.ctx,
+      developer,
+      "Partial change",
+      {},
+      new AbortController().signal,
+      () => {},
+      run as never,
+    );
+
+    expect(result.failure).toBe("Child failed");
+    expect(result.patchName).toBe("sub-developer-1");
+    expect(result.changedFiles).toEqual(["partial.txt"]);
+    expect(await readdir(join(main, PATCHES_DIR))).toContain("sub-developer-1.patch");
+  });
+
+  it("runs in place outside a git project", async () => {
+    const fake = fakeSession();
+    const run = async (
+      _parent: unknown,
+      _agent: AgentDefinition,
+      _task: string,
+      _settings: unknown,
+      _signal: AbortSignal,
+      _step: (step: string) => void,
+      cwd?: string,
+    ) => {
+      expect(cwd).toBeUndefined();
+      return {
+        answer: "Done",
+        usage: { tokens: 1, cost: 0 },
+        sessionFile: undefined,
+        changedFiles: [],
+        timedOut: false,
+      };
+    };
+
+    const result = await runWriter(
+      fake.session,
+      fake.session.ctx,
+      developer,
+      "Change",
+      {},
+      new AbortController().signal,
+      () => {},
+      run as never,
+    );
+
+    expect(result.inPlace).toBe(true);
+  });
+
+  it("runs three writers concurrently in separate worktrees", async () => {
+    const fake = fakeSession([], main, { main, commonDir: join(main, ".git") });
+    const tool = subagentTool(
+      fake.session,
+      () => [developer],
+      async (_parent, _agent, _task, _settings, _signal, _step, cwd) => {
+        await put(cwd as string, `writer-${cwd?.split("-").at(-1)}.txt`);
+        return {
+          answer: "Done",
+          usage: { tokens: 1, cost: 0 },
+          sessionFile: undefined,
+          changedFiles: [],
+          timedOut: false,
+        };
+      },
+    );
+    const call = (task: string) =>
+      tool.execute("call", { agent: "developer", task } as never, undefined, undefined, fake.session.ctx as never);
+
+    await call("One");
+    await call("Two");
+    await call("Three");
+    await expect(call("Four")).rejects.toThrow("At most 3");
+    await Promise.all(fake.session.jobs.list().map((job) => fake.session.jobs.get(job.id)?.done));
+
+    expect(
+      (await fake.session.worktrees.list()).filter((worktree) => worktree.managedName?.startsWith("sub-developer-"))
+        .length,
+    ).toBe(0);
+    expect(await readdir(join(main, PATCHES_DIR))).toContain("sub-developer-1.patch");
+    expect(await readdir(join(main, PATCHES_DIR))).toContain("sub-developer-2.patch");
+    expect(await readdir(join(main, PATCHES_DIR))).toContain("sub-developer-3.patch");
   });
 
   it("includes changes committed by the child", async () => {

@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { type ExtensionContext, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { answer } from "#core/events";
 import { planRule } from "#module/plan-build/rule";
@@ -7,7 +7,10 @@ import { type ChildResult, changedPath, runChild, runUsage } from "#module/subag
 import { subagentTool } from "#module/subagents/tools/subagent";
 import { fakeSession } from "../../fakes";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 const explore: AgentDefinition = {
   name: "explore",
@@ -252,6 +255,26 @@ describe("subagent", () => {
 });
 
 describe("runChild", () => {
+  it("doesn't continue child setup when stopped during runtime startup", async () => {
+    let finishRuntime: (runtime: ModelRuntime) => void = () => {};
+    const runtime = new Promise<ModelRuntime>((resolve) => {
+      finishRuntime = resolve;
+    });
+    vi.spyOn(ModelRuntime, "create").mockReturnValue(runtime);
+    const controller = new AbortController();
+    const parent = {
+      model: {},
+      cwd: "/project",
+      sessionManager: { getSessionFile: () => undefined },
+    } as unknown as ExtensionContext;
+    const running = runChild(parent, explore, "Find", {}, controller.signal, () => {});
+
+    controller.abort();
+    finishRuntime({} as ModelRuntime);
+
+    await expect(running).rejects.toThrow("aborted");
+  });
+
   it("fails with what to do when neither the parent nor the run names a model", async () => {
     const parent = { model: undefined } as ExtensionContext;
     await expect(runChild(parent, explore, "Find", {}, new AbortController().signal, () => {})).rejects.toThrow(

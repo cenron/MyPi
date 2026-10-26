@@ -18,5 +18,6 @@ it("says when to delegate, then lists each agent with its run settings", () => {
   expect(promptSection([explore])).toContain(
     "offer to take that step here, where the user can approve it. Don't retry the child with the same call",
   );
-  expect(promptSection([explore])).toContain("Apply a writer's patch only with `subagent_apply`");
+  expect(promptSection([explore])).toContain("ask it for the change itself, never for a patch");
+  expect(promptSection([explore])).toContain("apply it only with `subagent_apply`");
 });

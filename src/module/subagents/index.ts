@@ -35,7 +35,9 @@ const DELEGATION =
   "context. Do quick lookups and questions about one known file yourself. A run goes in the background: keep " +
   "working, and its answer arrives as a message. If a child reports a refused call, tell the user what it needed " +
   "and why, and offer to take that step here, where the user can approve it. Don't retry the child with the same call. " +
-  "Apply a writer's patch only with `subagent_apply`; never use `git apply` through `bash`, which wouldn't ask the user.";
+  "A write agent in a git project works in its own worktree, and MyPi turns its edits into a patch when it ends: ask " +
+  "it for the change itself, never for a patch. Its result names the patch; apply it only with `subagent_apply`, " +
+  "never `git apply` through `bash`, which wouldn't ask the user.";
 
 /** The agent list in the prompt: when delegating pays off, then one line per agent. */
 export function promptSection(agents: AgentDefinition[]): string {

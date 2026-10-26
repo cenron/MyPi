@@ -158,4 +158,22 @@ describe("noticeOnEnd", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sendMessage).not.toHaveBeenCalled();
   });
+
+  // A stopped writer saved a patch: the model needs its name, though a stop normally sends nothing.
+  it.each([
+    ["sends", true, 1],
+    ["sends nothing", false, 0],
+  ])("%s for a stopped job when sendWhenStopped says %s", async (_label, send, calls) => {
+    const { session, sendMessage } = fakeSession();
+    const stopped = session.jobs.start({
+      kind: "subagent",
+      label: "developer",
+      run: (signal) =>
+        new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("stopped")))),
+    });
+    noticeOnEnd(session, stopped, undefined, undefined, () => send);
+    await session.jobs.stop(stopped.info.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sendMessage).toHaveBeenCalledTimes(calls);
+  });
 });

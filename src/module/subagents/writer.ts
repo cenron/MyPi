@@ -1,11 +1,14 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
 import { keepOutOfGit } from "#core/util/git";
 import { slugify } from "#core/util/slug";
 import { git } from "#core/worktree/git";
 import type { AgentDefinition } from "./agents";
+import type { ChildResult, RunSettings } from "./child";
+import { runChild } from "./child";
 
 /** A writer's isolated checkout and the commit its patch must include changes from. */
 export type PreparedWriter = {
@@ -27,8 +30,19 @@ export type CapturedWork = {
 /** Where patches and handoffs wait, under the main checkout; kept out of git. */
 export const PATCHES_DIR = join(".pi", "patches");
 
+/** Result of a write run, including where its work was returned. */
+export type WriterResult = ChildResult & {
+  readonly patchName?: string;
+  readonly inPlace?: boolean;
+  readonly failure?: string;
+  readonly stopped?: boolean;
+};
+
 /** Longest agent-name part of a worktree name, leaving room for `sub-` and the number. */
 const MAX_SLUG_CHARS = 40;
+
+/** Serializes name allocation and worktree creation for concurrent writer starts in one session. */
+const writerStarts = new WeakMap<Session, Promise<void>>();
 
 /**
  * Creates the writer's private worktree at the caller's committed HEAD. Refuses outside a git project, and when the
@@ -43,10 +57,65 @@ export async function prepareWriter(session: Session, agent: AgentDefinition): P
     throw new Error(`Cannot start ${agent.name} in a worktree while this checkout has uncommitted changes:\n${status}`);
   }
 
-  const name = await freeName(session, project.main, agent.name);
-  const base = (await git(session.ctx.cwd, ["rev-parse", "HEAD"])).trim();
-  const worktree = await session.worktrees.create(name);
-  return { name, base, path: worktree.path, main: project.main };
+  return withWriterStart(session, async () => {
+    const name = await freeName(session, project.main, agent.name);
+    const base = (await git(session.ctx.cwd, ["rev-parse", "HEAD"])).trim();
+    const worktree = await session.worktrees.create(name);
+    return { name, base, path: worktree.path, main: project.main };
+  });
+}
+
+/** Runs a writer in a private checkout when possible, and captures its work even when its run is stopped. */
+export async function runWriter(
+  session: Session,
+  parent: ExtensionContext,
+  agent: AgentDefinition,
+  task: string,
+  settings: RunSettings,
+  signal: AbortSignal,
+  onStep: (step: string) => void,
+  run = runChild,
+): Promise<WriterResult> {
+  if (!session.project) {
+    return { ...(await run(parent, agent, task, settings, signal, onStep)), inPlace: true };
+  }
+
+  const prepared = await prepareWriter(session, agent);
+  const writerTask =
+    "You work in your own worktree of this project. Make the changes directly in its files. Don't commit, and don't " +
+    "write patch files, even if asked: when you finish, MyPi turns your edits into a patch for the user.\n\n" +
+    task;
+  let result: ChildResult;
+  try {
+    result = await run(parent, agent, writerTask, settings, signal, onStep, prepared.path);
+  } catch (error) {
+    const captured = await captureWork(
+      session,
+      prepared,
+      agent,
+      task,
+      error instanceof Error ? error.message : String(error),
+    );
+    const failure = error instanceof Error ? error.message : String(error);
+    return {
+      answer: "The writer did not finish.",
+      usage: { tokens: 0, cost: 0 },
+      sessionFile: undefined,
+      changedFiles: captured.files,
+      timedOut: false,
+      patchName: captured.patchPath ? captured.name : undefined,
+      failure,
+      stopped: signal.aborted,
+    };
+  }
+
+  const captured = await captureWork(session, prepared, agent, task, result.answer);
+  return {
+    ...result,
+    changedFiles: captured.files,
+    patchName: captured.patchPath ? captured.name : undefined,
+    stopped: signal.aborted,
+  };
 }
 
 /** Saves all work since `base`, including the writer's own commits, before discarding its checkout. */
@@ -101,6 +170,25 @@ export async function captureWork(
   await session.worktrees.discard(prepared.name);
 
   return { name: prepared.name, files, patchPath, handoffPath, diffStat };
+}
+
+/** Runs worktree allocation in order so simultaneous starts cannot choose the same free name. */
+async function withWriterStart<T>(session: Session, start: () => Promise<T>): Promise<T> {
+  const previous = writerStarts.get(session) ?? Promise.resolve();
+  let release: () => void = () => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  writerStarts.set(
+    session,
+    previous.then(() => current),
+  );
+  await previous;
+  try {
+    return await start();
+  } finally {
+    release();
+  }
 }
 
 /** `sub-<slug>-<n>` with the first `n` that has neither a worktree nor a saved patch, so no unapplied patch is lost. */
