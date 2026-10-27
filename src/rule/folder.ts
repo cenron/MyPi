@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { ToolCall, ToolEnv, Verdict } from "#core/tool-guard";
 import { commandPaths, isInside, resolveToolPath } from "#core/util/paths";
+import { isReadOnlyCommand } from "#core/util/shell";
 import { BaseRule, type RuleInfo } from "./base";
 
 /** MCP tools are named `mcp__<server>__<tool>`; their `path` arguments mean whatever the server says, not a file. */
@@ -22,6 +23,9 @@ const SCRATCH_DIRS = ["/tmp", "/private/tmp"];
  */
 const TEMP_DIRS = [tmpdir(), realpathSync(tmpdir())];
 
+/** Tools that only read: they may reach the modules' data folders (`readableDirs`). */
+const READING_TOOLS = new Set(["read", "grep", "find", "ls", "lsp"]);
+
 const ALLOW: Verdict = { kind: "allow" };
 
 /** What "Allow for this session" will cover, at the end of each question. */
@@ -30,7 +34,8 @@ const PATH_ONLY = "(this path only)";
 
 /**
  * Asks before a call that reaches outside the session's folder: a `path` input, or the places a `bash` command names
- * (`commandPaths`). Allowed without asking: the modules' own folders, the temp folder (background jobs and web_fetch
+ * (`commandPaths`). Allowed without asking: the modules' writable folders, their data folders for a call that only
+ * reads, the temp folder (background jobs and web_fetch
  * write there) and `/tmp`, the `/dev` streams, and the skills and context files pi put in the prompt. Each question
  * names one place, not the call, so "Allow for this session" covers that path and its whole tree across tools; for the
  * home folder and the folders above it, only the path itself.
@@ -48,10 +53,11 @@ export class FolderRule extends BaseRule {
     };
   }
 
-  check({ toolName, input }: ToolCall, { cwd, home, writableDirs }: ToolEnv): Verdict {
+  check({ toolName, input }: ToolCall, { cwd, home, writableDirs, readableDirs }: ToolEnv): Verdict {
     const allowed = [
       cwd,
       ...writableDirs,
+      ...(onlyReads(toolName, input) ? readableDirs : []),
       ...TEMP_DIRS,
       ...SCRATCH_DIRS,
       ...DEVICE_FILES,
@@ -80,6 +86,12 @@ export class FolderRule extends BaseRule {
     }
     this.allowedTrees.add(path);
   }
+}
+
+/** True for a call that can't change anything: a reading tool, or a `bash` command that passes the read-only check. */
+function onlyReads(toolName: string, input: Record<string, unknown>): boolean {
+  if (READING_TOOLS.has(toolName)) return true;
+  return toolName === "bash" && typeof input.command === "string" && isReadOnlyCommand(input.command);
 }
 
 /** True for the home folder and every folder above it, up to `/`: allowing one of those as a tree allows too much. */

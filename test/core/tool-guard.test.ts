@@ -51,28 +51,35 @@ describe("ToolGuard", () => {
     await guard.check(event("mcp__fs__read", { path: "a.txt" }), fakeContext().ctx);
     expect(seen).toHaveBeenCalledWith(
       { toolName: "mcp__fs__read", input: { path: "a.txt" }, annotations: { readOnlyHint: true } },
-      { cwd: "/project", home: homedir(), writableDirs: [], writableTools: new Set() },
+      { cwd: "/project", home: homedir(), writableDirs: [], writableTools: new Set(), readableDirs: [] },
     );
   });
 
   // Read on every call, so a module that sets its writable after another's rule is still seen.
-  it("passes every module's writable folders and tools, merged, until one is removed", async () => {
+  it("passes every module's writable and data folders and tools, merged, until one is removed", async () => {
     const guard = newGuard();
     const seen = vi.fn(allow);
     guard.set("one", seen);
     guard.setWritable("plans", { dirs: ["/p/plans"], tools: ["submit_plan"] });
     guard.setWritable("memory", { dirs: ["/p/memories", "/g/memories"], tools: [] });
+    guard.setReadable("analytics", ["/a/analytics"]);
+    guard.setReadable("done-check", ["/a/done-check"]);
     await guard.check(event(), fakeContext().ctx);
     expect(seen).toHaveBeenLastCalledWith(expect.anything(), {
       cwd: "/project",
       home: homedir(),
       writableDirs: ["/p/plans", "/p/memories", "/g/memories"],
       writableTools: new Set(["submit_plan"]),
+      readableDirs: ["/a/analytics", "/a/done-check"],
     });
 
     guard.setWritable("plans", undefined);
+    guard.setReadable("analytics", undefined);
     await guard.check(event(), fakeContext().ctx);
-    expect(seen).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ writableTools: new Set() }));
+    expect(seen).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ writableTools: new Set(), readableDirs: ["/a/done-check"] }),
+    );
   });
 
   // An MCP tool whose server is still connecting isn't listed yet; its call must still go through the rules.

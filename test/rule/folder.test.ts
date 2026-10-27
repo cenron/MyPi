@@ -10,6 +10,7 @@ const env: ToolEnv = {
   home: "/home/me",
   writableDirs: ["/home/me/.pi/agent/memories"],
   writableTools: new Set(),
+  readableDirs: ["/home/me/.pi/agent/analytics"],
 };
 
 /** The rule, with the skill folder and context file pi's prompt listed. */
@@ -39,6 +40,8 @@ describe("FolderRule", () => {
     ["a /dev stream", "write", { path: "/dev/null" }],
     ["an MCP tool's path, which isn't a file", "mcp__docs__get", { path: "/v1/users" }],
     ["a bash command whose paths are all allowed", "bash", { command: "cat src/a.ts > /dev/null; ls ../AGENTS.md" }],
+    ["a read of a module's data folder", "read", { path: "~/.pi/agent/analytics/notes.md" }],
+    ["a read-only bash command over a module's data folder", "bash", { command: "ls -la ~/.pi/agent/analytics" }],
   ])("allows %s", (_case, tool, input) => {
     expect(verdict(tool, input)).toEqual({ kind: "allow" });
   });
@@ -56,6 +59,19 @@ describe("FolderRule", () => {
       "/home/me/.agents/skills/other/SKILL.md",
     ],
     ["any tool with a path, lsp included", "lsp", { action: "outline", path: "/etc/hosts" }, "/etc/hosts"],
+    // A module's data folder is open to reads only: editing approvals or a database still asks.
+    [
+      "a write to a module's data folder",
+      "write",
+      { path: "~/.pi/agent/analytics/x.json" },
+      "/home/me/.pi/agent/analytics/x.json",
+    ],
+    [
+      "a bash command that changes a module's data folder",
+      "bash",
+      { command: "rm ~/.pi/agent/analytics/analytics.sqlite" },
+      "/home/me/.pi/agent/analytics/analytics.sqlite",
+    ],
   ])("asks for %s, naming the resolved path", (_case, tool, input, path) => {
     expect(verdict(tool, input)).toEqual(asks(path));
   });

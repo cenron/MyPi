@@ -66,6 +66,11 @@ export abstract class BaseModule<State = never> implements Module {
     this.session.toolGuard.setWritable(this.info.name, writable);
   }
 
+  /** The folders this module keeps its own data in, which a tool call that only reads may reach without asking. */
+  protected setReadable(dirs: readonly string[]) {
+    this.session.toolGuard.setReadable(this.info.name, dirs);
+  }
+
   /** Sets this module's system prompt section, or removes it with `undefined`; the next run sends it. */
   protected setPrompt(prompt: string | undefined) {
     this.session.promptManager.set(this.info.name, prompt);

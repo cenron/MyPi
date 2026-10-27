@@ -206,7 +206,13 @@ describe("subagent", () => {
   // Plan asks before any tool not marked read-only; the tool itself refuses a write agent in Plan.
   it("runs in Plan without asking", () => {
     const { tool } = setup();
-    const env = { cwd: "/project", home: "/home/me", writableDirs: [], writableTools: new Set<string>() };
+    const env = {
+      cwd: "/project",
+      home: "/home/me",
+      writableDirs: [],
+      writableTools: new Set<string>(),
+      readableDirs: [],
+    };
     expect(planRule({ toolName: "subagent", input: {}, annotations: tool.annotations }, env)).toEqual({
       kind: "allow",
     });

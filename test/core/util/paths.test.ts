@@ -92,6 +92,10 @@ describe("commandPaths", () => {
     ["a raw < target glued to its path", "cat </etc/hosts $(x)", ["/etc/hosts"]],
     ["a quoted path in the raw text, by its value", 'cmd "--file=/etc/x" "$X"', ["/etc/x"]],
     ["a path a heredoc script names", "python3 - <<'PY'\nopen('/etc/passwd')\nPY", ["/etc/passwd"]],
+    ["sed's file, past -e scripts", "sed -e '/x/d' -e 's/a/b/' /etc/hosts", ["/etc/hosts"]],
+    ["sed's file, past a -ne script", "sed -ne 's/a/b/p' /etc/hosts", ["/etc/hosts"]],
+    ["sed's file, past its first-operand script", "sed 's/a/b/' /etc/hosts", ["/etc/hosts"]],
+    ["sed's -f script file", "sed -f /etc/x.sed in.txt", ["/etc/x.sed"]],
     ["a path in a shell heredoc", "bash <<'EOF'\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
     // An apostrophe in a comment pairs with the next quote; that span has spaces, so it's split, and the path stays.
     ["a path after a stray apostrophe", "python3 - <<'PY'\n# don't\nopen('/etc/passwd')\nPY", ["/etc/passwd"]],
@@ -111,6 +115,9 @@ describe("commandPaths", () => {
     ["the same pattern when tokenize gives up", "git diff | grep -E '/Users/|/private/' || test \"$?\" -eq 1"],
     ["a tag in a heredoc script's regex", "python3 - <<'PY'\nre.findall(r'<cwd>.*?</cwd>', s)\nPY"],
     ["tags in a heredoc's markup", "cat > page.html <<'EOF'\n<div><b>x</b></div>\nEOF"],
+    // Found building analytics with DeepSeek (2026-10-26): each asked about a place nobody reaches.
+    ["a sed address range that starts with /", "herdr pane read x | sed -n '/Model usage/,$p' | head -55"],
+    ["symbols alone in a heredoc's code", "python3 - <<'EOF'\nprint(a / b)\nx = '/**'\nEOF"],
   ])("names nothing for %s", (_case, command) => {
     expect(commandPaths(command, commandCwd, commandHome)).toEqual([]);
   });

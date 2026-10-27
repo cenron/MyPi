@@ -27,6 +27,12 @@ const QUOTED_WORD_BREAK = /[;&()`=]+/;
 /** A command's text in order: single-quoted strings, double-quoted strings, then the runs between (or a lone quote). */
 const RAW_PART = /'[^']*'|"(?:\\.|[^"\\])*"|[^'"]+|['"]/g;
 
+/** `sed`'s options whose next word is a script: `-e`, a cluster ending in it (`-ne`), and `--expression`. */
+const SED_SCRIPT_OPTION = /^(-[a-zA-Z]*e|--expression)$/;
+
+/** Slashes and stars alone (`/`, `//`, `/**`): in text the shell parser gave up on, code rather than a place. */
+const SYMBOLS_ONLY = /^[/*]+$/;
+
 /** An HTML or XML tag (`<cwd>`, `</cwd>`), which in a heredoc's body is markup, not a redirect. */
 const MARKUP_TAG = /<\/?[A-Za-z][\w:-]*>/g;
 
@@ -112,7 +118,9 @@ function segmentPaths(segments: Segment[], cwd: string, home: string): string[] 
       continue;
     }
 
-    for (const word of words.map(assignedValue).filter(isPathWord)) paths.push(resolveToolPath(word, dir, home));
+    for (const word of withoutSedScripts(words).map(assignedValue).filter(isPathWord)) {
+      paths.push(resolveToolPath(word, dir, home));
+    }
   }
 
   return paths;
@@ -132,7 +140,36 @@ function rawPaths(command: string, cwd: string, home: string): string[] {
     return text.replace(MARKUP_TAG, " ").split(RAW_WORD_BREAK);
   });
 
-  return words.filter(isPathWord).map((word) => resolveToolPath(word, cwd, home));
+  // A heredoc's code divides and comments (`a / b`, `/**`); those words aren't places.
+  return words
+    .filter((word) => isPathWord(word) && !SYMBOLS_ONLY.test(word))
+    .map((word) => resolveToolPath(word, cwd, home));
+}
+
+/**
+ * A `sed` command's words without its scripts, which are text, not paths: each `-e` value (also in a cluster such as
+ * `-ne`), or the first operand when no `-e` or `-f` gives one. `-f`'s file stays, since it is one.
+ */
+function withoutSedScripts(words: readonly string[]): string[] {
+  const [name, ...args] = words;
+  if (name !== "sed") return [...words];
+
+  let scriptGiven = args.some((arg) => SED_SCRIPT_OPTION.test(arg) || arg === "-f" || arg.startsWith("--file"));
+  const kept = [name];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? "";
+    if (SED_SCRIPT_OPTION.test(arg)) {
+      index++; // its value is the script
+      continue;
+    }
+    if (arg.startsWith("--expression=")) continue;
+    if (!scriptGiven && !arg.startsWith("-")) {
+      scriptGiven = true;
+      continue;
+    }
+    kept.push(arg);
+  }
+  return kept;
 }
 
 /** `cd`'s folder: its first argument that isn't an option (`-L`, `-P`, `--`), or undefined for a bare `cd`. */

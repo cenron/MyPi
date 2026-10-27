@@ -6,6 +6,7 @@ import { errorMessage } from "#core/util/errors";
 import { BaseModule } from "../base";
 import { type AgentDefinition, loadAgents, projectAgentDir, userAgentDir } from "./agents";
 import { agentsCmd } from "./agents-view";
+import { subagentsDir } from "./child";
 import { subagentApplyTool } from "./tools/apply";
 import { agentManageRule, agentManageTool } from "./tools/manage";
 import { subagentTool } from "./tools/subagent";
@@ -42,6 +43,7 @@ export class SubagentsModule extends BaseModule {
   }
 
   init() {
+    this.setReadable([subagentsDir()]);
     this.setWritable({
       dirs: [userAgentDir(), projectAgentDir(this.session.ctx.cwd)],
       tools: ["agent_manage"],

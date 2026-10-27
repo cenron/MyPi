@@ -111,8 +111,13 @@ async function readApprovals(): Promise<Record<string, string[]>> {
   return approvals;
 }
 
+/** The done check's own folder in pi's agent dir, where approvals are kept. */
+export function doneCheckDir(): string {
+  return join(getAgentDir(), "done-check");
+}
+
 function approvalsPath(): string {
-  return join(getAgentDir(), "done-check", "approved.json");
+  return join(doneCheckDir(), "approved.json");
 }
 
 /** The commands in a `COMMANDS_FILE`'s text, or undefined when it isn't `{ "commands": [<string>, …] }`. */

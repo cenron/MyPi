@@ -40,6 +40,7 @@ export class AnalyticsModule extends BaseModule {
   }
 
   init(): void {
+    this.setReadable([analyticsDir()]);
     void this.refresh().catch((error: unknown) =>
       this.session.logWarning(`Analytics indexing failed: ${errorMessage(error)}`),
     );
@@ -58,7 +59,7 @@ export class AnalyticsModule extends BaseModule {
     const ready = this.indexing.then(async () => {
       let store = this.store;
       if (store === undefined) {
-        store = new AnalyticsStore(join(getAgentDir(), "analytics", "analytics.sqlite"));
+        store = new AnalyticsStore(join(analyticsDir(), "analytics.sqlite"));
         this.store = store;
       }
       await indexSessions(
@@ -91,4 +92,9 @@ function analyticsCmd(run: (all: boolean) => Promise<string>): Command {
       }
     },
   };
+}
+
+/** The module's own folder in pi's agent dir, which holds its database. */
+function analyticsDir(): string {
+  return join(getAgentDir(), "analytics");
 }

@@ -61,7 +61,7 @@ export async function runChild(run: ChildRun, cwd = run.parent.cwd): Promise<Chi
   const runtime = await ModelRuntime.create();
   if (signal.aborted) throw new Error("aborted");
   const { model, thinking } = childModel(parent, settings, runtime);
-  const manager = SessionManager.create(cwd, join(getAgentDir(), "subagents", "sessions"), {
+  const manager = SessionManager.create(cwd, join(subagentsDir(), "sessions"), {
     parentSession: parent.sessionManager.getSessionFile(),
   });
   const resources = await childResources(cwd, agent, run.checks ?? []);
@@ -186,4 +186,9 @@ export function runUsage(messages: readonly { role: string }[]): RunUsage {
 /** The tools a child of `agent` gets: its own list, else the read-only set, else undefined for pi's default tools. */
 export function childTools(agent: AgentDefinition): string[] | undefined {
   return agent.tools ?? (agent.access === "read-only" ? READ_ONLY_TOOLS : undefined);
+}
+
+/** Subagents' own folder in pi's agent dir: their runs' sessions go in it. */
+export function subagentsDir(): string {
+  return join(getAgentDir(), "subagents");
 }

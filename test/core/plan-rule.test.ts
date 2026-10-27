@@ -7,6 +7,7 @@ const env = {
   home: "/home/me",
   writableDirs: ["/project/.pi/plans", "/home/me/.pi/agent/memories"],
   writableTools: new Set(["submit_plan"]),
+  readableDirs: [],
 };
 const verdict = (toolName: string, input: Record<string, unknown> = {}, annotations?: ToolAnnotations) =>
   planRule({ toolName, input, annotations }, env);

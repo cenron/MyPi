@@ -19,6 +19,7 @@ import {
   approve,
   COMMANDS_FILE,
   type CommandFailure,
+  doneCheckDir,
   isApproved,
   readCommands,
   runCommand,
@@ -68,6 +69,7 @@ export class DoneCheckModule extends BaseModule {
   }
 
   init(): void {
+    this.setReadable([doneCheckDir()]);
     // before_agent_start fires once per run; the check's own continuation stays in the same run, keeping its count.
     this.session.pi.on("before_agent_start", (_ev, ctx) => this.onRunStart(ctx));
     this.session.pi.on("agent_before_settle", (ev, ctx) => this.onBeforeSettle(ev, ctx));

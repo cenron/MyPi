@@ -36,6 +36,8 @@ export type ToolEnv = {
   writableDirs: readonly string[];
   /** Every module's writable tools; a Set, because tool names come from the model. */
   writableTools: ReadonlySet<string>;
+  /** Every module's own data folders (absolute paths), which a call that only reads may reach. */
+  readableDirs: readonly string[];
 };
 
 /** A module's objection check, run on every tool call; it must be cheap and side-effect free. */
@@ -84,6 +86,7 @@ export function previewAsk(ask: string): string {
 export class ToolGuard {
   private readonly rules = new Map<string, ToolRule>();
   private readonly writables = new Map<string, Writable>();
+  private readonly readables = new Map<string, readonly string[]>();
   /** Ask lines (`<module>: <question>`) allowed for this session. In memory, so `/reload` forgets them. */
   private readonly allowed = new Set<string>();
 
@@ -109,6 +112,16 @@ export class ToolGuard {
     this.writables.set(name, writable);
   }
 
+  /** Sets the data folders module `name` keeps, which reads may reach, or removes them with `undefined`. */
+  setReadable(name: string, dirs: readonly string[] | undefined): void {
+    if (dirs === undefined) {
+      this.readables.delete(name);
+      return;
+    }
+
+    this.readables.set(name, dirs);
+  }
+
   async check(ev: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> {
     const toolCall = this.toToolCall(ev);
     const writables = [...this.writables.values()];
@@ -118,6 +131,7 @@ export class ToolGuard {
       home: homedir(),
       writableDirs: writables.flatMap((writable) => writable.dirs),
       writableTools: new Set(writables.flatMap((writable) => writable.tools)),
+      readableDirs: [...this.readables.values()].flat(),
     };
 
     const asks: ToolApprovalRequest[] = [];

@@ -63,7 +63,7 @@ describe("agent_manage confirmation", () => {
           model: "inherit",
         },
       },
-      { cwd: root, home: root, writableDirs: [], writableTools: new Set() },
+      { cwd: root, home: root, writableDirs: [], writableTools: new Set(), readableDirs: [] },
     );
     expect(confirm).toMatchObject({ kind: "ask", questions: [expect.stringContaining("description: Writes tests")] });
     expect(confirm).toMatchObject({ questions: [expect.stringContaining(`prompt: ${prompt}`)] });
@@ -73,7 +73,7 @@ describe("agent_manage confirmation", () => {
     expect(
       rule(
         { toolName: "agent_manage", input: { action: "delete", name: "reviewer" } },
-        { cwd: root, home: root, writableDirs: [], writableTools: new Set() },
+        { cwd: root, home: root, writableDirs: [], writableTools: new Set(), readableDirs: [] },
       ),
     ).toMatchObject({ kind: "block", reason: expect.stringContaining("can't be deleted") });
   });
@@ -91,7 +91,10 @@ describe("agent_manage confirmation", () => {
       model: "inherit",
     };
     expect(
-      rule({ toolName: "agent_manage", input }, { cwd: root, home: root, writableDirs: [], writableTools: new Set() }),
+      rule(
+        { toolName: "agent_manage", input },
+        { cwd: root, home: root, writableDirs: [], writableTools: new Set(), readableDirs: [] },
+      ),
     ).toMatchObject({ kind: "block", reason: expect.stringContaining("can't use lsp") });
   });
 });
@@ -130,7 +133,7 @@ describe("agent_manage tool", () => {
     expect(callbacks.agents().find((agent) => agent.name === "reviewer")?.source).toBe("user");
     const confirmDelete = agentManageRule(callbacks, root)(
       { toolName: "agent_manage", input: { action: "delete", name: "reviewer" } },
-      { cwd: root, home: root, writableDirs: [], writableTools: new Set() },
+      { cwd: root, home: root, writableDirs: [], writableTools: new Set(), readableDirs: [] },
     );
     expect(confirmDelete).toMatchObject({
       kind: "ask",

@@ -32,6 +32,11 @@ user's other projects and personal files are none of the agent's business unless
     loaded, read from `before_agent_start`'s `systemPromptOptions`. That's exactly what pi points the agent at,
     wherever it lives (the agent dir, `~/.agents/skills`, a package such as MyPi's `resources/skills`, a project's
     parents), with no folder list to keep in step;
+  - **for a call that only reads** (`read`, `grep`, `find`, `ls`, `lsp`, or a `bash` command that passes the
+    read-only check), each module's own data folder in pi's agent dir, set with `BaseModule.setReadable`:
+    `analytics/`, `done-check/`, `subagents/` (asked for 2026-10-26: MyPi's self-builds kept asking to read its
+    own database). Writes there still ask, so the agent can't, say, approve its own check commands. pi's
+    `sessions/`, every project's conversations, isn't one.
   - the temp folder (`os.tmpdir()`), where background jobs and `web_fetch` write their output. On macOS that's
     `/var/folders/…/T`, not `/tmp`. Its real path (`/private/var/folders/…/T`) is allowed too: a session started in
     a temp folder runs from the real path, so `..` from it named a folder the guard asked about (found 2026-10-26 in
@@ -61,6 +66,11 @@ user's other projects and personal files are none of the agent's business unless
   and `=`, not on `|`, `<`, or `>`; and HTML or XML tags (`<cwd>`, `</cwd>`) are dropped before splitting. A quoted
   span with spaces is split like the rest, so a stray apostrophe in a heredoc can't hide a path inside a long "quoted"
   span.
+  In that split, words of slashes and stars alone (`/`, `/**`) aren't places: in a heredoc's code they divide and
+  open comments (seen 2026-10-26, DeepSeek editing files through Python heredocs).
+- **`sed`'s scripts aren't paths:** each `-e` value (also in a cluster such as `-ne`), or the first operand when no
+  `-e` or `-f` gives one, so an address range like `/Model usage/,$p` isn't asked about; the files after it, and
+  `-f`'s script file, are.
 - **`cd` counts:** `cd /elsewhere && ls` names `/elsewhere`, a bare `cd` names the home folder, and later words
   resolve from the folder `cd` moved to: `cd sub && cat ../../x` names `<cwd>/../x`. Each bash call starts a new
   shell in the session's folder (pi's `bash.js` spawns one per call), so a `cd` lasts only within one command.
@@ -87,7 +97,7 @@ Known gaps in `bash`, accepted for a guard against wandering:
 | Piece | pi hook | Notes |
 |---|---|---|
 | Rule | `FolderRule` in `src/rule/folder.ts`, a `BaseRule`; `registerRules` (`src/rule/index.ts`) sets it on the guard when `MyPi` starts a session | `info.name` is `folder-guard`, the prefix of its questions. The tool guard merges its ask with Plan's into one dialog, and a block from any rule still wins. |
-| Allowed places | `ToolEnv` and the shared `PromptPaths` | `env.writableDirs` carries every module's `setWritable` folders. The prompt's skill folders and context files are `this.prompt.paths`, the session's one `PromptPaths`, which `updatePromptPaths` (`src/rule/index.ts`) fills from the first run's prompt. The rule adds the temp folder and the `/dev` streams itself. |
+| Allowed places | `ToolEnv` and the shared `PromptPaths` | `env.writableDirs` carries every module's `setWritable` folders, and `env.readableDirs` its `setReadable` data folders (for calls that only read). The prompt's skill folders and context files are `this.prompt.paths`, the session's one `PromptPaths`, which `updatePromptPaths` (`src/rule/index.ts`) fills from the first run's prompt. The rule adds the temp folder and the `/dev` streams itself. |
 | Path words in bash | `commandPaths` in `src/core/util/paths.ts`: `tokenize`, then the raw-text fallback | Pure, with a table test, next to `resolveToolPath` and `isInside`, which it builds on. |
 
 ## The lsp module
