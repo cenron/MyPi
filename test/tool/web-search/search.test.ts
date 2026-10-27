@@ -4,6 +4,8 @@ import { searchInOrder } from "#tool/web-search/search";
 import type { SearchBackend } from "#tool/web-search/types";
 
 const RATE_LIMITED = "MCP HTTP request failed with status 429: Too Many Requests";
+const PARALLEL_RATE_LIMITED =
+  "Web search failed (Parallel): You've hit the free-tier rate limit for Parallel Search MCP";
 const results = [{ url: "https://a.test" }];
 const ctx = {} as ExtensionToolContext;
 
@@ -25,11 +27,12 @@ describe("searchInOrder", () => {
     expect(second.search).not.toHaveBeenCalled();
   });
 
-  // The fallback rules: only a rate limit or a missing tool sends the search on to the next backend.
+  // The fallback rules: rate limits, server errors, and a missing tool move on; other errors stop at once.
   it.each([
-    [RATE_LIMITED, true],
-    ["Tool mcp__parallel__web_search not found", true],
-    ["MCP HTTP request failed with status 500: Internal Server Error", false],
+    [PARALLEL_RATE_LIMITED, true],
+    ["MCP HTTP request failed with status 429: You've hit the free MCP rate limit for Exa", true],
+    ["MCP HTTP request failed with status 503: Service Unavailable", true],
+    ["Tool mcp__x__y not found", true],
     ["Parallel's reply has no results list.", false],
   ])("after %s, asks the next backend: %s", async (message, fallsBack) => {
     const second = backend("Second");
@@ -39,11 +42,64 @@ describe("searchInOrder", () => {
     expect(second.search).toHaveBeenCalledTimes(fallsBack ? 1 : 0);
   });
 
-  it("lists every backend it tried when none could answer", async () => {
-    const backends = [backend("First", RATE_LIMITED), backend("Second", "boom")];
-    await expect(searchInOrder(backends, ctx, "q", undefined)).rejects.toThrow(
-      new Error(`Web search failed (First): ${RATE_LIMITED}\nWeb search failed (Second): boom`),
+  it("lists failures and resting backends when none could answer", async () => {
+    const first = backend("First");
+    const restingUntil = new Map([[first.id, 10_000]]);
+    const backends = [first, backend("Second", "boom")];
+    await expect(searchInOrder(backends, ctx, "q", undefined, restingUntil, () => 1)).rejects.toThrow(
+      new Error(
+        "Web search failed (Second): boom\n" +
+          "Skipped resting backends: First.\n" +
+          "Rate limits clear with time; don't retry the backends' own tools.",
+      ),
     );
+    expect(backends[0]?.search).not.toHaveBeenCalled();
+  });
+
+  it("says rate limits clear with time when every backend was limited", async () => {
+    const backends = [
+      backend("First", PARALLEL_RATE_LIMITED),
+      backend("Second", "MCP HTTP request failed with status 429"),
+    ];
+    await expect(searchInOrder(backends, ctx, "q", undefined)).rejects.toThrow(
+      new Error(
+        `Web search failed (First): ${PARALLEL_RATE_LIMITED}\n` +
+          "Web search failed (Second): MCP HTTP request failed with status 429\n" +
+          "Rate limits clear with time; don't retry the backends' own tools.",
+      ),
+    );
+  });
+
+  it("skips a rate-limited backend until its rest expires", async () => {
+    let now = 1_000;
+    const restingUntil = new Map<string, number>();
+    const first = backend("First", RATE_LIMITED);
+    const second = backend("Second");
+    await searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => now);
+    first.search.mockImplementation(async () => results);
+
+    await searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => now);
+    expect(first.search).toHaveBeenCalledTimes(1);
+
+    now += 5 * 60 * 1000;
+    await searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => now);
+    expect(first.search).toHaveBeenCalledTimes(2);
+  });
+
+  it("tries all backends when every backend is resting", async () => {
+    const first = backend("First");
+    const second = backend("Second");
+    const restingUntil = new Map([
+      [first.id, 10_000],
+      [second.id, 10_000],
+    ]);
+
+    await expect(searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => 1)).resolves.toEqual({
+      backend: first,
+      results,
+    });
+    expect(first.search).toHaveBeenCalledTimes(1);
+    expect(second.search).not.toHaveBeenCalled();
   });
 
   it("passes a cancel through as it is", async () => {

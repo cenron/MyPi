@@ -23,6 +23,7 @@ export function webSearchTool(): Tool {
   const year = new Date().getFullYear();
   // Tried in this order. One Parallel session id per tool instance, so each pi session (and each reload) gets its own.
   const backends = [parallelBackend(randomUUID()), exaBackend()];
+  const restingUntil = new Map<string, number>();
 
   const definition = defineTool({
     name: "web_search",
@@ -42,7 +43,7 @@ export function webSearchTool(): Tool {
     renderResult: (result, { expanded }, theme, context) =>
       reuseText(context.lastComponent, formatResult(result, expanded, context.isError, theme)),
     async execute(_toolCallId, { query }, signal, _onUpdate, ctx): Promise<AgentToolResult<SearchDetails>> {
-      const { backend, results } = await searchInOrder(backends, ctx, query, signal);
+      const { backend, results } = await searchInOrder(backends, ctx, query, signal, restingUntil);
       return {
         content: [{ type: "text", text: formatResults(query, backend.name, results) }],
         details: { query, backend: { id: backend.id, name: backend.name }, results },
