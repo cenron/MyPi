@@ -155,10 +155,10 @@ Dated, with the window and model; newest last. Each says what was decided.
   worth about 13× the price, and not on the Go plan's 5-hour budget.
 - **2026-10-27, the first full report** (all indexed history, 2026-10-18 to 2026-10-27, 328 MyPi sessions, nearly
   all on the 25th and 26th; costs are list prices, not what a subscription billed):
-  - **Subagents are the cost, through `inherit`.** Child sessions spent $14.46 of $17.25 (84%) and made 5,338 of
-    6,663 replies. A child on gpt-6-luna cost about $0.03 a run; children that inherited gpt-6.1-sol ($6.69, 12 runs)
-    or Qwen 3.8 Max ($2.54, 5 runs) cost about $0.56 a run and made up most of it. The parent's model is the lever,
-    since every builtin agent inherits it.
+  - **Subagents are not the cost.** Subagent sessions (`subagents/sessions/`) spent $0.96 of $17.25 (6%) in 878 of
+    6,663 replies, about $0.03 a run on gpt-6-luna. A first count said 84%: it took every session with a parent link
+    for a subagent, but `/plan implement` sessions carry one too, and the expensive ones (gpt-6.1-sol $6.69, Qwen 3.8
+    Max $2.54) were those build sessions. A report grouping by parent link has to tell the two apart.
   - **Subagents hit approval walls.** 76 "no one can give it here (no UI)" refusals, all inside subagents: 56 from
     Plan's rule (tests, chained lines, `cd` before a reader), about 20 from the folder guard. `e921173` (approved
     checks) and `26344d2` (`cd`) fixed most; the refusals after them came from two pis started before `26344d2`. Left:
@@ -177,10 +177,9 @@ Dated, with the window and model; newest last. Each says what was decided.
     writes the longest replies (555 output tokens each) and has the lowest `lsp` share (2%). One permission dialog
     recorded so far: too few to read.
 
-  Decided: subagents keep `inherit` (the parent's model is chosen with that in mind); fix writers' paths and checks in
-  a longer line, and split non-zero exits from other failures; then start over from an empty history (the sessions
-  indexed here went to the Trash) and measure the next work. Still open: a date or per-milestone window for
-  `/analytics`, and herdr usage errors.
+  Decided: subagents keep `inherit`; fix writers' paths and checks in a longer line, and split non-zero exits from
+  other failures; then start over from an empty history (the sessions indexed here went to the Trash) and measure the
+  next work. Still open: a date or per-milestone window for `/analytics`, and herdr usage errors.
 
 ## What pi offers
 
