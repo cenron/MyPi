@@ -2,11 +2,11 @@ import { callMcpTool } from "#tool/utils";
 import { textOf } from "#ui/render";
 import type { SearchBackend, SearchResult } from "../types";
 
-/** Pi's name for Exa's search tool: `mcp__<server>__<tool>`, from `exaServer` in `src/mcp/exa.ts`. */
-export const EXA_SEARCH_TOOL = "mcp__exa__web_search_exa";
-
 /** A header line of an Exa result block, such as `URL: https://…`. */
 const FIELD = /^(Title|URL|Published|Author): (.*)$/;
+
+/** Pi's name for Exa's search tool, used by the backend and web_search's rule. */
+export const EXA_SEARCH_TOOL = "mcp__exa__web_search_exa";
 
 /** Exa's free search, through its MCP server. */
 export function exaBackend(): SearchBackend {

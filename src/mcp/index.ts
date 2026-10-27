@@ -3,6 +3,8 @@ import type { Session } from "#core/session";
 import { errorMessage } from "#core/util/errors";
 import { exaServer } from "./exa";
 import { parallelServer } from "./parallel";
+import { tavilyServer } from "./tavily";
+import { tinyfishServer } from "./tinyfish";
 import type { McpServer } from "./types";
 
 /** Registers MyPi's MCP servers with pi. One that pi rejects is logged, and the rest still register. */
@@ -18,5 +20,5 @@ export function registerMcpServers(pi: ExtensionAPI, session: Session): void {
 
 /** MyPi's MCP servers. Add new ones here. */
 function createMcpServers(): McpServer[] {
-  return [parallelServer(), exaServer()];
+  return [parallelServer(), exaServer(), tinyfishServer(), tavilyServer()].filter((server) => server !== undefined);
 }

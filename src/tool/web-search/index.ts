@@ -5,9 +5,12 @@ import type { Tool } from "#tool/types";
 import { reuseText } from "#ui/render";
 import { formatResults } from "./format";
 import { formatCall, formatResult } from "./render";
+import { createSearchBackendsRule } from "./rule";
 import { searchInOrder } from "./search";
 import { exaBackend } from "./tools/exa";
 import { parallelBackend } from "./tools/parallel";
+import { tavilyBackend } from "./tools/tavily";
+import { tinyfishBackend } from "./tools/tinyfish";
 import type { SearchDetails } from "./types";
 
 const parameters = Type.Object({
@@ -15,14 +18,18 @@ const parameters = Type.Object({
 });
 
 /**
- * `web_search`: searches the web through Parallel, or Exa when Parallel can't answer, and returns titles, URLs, and
- * excerpts.
+ * `web_search`: searches the web through available search services and returns titles, URLs, and excerpts.
  */
 export function webSearchTool(): Tool {
   // The year goes into the description, so searches about recent things ask for the right one, as OpenCode does.
   const year = new Date().getFullYear();
   // Tried in this order. One Parallel session id per tool instance, so each pi session (and each reload) gets its own.
-  const backends = [parallelBackend(randomUUID()), exaBackend()];
+  const backends = [
+    parallelBackend(randomUUID()),
+    exaBackend(),
+    tinyfishBackend(),
+    ...(process.env.TAVILY_API_KEY ? [tavilyBackend()] : []),
+  ];
   const restingUntil = new Map<string, number>();
 
   const definition = defineTool({
@@ -51,5 +58,5 @@ export function webSearchTool(): Tool {
     },
   });
 
-  return { definition };
+  return { definition, rule: createSearchBackendsRule(backends) };
 }

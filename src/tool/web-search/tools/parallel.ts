@@ -2,7 +2,7 @@ import { isNonEmptyString, isRecord } from "#core/util/guards";
 import { callMcpTool } from "#tool/utils";
 import type { SearchBackend, SearchResult } from "../types";
 
-/** Pi's name for Parallel's search tool: `mcp__<server>__<tool>`, from `parallelServer` in `src/mcp/parallel.ts`. */
+/** Pi's name for Parallel's search tool, used by the backend and web_search's rule. */
 export const PARALLEL_SEARCH_TOOL = "mcp__parallel__web_search";
 
 /**

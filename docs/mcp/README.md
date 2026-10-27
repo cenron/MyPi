@@ -53,8 +53,8 @@ Checked against the installed pi 1.2.0 (`docs/mcp.md`, `docs/extensions.md`, `di
 
 ## Rules for every server
 
-- The same rules as [built-in tools](../tools/README.md#rules-for-every-built-in-tool): works with every model, and
-  no paid key required.
+- Works with every model. Search services that support keyless access are registered without a key; integrations whose
+  free tier is exhausted register only when their key is set.
 - Sets `exposure` explicitly, and hides the tools MyPi already has (`toolExposure: { tool: "hidden" }`).
 - Sets `description`, so the `mcp_servers` section and `tool_search` say what it offers.
 - Keys, when a server takes one, go in `headers` as `${ENV}` or `!command`, never as values in tracked files.
@@ -77,6 +77,8 @@ Checked against the installed pi 1.2.0 (`docs/mcp.md`, `docs/extensions.md`, `di
 |---|---|---|---|---|
 | parallel | done | `https://search.parallel.ai/mcp` | `deferred`; its `web_fetch` hidden | [web_search](../tools/web-search.md) |
 | exa | done | `https://mcp.exa.ai/mcp` | `deferred`; its `web_fetch_exa` hidden | [web_search](../tools/web-search.md), as fallback |
+| tinyfish | done | `https://agent.tinyfish.ai/mcp` | `deferred` | [web_search](../tools/web-search.md), as fallback |
+| tavily | done (key required) | `https://mcp.tavily.com/mcp/` | `deferred` | [web_search](../tools/web-search.md), as fallback |
 
 A server gets its own doc here only once it needs design of its own.
 
@@ -134,13 +136,15 @@ Live in pi (2026-10-22): `/reload` registered it (no restart needed, since `pack
 
 ## Keys
 
-Both servers work without a key; a key only raises the service's limits. MyPi reads two environment variables, the
-same names OpenCode uses, at each `session_start`:
+Parallel, Exa, and TinyFish work without a key; a key only raises the service's limits. MyPi reads these environment
+variables at each `session_start`:
 
 | Variable | Header MyPi adds |
 |---|---|
 | `PARALLEL_API_KEY` | `Authorization: Bearer ${PARALLEL_API_KEY}` |
 | `EXA_API_KEY` | `x-api-key: ${EXA_API_KEY}` |
+| `TINYFISH_API_KEY` | `X-API-Key: ${TINYFISH_API_KEY}` (replaces its keyless access header) |
+| `TAVILY_API_KEY` | `Authorization: Bearer ${TAVILY_API_KEY}` (Tavily registers only when set) |
 
 - The header names the variable, and pi resolves it when it connects (`resolveHeadersOrThrow` in
   `dist/extensions/mcp/runtime.js`), so the key never appears in MyPi's code, its config, `/mcp`, or a log.
@@ -151,8 +155,17 @@ same names OpenCode uses, at each `session_start`:
 - With an `Authorization` header, pi doesn't try OAuth. A wrong key fails the connection, and web_search falls back
   to the other server.
 - The variables come from pi's own environment: set them before starting pi, and restart it after a change.
-- Anything else (a `!command` key from a password manager, another exposure) goes in a full `parallel` or `exa` entry
-  in `~/.pi/agent/mcp.json`, which replaces MyPi's.
+- Tavily's keyless MCP search connected but returned the monthly keyless-cap error on 2026-10-27; MyPi therefore
+  registers it only with `TAVILY_API_KEY`. The documented keyless Tavily REST API is a possible later backend, not
+  used now.
+- TinyFish's keyless MCP search worked from MyPi on 2026-10-27. It uses `X-TinyFish-Access-Mode: keyless`; with a
+  key, MyPi sends only `X-API-Key`.
+- On 2026-10-27, deferred search tools let a model discover and call the backend directly when `web_search` failed.
+  `web_search` owns a rule that allows those calls only as nested calls from that tool; see its
+  [design](../tools/web-search.md#design-in-pi). `ToolGuard` resolves nested parent tool names from pi's
+  `parentToolCallId` and clears them on `tool_execution_end`.
+- Anything else (a `!command` key from a password manager, another exposure) goes in a full server entry in
+  `~/.pi/agent/mcp.json`, which replaces MyPi's.
 
 ## Slices
 

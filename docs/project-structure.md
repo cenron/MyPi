@@ -43,7 +43,9 @@ MyPi/
 | A module idea | `docs/modules/<name>.md` with status `idea` | Add a row to `docs/modules/README.md` |
 | An outside project to learn from | `docs/inspiration/<project>.md`: commit read, license, ideas for MyPi, what doesn't fit | Add a row to `docs/inspiration/README.md`; link it from the module or tool docs it feeds |
 | A built-in tool idea | `docs/tools/<name>.md` with status `idea` | Add a row to `docs/tools/README.md`. A tool a module owns goes in that module's doc instead. |
-| A built-in tool | `src/tool/<name>.ts`, returning a `Tool`: `{ definition: defineTool({ … }), init?, shutdown? }`; `src/tool/<name>/index.ts` when it needs more files | Add it to `createTools` in `src/tool/index.ts`; tests in `test/tool/`; a doc in `docs/tools/` |
+| A built-in tool | `src/tool/<name>.ts`, returning a `Tool`: `{ definition: defineTool({ … }), rule?, init?, shutdown? }`; `src/tool/<name>/index.ts` when it needs more files | Add it to `createTools` in `src/tool/index.ts`; tests in `test/tool/`; a doc in `docs/tools/` |
+| A rule one built-in tool needs | That tool's folder as `rule.ts`, returned as its `Tool.rule` | `registerTools` installs it on the session's `ToolGuard` under the tool name; test beside the tool |
+
 | An MCP server | `src/mcp/<name>.ts`, exporting a function that returns a `McpServer` (`{ name, config }`) | Add it to `createMcpServers` in `src/mcp/index.ts`; a row in `docs/mcp/README.md` |
 | A slash command | `src/command/<name>.ts`, returning a `Command`; `src/command/<name>/index.ts` when it needs more files | Add it to `createCommands` in `src/command/index.ts`; tests in `test/command/` |
 | A reusable TUI component | `src/ui/components/<name>.ts`, implementing pi-tui's `Component` | No feature logic; tests in `test/ui/components/` |
@@ -52,7 +54,7 @@ MyPi/
 | A module's tool | `src/module/<name>/tools/<tool>.ts`, returning a `ToolDefinition` | Return it from the module's `tools()`, wrapped in `defineTool`; tests in `test/module/<name>/tools/` |
 | A module's command | `src/module/<name>/commands/<command>/index.ts`, returning a `Command`, with files only it uses beside it | Return it from the module's `commands()`; tests in `test/module/<name>/commands/<command>/` |
 | A core feature (always on, not a module: MyPi's own behavior, such as identity) | `src/core/<name>.ts`, wired from `MyPi` (`src/mypi.ts`) | Tests in `test/core/`; a doc in `docs/core/` |
-| A built-in tool rule (always on, not a module's) | `src/rule/<name>.ts`, a class extending `BaseRule` (`info`, `check`) | Add it to `createRules` in `src/rule/index.ts`; tests in `test/rule/`; a doc in `docs/rules/` |
+| An independent built-in rule (always on, not a module's) | `src/rule/<name>.ts`, a class extending `BaseRule` (`info`, `check`); use this for rules such as the folder guard that depend on nothing else | Add it to `createRules` in `src/rule/index.ts`; tests in `test/rule/`; a doc in `docs/rules/` |
 | A shared service or helper | `src/core/` (helpers in `src/core/util/`) | Only once more than one place needs it; tests in `test/core/` |
 | A skill | `resources/skills/<name>/SKILL.md` | |
 | A prompt template | `resources/prompts/<name>.md` | |

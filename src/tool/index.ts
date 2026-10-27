@@ -15,6 +15,10 @@ export function registerTools(pi: ExtensionAPI, session: Session): Tool[] {
   for (const definition of definitions) {
     pi.registerTool(definition);
   }
+  // Only tools with a rule: `set` with none would remove a rule a module set under the same name.
+  for (const tool of tools) {
+    if (tool.rule) session.toolGuard.set(tool.definition.name, tool.rule);
+  }
 
   return tools;
 }

@@ -25,7 +25,12 @@ export type Verdict =
     };
 
 /** A tool call as rules see it; `annotations` are the tool author's hints, unverified. */
-export type ToolCall = { toolName: string; input: Record<string, unknown>; annotations?: ToolAnnotations };
+export type ToolCall = {
+  toolName: string;
+  input: Record<string, unknown>;
+  parentToolName?: string;
+  annotations?: ToolAnnotations;
+};
 
 /** Where a read-only mode (Plan) still lets a module write: folders (absolute paths) and tools that only write there. */
 export type Writable = { readonly dirs: readonly string[]; readonly tools: readonly string[] };
@@ -91,8 +96,14 @@ export class ToolGuard {
   private readonly readables = new Map<string, readonly string[]>();
   /** Ask lines (`<module>: <question>`) allowed for this session. In memory, so `/reload` forgets them. */
   private readonly allowed = new Set<string>();
+  /** Each running call's tool name by its id, so a nested call's rules can see which tool made it. */
+  private readonly toolNames = new Map<string, string>();
 
-  constructor(readonly pi: ExtensionAPI) {}
+  constructor(readonly pi: ExtensionAPI) {
+    pi.on("tool_execution_end", (event) => {
+      this.toolNames.delete(event.toolCallId);
+    });
+  }
 
   /** Sets the rule under `name`, or removes it with `undefined`. */
   set(name: string, rule: ToolRule | undefined): void {
@@ -126,6 +137,7 @@ export class ToolGuard {
 
   async check(ev: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> {
     const toolCall = this.toToolCall(ev);
+    this.toolNames.set(ev.toolCallId, ev.toolName);
     const writables = [...this.writables.values()];
 
     const toolEnv: ToolEnv = {
@@ -140,13 +152,18 @@ export class ToolGuard {
     for (const [name, rule] of this.rules) {
       const verdict = rule(toolCall, toolEnv);
 
-      if (verdict.kind === "block") return blocked(verdict.reason);
+      if (verdict.kind === "block") {
+        this.toolNames.delete(ev.toolCallId);
+        return blocked(verdict.reason);
+      }
       if (verdict.kind === "ask") {
         asks.push(...verdict.questions.map((question) => ({ name, question, onAllowSession: verdict.onAllowSession })));
       }
     }
 
-    return this.confirmToolRequests(ctx, asks);
+    const result = await this.confirmToolRequests(ctx, asks);
+    if (result?.block) this.toolNames.delete(ev.toolCallId);
+    return result;
   }
 
   private async confirmToolRequests(
@@ -183,7 +200,12 @@ export class ToolGuard {
   /** The call as rules see it, with the annotations pi lists for the tool, if any. */
   private toToolCall(ev: ToolCallEvent): ToolCall {
     const toolInfo = this.pi.getAllTools().find((tool) => tool.name === ev.toolName);
-    return { toolName: ev.toolName, input: ev.input, annotations: toolInfo?.annotations };
+    return {
+      toolName: ev.toolName,
+      input: ev.input,
+      parentToolName: ev.parentToolCallId ? this.toolNames.get(ev.parentToolCallId) : undefined,
+      annotations: toolInfo?.annotations,
+    };
   }
 }
 

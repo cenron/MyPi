@@ -1,9 +1,11 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatResults } from "#tool/web-search/format";
 import { webSearchTool } from "#tool/web-search/index";
 import { EXA_SEARCH_TOOL } from "#tool/web-search/tools/exa";
 import { PARALLEL_SEARCH_TOOL } from "#tool/web-search/tools/parallel";
+import { TAVILY_SEARCH_TOOL } from "#tool/web-search/tools/tavily";
+import { TINYFISH_SEARCH_TOOL } from "#tool/web-search/tools/tinyfish";
 import { answered, fakeContext } from "../fakes";
 
 const results = [{ url: "https://a.test", title: "A", excerpt: "Some text." }];
@@ -16,7 +18,13 @@ const parallel = answered({
 const exa = answered({ content: [{ type: "text", text: "Title: A\nURL: https://a.test\nHighlights:\nSome text." }] });
 
 describe("webSearchTool", () => {
-  const { definition } = webSearchTool();
+  let definition: ReturnType<typeof webSearchTool>["definition"];
+  beforeEach(() => {
+    vi.stubEnv("TAVILY_API_KEY", "");
+    definition = webSearchTool().definition;
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
   const run = (ctx: ExtensionToolContext, signal?: AbortSignal) =>
     definition.execute("call-1", { query: "q" }, signal, undefined, ctx);
 
@@ -32,6 +40,31 @@ describe("webSearchTool", () => {
     expect(result.details).toEqual({ query: "q", backend: { id: "exa_search", name: "Exa" }, results });
   });
 
+  it("falls through to TinyFish after Parallel and Exa are unavailable", async () => {
+    const tinyfish = answered({
+      content: [
+        { type: "text", text: JSON.stringify({ results: [{ url: "https://tinyfish.test", title: "TinyFish" }] }) },
+      ],
+    });
+    const result = await run(fakeContext({ [TINYFISH_SEARCH_TOOL]: tinyfish }).ctx);
+    expect(result.details).toEqual({
+      query: "q",
+      backend: { id: "tinyfish_search", name: "TinyFish" },
+      results: [{ url: "https://tinyfish.test", title: "TinyFish" }],
+    });
+  });
+
+  it("adds Tavily last only when its key is set", () => {
+    vi.stubEnv("TAVILY_API_KEY", "key");
+    const keyed = webSearchTool().definition;
+    expect(keyed.reachesTools?.({ query: "q" })).toEqual([
+      PARALLEL_SEARCH_TOOL,
+      EXA_SEARCH_TOOL,
+      TINYFISH_SEARCH_TOOL,
+      TAVILY_SEARCH_TOOL,
+    ]);
+  });
+
   it("sends the same Parallel session id with every search", async () => {
     const { ctx, executeTool } = fakeContext({ [PARALLEL_SEARCH_TOOL]: parallel });
     await run(ctx);
@@ -42,6 +75,10 @@ describe("webSearchTool", () => {
   });
 
   it("reaches every backend's tool, so pi waits for their servers", () => {
-    expect(definition.reachesTools?.({ query: "q" })).toEqual([PARALLEL_SEARCH_TOOL, EXA_SEARCH_TOOL]);
+    expect(definition.reachesTools?.({ query: "q" })).toEqual([
+      PARALLEL_SEARCH_TOOL,
+      EXA_SEARCH_TOOL,
+      TINYFISH_SEARCH_TOOL,
+    ]);
   });
 });

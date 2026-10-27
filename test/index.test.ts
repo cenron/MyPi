@@ -239,7 +239,7 @@ describe("mypi extension", () => {
     const { handlers, mcpServers } = loadExtension();
     expect(mcpServers).toEqual([]);
     await startSession(handlers);
-    expect(mcpServers).toEqual(["parallel", "exa"]);
+    expect(mcpServers).toEqual(["parallel", "exa", "tinyfish"]);
   });
 
   // Pi reads the handler's return value; a handler that awaited the guard without returning would let every call run.

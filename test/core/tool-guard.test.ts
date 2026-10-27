@@ -12,9 +12,25 @@ import { subscribe } from "#core/events";
 import { previewAsk, ToolGuard, type ToolRule, type Verdict } from "#core/tool-guard";
 
 /** A guard over a fake pi whose `getAllTools()` lists `tools`, with a real bus its dialogs publish on. */
+const toolEndHandlers = new WeakMap<ToolGuard, (toolCallId: string) => void>();
+
 function newGuard(tools: { name: string; annotations?: ToolAnnotations }[] = []) {
-  const pi = { getAllTools: () => tools, events: createEventBus() } as unknown as ExtensionAPI;
-  return new ToolGuard(pi);
+  let onEnd: ((event: { toolCallId: string }) => void) | undefined;
+  const pi = {
+    getAllTools: () => tools,
+    events: createEventBus(),
+    on: (_name: string, handler: (event: { toolCallId: string }) => void) => {
+      onEnd = handler;
+      return () => {};
+    },
+  } as unknown as ExtensionAPI;
+  const guard = new ToolGuard(pi);
+  toolEndHandlers.set(guard, (toolCallId) => onEnd?.({ toolCallId }));
+  return guard;
+}
+
+function endTool(guard: ToolGuard, toolCallId: string): void {
+  toolEndHandlers.get(guard)?.(toolCallId);
 }
 
 /** The approvals a guard publishes, collected until the test ends. */
@@ -65,6 +81,38 @@ describe("ToolGuard", () => {
     guard.set("one", allow);
     guard.set("two", allow);
     await expect(guard.check(event(), fakeContext().ctx)).resolves.toBeUndefined();
+  });
+
+  it("passes a nested call its parent's tool name and forgets the name when the parent ends", async () => {
+    const guard = newGuard();
+    const seen = vi.fn(allow);
+    guard.set("one", seen);
+    const ctx = fakeContext().ctx;
+
+    await guard.check(event("web_search"), ctx);
+    await guard.check(
+      { ...event("mcp__parallel__web_search"), toolCallId: "call-1/1", parentToolCallId: "call-1" },
+      ctx,
+    );
+    expect(seen.mock.calls[1]?.[0].parentToolName).toBe("web_search");
+
+    endTool(guard, "call-1");
+    await guard.check(
+      { ...event("mcp__parallel__web_search"), toolCallId: "call-1/2", parentToolCallId: "call-1" },
+      ctx,
+    );
+    expect(seen.mock.calls[2]?.[0].parentToolName).toBeUndefined();
+  });
+
+  it.each([
+    ["top-level", event("web_search"), undefined],
+    ["unknown parent", { ...event("mcp__parallel__web_search"), parentToolCallId: "missing" }, undefined],
+  ])("has no parent tool name for %s calls", async (_case, call, parentToolName) => {
+    const guard = newGuard();
+    const seen = vi.fn(allow);
+    guard.set("one", seen);
+    await guard.check(call as ToolCallEvent, fakeContext().ctx);
+    expect(seen.mock.calls[0]?.[0].parentToolName).toBe(parentToolName);
   });
 
   it("passes each rule the call, the tool's annotations, and the environment", async () => {
