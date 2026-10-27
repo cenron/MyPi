@@ -36,6 +36,7 @@ describe("PlanBuildModule", () => {
   it("Plan prompt requires complete hand-offs and checking existing APIs", () => {
     expect(PLAN_PROMPT).toContain("fold every decision and correction from the conversation into the plan");
     expect(PLAN_PROMPT).toContain("name the existing pi or MyPi API you checked and why it falls short");
+    expect(PLAN_PROMPT).toContain("Read files with the read tool");
   });
 
   it("starts in Plan when nothing is saved, with Plan's footer and prompt", () => {

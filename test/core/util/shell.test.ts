@@ -146,6 +146,9 @@ describe("isReadOnlyCommand", () => {
     "git config get user.name",
     "npm ls --depth=0",
     "npm view vitest version",
+    "cd",
+    "cd src && rg -n foo . | head -50",
+    "cd /p && sed -n '35,55p' a.ts && echo '---' && sed -n 5p b.ts",
   ])("allows %j", (command) => {
     expect(isReadOnlyCommand(command)).toBe(true);
   });
@@ -160,6 +163,8 @@ describe("isReadOnlyCommand", () => {
     ["a wrapper", "timeout 5 ls"],
     ["sudo", "sudo ls"],
     ["a later bad segment", "ls && rm x"],
+    ["a writer after cd", "cd /p && touch x"],
+    ["cd to a command's output", "cd $(echo /p) && ls"],
     ["tee", "ls | tee out"],
     ["tree -o", "tree -o out"],
     ["tree with o in a cluster", "tree -ao out"],

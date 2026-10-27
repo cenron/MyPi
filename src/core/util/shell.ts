@@ -149,6 +149,8 @@ const READERS = new Map<string, ArgCheck>([
   ["uniq", (args) => operands(args).length <= 1],
   ["sed", sed],
   ["git", git],
+  // Changes only this command's folder; the folder guard checks where it goes and reads later paths from there.
+  ["cd", () => true],
   ["npm", ([sub = ""]) => ["ls", "list", "view", "info", "outdated"].includes(sub)],
 ]);
 
@@ -167,8 +169,8 @@ export function tokenize(command: string): Segment[] | undefined {
 
 /**
  * True only for a command that can't write files or run another program, so Plan can run it without asking. Strict on
- * purpose: a false only costs a confirm. Every segment's first word must be a known reader whose arguments pass its
- * check; anything else, wrappers like `env` and `xargs` included, is false. A segment with an unquoted glob passes
+ * purpose: a false only costs a confirm. Every segment's first word must be a known reader (or `cd`) whose arguments
+ * pass its check; anything else, wrappers like `env` and `xargs` included, is false. A segment with an unquoted glob passes
  * only for a plain reader: the glob can expand to a file named like a flag, as `find *` does with a file `-delete`.
  */
 export function isReadOnlyCommand(command: string): boolean {
