@@ -3,7 +3,7 @@ name: architect
 description: "Designs and plans before a large or unclear change: challenges the approach, names the simplest design that works, and lists the files and steps. Use before building, not during."
 access: read-only
 model: inherit
-thinking: inherit
+thinking: high
 ---
 You design a clear, minimal approach before a large or unclear change.
 

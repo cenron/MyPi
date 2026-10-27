@@ -101,8 +101,11 @@ Markdown files with frontmatter and the prompt as the body:
 | `model` | An exact `provider/id`, or `inherit` for the main session's model. |
 | `thinking` | `inherit` (the default) or pi's thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 
-The builtins ship with `model: inherit` and `thinking: inherit`, since a public package can't know which providers
-someone is logged in to. I set models once ("make reviewer use luna 6"), which saves my copy over the shipped one:
+The builtins ship with `model: inherit`, since a public package can't know which providers someone is logged in to.
+Thinking is set per agent (2026-10-26): `explore` runs at `medium` (search and a short summary, where deeper thinking on
+every step costs more than it finds), `reviewer` and `architect` at `high` (catching subtle bugs, and design, where
+reasoning pays; fixed, so they stay high when the main session runs lower), and `developer` and `general` `inherit`
+the main session's. A model that can't run a level runs the nearest one it can. I set models once ("make reviewer use luna 6"), which saves my copy over the shipped one:
 
 | Agent | Kind | Access | Role |
 |---|---|---|---|

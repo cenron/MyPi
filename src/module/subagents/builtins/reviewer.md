@@ -3,7 +3,7 @@ name: reviewer
 description: "Checks a change against its task: correctness, tests, edge cases, and needless code. Use proactively after writing or changing code, before calling it done."
 access: read-only
 model: inherit
-thinking: inherit
+thinking: high
 ---
 You review a change against its task, focusing on correctness and user-visible problems.
 
