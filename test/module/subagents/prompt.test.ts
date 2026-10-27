@@ -16,8 +16,14 @@ it("says when to delegate, then lists each agent with its run settings", () => {
     "## Subagents",
     expect.stringContaining("more than about three queries"),
     "To create, change, or remove an agent, find `agent_manage` with `tool_search`.",
-    "- explore: Search widely (model: inherit; thinking: inherit; access: read-only)",
+    expect.stringContaining("a user or project copy replaces the builtin"),
+    "- explore: Search widely (model: inherit; thinking: inherit; access: read-only; builtin)",
   ]);
+  expect(
+    promptSection([{ ...explore, thinking: "medium", source: "user", path: "/home/agents/explore.md" }]),
+  ).toContain(
+    "- explore: Search widely (model: inherit; thinking: medium; access: read-only; user copy: /home/agents/explore.md)",
+  );
   expect(promptSection([explore])).toContain(
     "offer to take that step here, where the user can approve it. Don't retry the child with the same call",
   );

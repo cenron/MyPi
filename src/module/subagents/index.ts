@@ -85,16 +85,27 @@ const DELEGATION =
   "it for the change itself, never for a patch. Its result names the patch; apply it only with `subagent_apply`, " +
   "never `git apply` through `bash`, which wouldn't ask the user.";
 
-/** The agent list in the prompt: when delegating pays off, then one line per agent. */
+/**
+ * The agent list in the prompt: when delegating pays off, then one line per agent as it runs, naming the file a user
+ * or project copy came from. Seen 2026-10-26: asked an edited agent's settings, a model read the builtin file instead.
+ */
 export function promptSection(agents: AgentDefinition[]): string {
   const rows = agents.map(
     (agent) =>
-      `- ${agent.name}: ${agent.description} (model: ${agent.model}; thinking: ${agent.thinking}; access: ${agent.access})`,
+      `- ${agent.name}: ${agent.description} (model: ${agent.model}; thinking: ${agent.thinking}; ` +
+      `access: ${agent.access}; ${definedBy(agent)})`,
   );
   return [
     "## Subagents",
     DELEGATION,
     "To create, change, or remove an agent, find `agent_manage` with `tool_search`.",
+    "These are the agents as they run: a user or project copy replaces the builtin of the same name. Answer questions " +
+      "about an agent from this list or the file it names, not from MyPi's builtin files.",
     ...rows,
   ].join("\n");
+}
+
+/** Where an agent's definition comes from, as the list says it. */
+function definedBy(agent: AgentDefinition): string {
+  return agent.source === "builtin" ? "builtin" : `${agent.source} copy: ${agent.path}`;
 }
