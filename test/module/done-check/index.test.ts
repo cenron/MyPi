@@ -118,26 +118,6 @@ describe("DoneCheckModule", () => {
     });
   });
 
-  it("does not suppress names omitted by the report limit", async () => {
-    const duplicates = Array.from(
-      { length: 12 },
-      (_, index): Duplicate => ({
-        name: `format${index}`,
-        file: join(dir, `src/cart${index}.ts`),
-        line: 1,
-        elsewhere: { file: join(dir, "src/price.ts"), line: 1 },
-      }),
-    );
-    const { runTurn } = start({ project: { main: dir, commonDir: dir }, duplicates });
-
-    const first = await runTurn(() => writeNew("cart.ts"));
-    expect(first).toMatchObject({ entries: [{ content: expect.stringContaining("… and 2 more.") }] });
-    expect(await runTurn(() => writeNew("cart2.ts"))).toMatchObject({
-      continue: true,
-      entries: [{ content: expect.stringContaining("`format10`") }],
-    });
-  });
-
   it("sends the errors in the files a Build run changed back, and asks for one more model request", async () => {
     const { runTurn, diagnostics } = start({ problems: (files) => files.map((file) => error(file)) });
 

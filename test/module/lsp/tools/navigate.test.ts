@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ServerManager } from "#module/lsp/manager";
 import type { ServerSpec } from "#module/lsp/servers";
 import { lspTool } from "#module/lsp/tools/lsp";
-import { fakeSpec } from "../fakes";
+import { fakeSpec, textOrError } from "../fakes";
 
 let dir: string;
 let servers: ServerManager | undefined;
@@ -30,13 +30,7 @@ afterEach(async () => {
 /** Runs the tool, its session folder `cwd`; the text it returns, or the error it throws. */
 async function run(params: Record<string, unknown>, spec: ServerSpec = fakeSpec(), cwd = dir): Promise<string> {
   servers = new ServerManager([spec], dir, () => {});
-  try {
-    const result = await lspTool(servers).execute("1", params as never, undefined, undefined, { cwd } as never);
-    const [first] = result.content;
-    return first?.type === "text" ? first.text : "";
-  } catch (error) {
-    return `ERROR: ${(error as Error).message}`;
-  }
+  return textOrError(lspTool(servers), params, cwd);
 }
 
 describe("lsp references", () => {

@@ -17,3 +17,17 @@ export function fakeSpec(mode = "ok", overrides: Partial<ServerSpec> = {}): Serv
     ...overrides,
   };
 }
+
+/** A tool as these tests call it: `execute` with the call's parameters and a context holding only `cwd`. */
+type CallableTool = { execute(...args: never[]): Promise<{ content: { type: string; text?: string }[] }> };
+
+/** Runs `tool` with `params`, its session folder `cwd`; the text it returns, or `ERROR: <message>` when it throws. */
+export async function textOrError(tool: CallableTool, params: Record<string, unknown>, cwd: string): Promise<string> {
+  try {
+    const execute = tool.execute as (...args: unknown[]) => ReturnType<CallableTool["execute"]>;
+    const [first] = (await execute("1", params, undefined, undefined, { cwd })).content;
+    return first?.type === "text" ? (first.text ?? "") : "";
+  } catch (error) {
+    return `ERROR: ${(error as Error).message}`;
+  }
+}

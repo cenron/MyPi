@@ -2,6 +2,7 @@ import { readFile, rm } from "node:fs/promises";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { publicLookup } from "#tool/web-fetch/address";
 import { webFetchTool } from "#tool/web-fetch/index";
+import { trackedStream } from "./fakes";
 
 const PAGE = "https://example.com/page";
 
@@ -68,20 +69,6 @@ function response({ body = "hello", status = 200, headers = { "content-type": "t
   // A constructed Response has an empty `url`; a fetched one has the final URL after redirects.
   Object.defineProperty(res, "url", { value: url });
   return res;
-}
-
-/** A body that records whether it was cancelled. */
-function trackedBody(text = "body") {
-  const state = { cancelled: false };
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(text));
-    },
-    cancel() {
-      state.cancelled = true;
-    },
-  });
-  return { stream, state };
 }
 
 /** A `fetch` that never answers and rejects with the signal's reason once aborted, or at once if it already is, like
@@ -164,7 +151,7 @@ describe("web_fetch", () => {
 
   describe("the status", () => {
     it("fails on a non-2xx status and cancels its body", async () => {
-      const { stream, state } = trackedBody("not here");
+      const { stream, state } = trackedStream([new TextEncoder().encode("not here")]);
       fetchMock.mockResolvedValueOnce(response({ body: stream, status: 404 }));
       await expect(run({ url: PAGE })).rejects.toThrow(/HTTP 404/);
       expect(state.cancelled).toBe(true);
@@ -382,7 +369,7 @@ describe("web_fetch", () => {
     });
 
     it("cancels each redirect's body", async () => {
-      const { stream, state } = trackedBody("Moved");
+      const { stream, state } = trackedStream([new TextEncoder().encode("Moved")]);
       fetchMock.mockResolvedValueOnce(response({ body: stream, status: 302, headers: { location: "/next" } }));
       await run({ url: PAGE });
       expect(state.cancelled).toBe(true);

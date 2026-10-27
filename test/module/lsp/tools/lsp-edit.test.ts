@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ServerManager } from "#module/lsp/manager";
 import { lspEditTool } from "#module/lsp/tools/lsp-edit";
-import { fakeSpec } from "../fakes";
+import { fakeSpec, textOrError } from "../fakes";
 
 let dir: string;
 let servers: ServerManager | undefined;
@@ -26,19 +26,7 @@ afterEach(async () => {
 /** Runs a rename in the session folder `cwd`; the text it returns, or the error it throws. */
 async function rename(params: Record<string, unknown>, cwd = dir): Promise<string> {
   servers = new ServerManager([fakeSpec()], dir, () => {});
-  try {
-    const result = await lspEditTool(servers).execute(
-      "1",
-      { action: "rename", ...params } as never,
-      undefined,
-      undefined,
-      { cwd } as never,
-    );
-    const [first] = result.content;
-    return first?.type === "text" ? first.text : "";
-  } catch (error) {
-    return `ERROR: ${(error as Error).message}`;
-  }
+  return textOrError(lspEditTool(servers), { action: "rename", ...params }, cwd);
 }
 
 const read = (path: string) => readFile(join(dir, path), "utf8");

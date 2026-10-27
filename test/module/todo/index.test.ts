@@ -140,31 +140,11 @@ describe("TodoModule", () => {
     });
   });
 
-  it("adds a transient reminder at the end of context after five quiet assistant messages", async () => {
+  it("adds the reminder, with the current list, after the messages when it's due, without saving it", async () => {
     const fake = fakeSession();
     const module = new TodoModule(fake.session);
     module.init();
-    const messages = Array.from({ length: 5 }, () => ({ role: "assistant", content: [], timestamp: 0 }));
-    const result = await fake.emit("context", { type: "context", messages });
-
-    expect(result).toMatchObject({
-      messages: [
-        ...messages,
-        {
-          role: "user",
-          content: expect.stringContaining("The task tools haven't been used recently"),
-        },
-      ],
-    });
-    expect(messages).toHaveLength(5);
-  });
-
-  it("includes the current task list in the transient reminder", async () => {
-    const fake = fakeSession();
-    const module = new TodoModule(fake.session);
-    module.init();
-    const create = toolCall(module, "task_create");
-    await create?.execute(
+    await toolCall(module, "task_create")?.execute(
       "id",
       { subject: "Run tests", description: "Run the suite" },
       undefined,
@@ -172,21 +152,12 @@ describe("TodoModule", () => {
       fake.session.ctx as ExtensionToolContext,
     );
     const messages = Array.from({ length: 5 }, () => ({ role: "assistant", content: [], timestamp: 0 }));
-    const result = (await fake.emit("context", { type: "context", messages })) as {
-      messages: { role: string; content: string }[];
-    };
+    const result = await fake.emit("context", { type: "context", messages });
 
-    expect(result.messages.at(-1)?.content).toContain("Here are the existing tasks:");
-    expect(result.messages.at(-1)?.content).toContain("#1. [pending] Run tests");
-  });
-
-  it("does not change context before the reminder is due", async () => {
-    const fake = fakeSession();
-    const module = new TodoModule(fake.session);
-    module.init();
-    const messages = Array.from({ length: 4 }, () => ({ role: "assistant", content: [], timestamp: 0 }));
-
-    await expect(fake.emit("context", { type: "context", messages })).resolves.toBeUndefined();
+    expect(result).toMatchObject({
+      messages: [...messages, { role: "user", content: expect.stringContaining("#1. [pending] Run tests") }],
+    });
+    expect(messages).toHaveLength(5);
   });
 
   it("restores state again after session tree navigation", async () => {

@@ -112,7 +112,7 @@ function summary(errors: number, failures: number): string {
   return parts.join(", and ");
 }
 
-/** The pending work that keeps a Build run from passing. */
+/** The duplicate names, at most `MAX_REPORTED_DUPLICATES` of them, then how many more there are. */
 function duplicatesBlock(duplicates: readonly Duplicate[], cwd: string): string {
   const shown = duplicates.slice(0, MAX_REPORTED_DUPLICATES);
   const lines = shown.map(

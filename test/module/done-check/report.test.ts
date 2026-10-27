@@ -88,6 +88,16 @@ describe("doneCheckReport", () => {
       "Done check:\n1 new name already exists elsewhere:\n`formatPrice` (src/cart.ts:4) is also in src/price.ts:2\n" +
         "Reuse the existing one, or say why a second one is right.",
     );
+
+    const many = Array.from({ length: 12 }, (_, index) => ({
+      name: `format${index}`,
+      file: "/p/src/cart.ts",
+      line: index,
+      elsewhere: { file: "/p/src/price.ts", line: 1 },
+    }));
+    expect(report([], [], 0, [], many)).toContain("12 new names already exist elsewhere:\n");
+    expect(report([], [], 0, [], many)).toContain("`format9`");
+    expect(report([], [], 0, [], many)).toContain("… and 2 more.");
   });
   it("lists the errors by file and line, with what to do", () => {
     const problems = [problem("/p/src/b.ts", 4), problem("/p/src/a.ts", 9), problem("/p/src/a.ts", 2)];

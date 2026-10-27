@@ -8,24 +8,9 @@ import {
   readCapped,
   timeoutSignal,
 } from "#tool/web-fetch/http";
+import { trackedStream } from "./fakes";
 
 const bytes = (size: number) => new Uint8Array(size).fill(97);
-
-/** A body that hands out `chunks` one per read, and records whether it was read or cancelled. */
-function trackedStream(chunks: Uint8Array[]) {
-  const state = { reads: 0, cancelled: false };
-  const stream = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      const chunk = chunks[state.reads++];
-      if (chunk) controller.enqueue(chunk);
-      else controller.close();
-    },
-    cancel() {
-      state.cancelled = true;
-    },
-  });
-  return { stream, state };
-}
 
 /** A body that never ends, so only the cap can stop the read. */
 function endlessStream() {
