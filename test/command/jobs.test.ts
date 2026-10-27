@@ -2,12 +2,8 @@ import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-a
 import type { Component } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { jobsCmd } from "#command/jobs/index";
-import { fakeSession } from "../fakes";
+import { fakeSession, plainTheme as theme } from "../fakes";
 
-const theme = {
-  fg: (_color: string, text: string) => text,
-  bg: (_color: string, text: string) => text,
-} as unknown as Theme;
 type Factory = (tui: unknown, theme: Theme, keys: unknown, done: (result: undefined) => void) => Component;
 
 function context(keys: string[] = []) {

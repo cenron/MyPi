@@ -2,16 +2,9 @@ import { stripVTControlCharacters } from "node:util";
 import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { type ToggleItem, ToggleList } from "#ui/components/toggle-list";
+import { KEY, plainTheme as theme } from "../../fakes";
 
-const SPACE = " ";
-const ENTER = "\r";
-const UP = "\x1b[A";
-const DOWN = "\x1b[B";
-
-// Plain-text colors, so the circles compare as "●" and "○".
-const theme = {
-  fg: (_color: string, text: string) => text,
-} as unknown as Theme;
+const { SPACE, ENTER, UP, DOWN } = KEY;
 
 const items: ToggleItem[] = [
   { id: "a", label: "a", description: "first", on: true },

@@ -1,19 +1,15 @@
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ExtensionCommandContext, initTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
+import { type ExtensionCommandContext, initTheme } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { ask } from "#core/events";
 import { LspModule } from "#module/lsp/index";
 import { ServerManager } from "#module/lsp/manager";
 import { SERVERS } from "#module/lsp/servers";
-import { customEntry, fakeSession } from "../../fakes";
+import { customEntry, customPressing, fakeSession, KEY } from "../../fakes";
 
-const SPACE = " ";
-const ENTER = "\r";
-const ESCAPE = "\x1b";
-const DOWN = "\x1b[B";
+const { SPACE, ENTER, DOWN, ESCAPE } = KEY;
 
 /** A `tool_result` event, as pi sends it after a tool ran. */
 function toolResult(toolName: string, path: string, isError = false) {
@@ -28,17 +24,9 @@ function start(branch: unknown[] = [], cwd = "/project") {
   return { ...fake, module };
 }
 
-type Factory = (tui: unknown, theme: Theme, keybindings: unknown, done: (result: unknown) => void) => Component;
-
 /** A command context whose `ui.custom` builds the menu and presses `keys`. */
 function pressing(keys: string[]) {
-  const theme = { fg: (_c: string, text: string) => text, bg: (_c: string, text: string) => text } as Theme;
-  const custom = (factory: Factory) =>
-    new Promise((resolve) => {
-      const component = factory({}, theme, {}, resolve);
-      for (const key of keys) component.handleInput?.(key);
-    });
-  return { mode: "tui", ui: { custom } } as unknown as ExtensionCommandContext;
+  return { mode: "tui", ui: { custom: customPressing(keys) } } as unknown as ExtensionCommandContext;
 }
 
 beforeAll(() => initTheme("dark"));

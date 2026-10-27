@@ -3,12 +3,7 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { Dialog } from "#ui/components/dialog";
-
-// Plain-text colors, so line widths are just character counts.
-const theme = {
-  fg: (_color: string, text: string) => text,
-  bg: (_color: string, text: string) => text,
-} as unknown as Theme;
+import { plainTheme as theme } from "../../fakes";
 
 function fakeChild(lines: string[] = []) {
   return { render: () => lines, invalidate: vi.fn(), handleInput: vi.fn() };

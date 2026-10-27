@@ -1,20 +1,11 @@
-import { type ExtensionContext, initTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { type ExtensionContext, initTheme } from "@earendil-works/pi-coding-agent";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { ServerStatus } from "#module/lsp/manager";
 import { openLspMenu, statusLine } from "#module/lsp/menu";
+import { customPressing, KEY } from "../../fakes";
 import { fakeSpec } from "./fakes";
 
-const SPACE = " ";
-const ENTER = "\r";
-const DOWN = "\x1b[B";
-
-const theme = {
-  fg: (_color: string, text: string) => text,
-  bg: (_color: string, text: string) => text,
-} as unknown as Theme;
-
-type Factory = (tui: unknown, theme: Theme, keybindings: unknown, done: (result: unknown) => void) => Component;
+const { SPACE, ENTER, DOWN } = KEY;
 
 /** A status for server `id`: installed, on, and idle unless `changes` says otherwise. */
 function status(id: string, changes: Partial<ServerStatus> = {}): ServerStatus {
@@ -29,15 +20,8 @@ function status(id: string, changes: Partial<ServerStatus> = {}): ServerStatus {
   };
 }
 
-// Stands in for pi's ctx.ui.custom: builds the component, then presses the keys.
 function fakeContext(keys: string[], mode = "tui") {
-  const custom = vi.fn(
-    (factory: Factory) =>
-      new Promise((resolve) => {
-        const component = factory({}, theme, {}, resolve);
-        for (const key of keys) component.handleInput?.(key);
-      }),
-  );
+  const custom = customPressing(keys);
   return { ctx: { mode, ui: { custom } } as unknown as ExtensionContext, custom };
 }
 

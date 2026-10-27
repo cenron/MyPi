@@ -5,7 +5,7 @@ import { planRule } from "#core/plan-rule";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { type ChildResult, changedPath, runChild, runUsage } from "#module/subagents/child";
 import { subagentTool } from "#module/subagents/tools/subagent";
-import { fakeSession } from "../../fakes";
+import { fakeSession, plainTheme as theme } from "../../fakes";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -90,7 +90,6 @@ describe("subagent", () => {
   });
 
   describe("drawing", () => {
-    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never;
     const context = { lastComponent: undefined, isPartial: true } as never;
     const drawn = (component: { render(width: number): string[] } | undefined) =>
       component

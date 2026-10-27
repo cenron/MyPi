@@ -1,25 +1,12 @@
-import { type ExtensionContext, initTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { type ExtensionContext, initTheme } from "@earendil-works/pi-coding-agent";
+import { beforeAll, describe, expect, it } from "vitest";
 import { openToggleDialog } from "#ui/components/toggle-dialog";
+import { customPressing, KEY } from "../../fakes";
 
-const SPACE = " ";
-const ENTER = "\r";
-const DOWN = "\x1b[B";
-const theme = {
-  fg: (_color: string, text: string) => text,
-  bg: (_color: string, text: string) => text,
-} as unknown as Theme;
-type Factory = (tui: unknown, theme: Theme, keybindings: unknown, done: (result: unknown) => void) => Component;
+const { SPACE, ENTER, DOWN } = KEY;
 
 function context(keys: string[]) {
-  const custom = vi.fn(
-    (factory: Factory, _options?: unknown) =>
-      new Promise((resolve) => {
-        const component = factory({}, theme, {}, resolve);
-        for (const key of keys) component.handleInput?.(key);
-      }),
-  );
+  const custom = customPressing(keys);
   return { ctx: { ui: { custom } } as unknown as ExtensionContext, custom };
 }
 

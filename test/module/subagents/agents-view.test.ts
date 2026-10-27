@@ -6,11 +6,8 @@ import type { Component } from "@earendil-works/pi-tui";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { agentsCmd } from "#module/subagents/agents-view";
+import { plainTheme as theme } from "../../fakes";
 
-const theme = {
-  fg: (_color: string, text: string) => text,
-  bg: (_color: string, text: string) => text,
-} as unknown as Theme;
 type Factory = (
   tui: { requestRender: () => void },
   theme: Theme,

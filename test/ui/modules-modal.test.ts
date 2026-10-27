@@ -1,20 +1,10 @@
-import { type ExtensionContext, initTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { type ExtensionContext, initTheme } from "@earendil-works/pi-coding-agent";
+import { beforeAll, describe, expect, it } from "vitest";
 import { ModuleLoadMode } from "#core/types";
 import { openModulesModal } from "#ui/modules-modal";
-import { fakeSession as fakeFor, fakeModule } from "../fakes";
+import { customPressing, fakeSession as fakeFor, fakeModule, KEY } from "../fakes";
 
-const SPACE = " ";
-const ENTER = "\r";
-const UP = "\x1b[A";
-
-const theme = {
-  fg: (_color: string, text: string) => text,
-  bg: (_color: string, text: string) => text,
-} as unknown as Theme;
-
-type Factory = (tui: unknown, theme: Theme, keybindings: unknown, done: (result: unknown) => void) => Component;
+const { SPACE, ENTER, UP } = KEY;
 
 // Modules a, b and c; a and c are running.
 function fakeSession() {
@@ -30,17 +20,9 @@ function fakeSession() {
   return session;
 }
 
-// Stands in for pi's ctx.ui.custom: builds the component, then presses the keys.
 function fakeContext(keys: string[], mode = "tui") {
-  const custom = vi.fn(
-    (factory: Factory, _options?: { overlay?: boolean }) =>
-      new Promise((resolve) => {
-        const component = factory({}, theme, {}, resolve);
-        for (const key of keys) component.handleInput?.(key);
-      }),
-  );
-  const ctx = { mode, ui: { custom } } as unknown as ExtensionContext;
-  return { ctx, custom };
+  const custom = customPressing(keys);
+  return { ctx: { mode, ui: { custom } } as unknown as ExtensionContext, custom };
 }
 
 /** Opens the modal, presses the keys, and returns the saved names as an array, or `undefined` on Escape. */

@@ -3,12 +3,37 @@ import {
   type ExtensionAPI,
   type ExtensionContext,
   type McpServerConfig,
+  type Theme,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import type { Component } from "@earendil-works/pi-tui";
 import { type Mock, vi } from "vitest";
 import { Session } from "#core/session";
 import type { Module, ModuleLoadMode } from "#core/types";
 import type { Project } from "#core/worktree/index";
+
+/** Key codes a test presses in a dialog. */
+export const KEY = { SPACE: " ", ENTER: "\r", ESCAPE: "\x1b", UP: "\x1b[A", DOWN: "\x1b[B" } as const;
+
+/** A theme that leaves text as it is, for tests that read a dialog's plain text. */
+export const plainTheme = {
+  fg: (_color: string, text: string) => text,
+  bg: (_color: string, text: string) => text,
+  bold: (text: string) => text,
+} as unknown as Theme;
+
+type DialogFactory = (tui: unknown, theme: Theme, keybindings: unknown, done: (result: unknown) => void) => Component;
+
+/** Stands in for pi's `ctx.ui.custom`: builds the component with `plainTheme`, then presses `keys`. */
+export function customPressing(keys: readonly string[] = []) {
+  return vi.fn(
+    (factory: DialogFactory, _options?: unknown) =>
+      new Promise<unknown>((resolve) => {
+        const component = factory({ requestRender: vi.fn() }, plainTheme, {}, resolve);
+        for (const key of keys) component.handleInput?.(key);
+      }),
+  );
+}
 
 /** A custom session entry, the way pi stores what `appendEntry` writes. */
 export const customEntry = (customType: string, data: unknown) => ({ type: "custom", customType, data });

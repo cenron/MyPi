@@ -2,15 +2,13 @@ import type { AgentToolResult, Theme } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { formatCall, formatResult } from "#tool/web-fetch/render";
 import type { FetchedDetails } from "#tool/web-fetch/types";
+import { plainTheme as plain } from "../../fakes";
 
 /** A theme that writes colors as tags, so tests can see which text got which color. */
 const theme = {
   fg: (color: string, text: string) => `<${color}>${text}</${color}>`,
   bold: (text: string) => `**${text}**`,
 } as unknown as Theme;
-
-/** A theme that adds nothing, for checking the words alone. */
-const plain = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as unknown as Theme;
 
 const DETAILS: FetchedDetails = {
   url: "https://example.com/page",
