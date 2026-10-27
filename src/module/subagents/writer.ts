@@ -92,9 +92,10 @@ export async function runWriter(session: Session, run: ChildRun, runChildSession
   const { agent, task, signal } = run;
   const prepared = await prepareWriter(session, agent);
   const writerTask =
-    "You work in your own worktree of this project. Make the changes directly in its files. Don't commit, and don't " +
-    "write patch files, even if asked: when you finish, MyPi turns your edits into a patch for the user.\n\n" +
-    task;
+    `You work in your own worktree of this project: ${prepared.path}. Make the changes directly in its files. ` +
+    `It holds the project's files at the same paths as ${prepared.main}; work on them here. Don't commit, ` +
+    "and don't write patch files, even if asked: when you finish, MyPi turns your edits into a patch for the user.\n\n" +
+    rewriteWriterTaskPaths(task, prepared.main, prepared.path);
   let result: ChildResult;
   try {
     result = await runChildSession({ ...run, task: writerTask }, prepared.path);
@@ -126,6 +127,13 @@ export async function runWriter(session: Session, run: ChildRun, runChildSession
     patchName: captured.patchPath ? captured.name : undefined,
     stopped: signal.aborted,
   };
+}
+
+/** Repoints task paths into the writer's worktree without rewriting paths already there. */
+function rewriteWriterTaskPaths(task: string, main: string, worktree: string): string {
+  return task.replaceAll(`${main}/`, (prefix, offset: number) =>
+    task.startsWith(`${worktree}/`, offset) ? prefix : `${worktree}/`,
+  );
 }
 
 /** Saves all work since `base`, including the writer's own commits, before discarding its checkout. */

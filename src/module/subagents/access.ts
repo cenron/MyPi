@@ -3,6 +3,7 @@ import { answeredItems, ask } from "#core/events";
 import { planRule } from "#core/plan-rule";
 import type { Session } from "#core/session";
 import { ToolGuard, type ToolRule } from "#core/tool-guard";
+import { isReadOnlyCommandWithChecks } from "#core/util/shell";
 import { registerRules, updatePromptPaths } from "#rule/index";
 import type { AgentDefinition } from "./agents";
 
@@ -20,10 +21,16 @@ export function childAccess(agent: AgentDefinition, checks: readonly string[] = 
   };
 }
 
-/** Plan's rule, except that an approved check command, exactly as written, runs without asking. */
+/** Plan's rule, except that approved checks may run as exact segments alongside readers. */
 export function readOnlyRule(checks: readonly string[]): ToolRule {
   return (call, context) => {
-    if (call.toolName === "bash" && checks.includes(String(call.input.command).trim())) return { kind: "allow" };
+    if (
+      call.toolName === "bash" &&
+      typeof call.input.command === "string" &&
+      isReadOnlyCommandWithChecks(call.input.command, checks)
+    ) {
+      return { kind: "allow" };
+    }
     return planRule(call, context);
   };
 }
@@ -32,7 +39,7 @@ export function readOnlyRule(checks: readonly string[]): ToolRule {
 export function checksPrompt(checks: readonly string[]): string {
   if (checks.length === 0) return "";
   const list = checks.map((command) => `\`${command}\``).join(", ");
-  return `\n\nYou may run the project's checks with bash, each exactly as written, with nothing added (no pipes, redirects, or extra arguments): ${list}.`;
+  return `\n\nYou may run the project's checks with bash, each exactly as written, alone or chained with read-only commands (no extra arguments or output redirects): ${list}.`;
 }
 
 /**

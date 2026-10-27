@@ -176,10 +176,37 @@ export function tokenize(command: string): Segment[] | undefined {
 export function isReadOnlyCommand(command: string): boolean {
   const scanned = scan(command);
   if (scanned === undefined || scanned.segments.length === 0) return false;
-  return scanned.segments.every(({ words: [name = "", ...args] }, i) => {
-    if (scanned.globbed[i] && !PLAIN_READERS.includes(name)) return false;
-    return READERS.get(name)?.(args) ?? false;
+  return scanned.segments.every((segment, i) => isReadOnlySegment(segment, scanned.globbed[i]));
+}
+
+/**
+ * `isReadOnlyCommand`, except that a segment that is exactly one of `checks` (the user's approved check commands) also
+ * passes, unless a `cd` comes before it: the check would then run in another folder. Redirects need no check of their
+ * own, since `scan` refuses every output redirect but `>/dev/null`.
+ */
+export function isReadOnlyCommandWithChecks(command: string, checks: readonly string[]): boolean {
+  const scanned = scan(command);
+  if (scanned === undefined || scanned.segments.length === 0) return false;
+
+  // Words joined on a character no command holds, so `a b` and `a` `b` never match.
+  const approved = new Set(
+    checks.flatMap((check) => {
+      const [only, ...rest] = tokenize(check) ?? [];
+      return only && rest.length === 0 ? [only.words.join("\0")] : [];
+    }),
+  );
+  let changedFolder = false;
+  return scanned.segments.every((segment, i) => {
+    const isCheck = !changedFolder && segment.inputs.length === 0 && approved.has(segment.words.join("\0"));
+    if (segment.words[0] === "cd") changedFolder = true;
+    return isCheck || isReadOnlySegment(segment, scanned.globbed[i]);
   });
+}
+
+/** One segment of `isReadOnlyCommand`: a known reader whose arguments pass, and a glob only for a plain reader. */
+function isReadOnlySegment({ words: [name = "", ...args] }: Segment, globbed = false): boolean {
+  if (globbed && !PLAIN_READERS.includes(name)) return false;
+  return READERS.get(name)?.(args) ?? false;
 }
 
 function scan(command: string): Scan | undefined {

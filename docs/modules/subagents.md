@@ -193,11 +193,11 @@ it here (no UI). Tell the user what you needed and why: …").
 
 - **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with the Plan rule (`planRule`, `src/core/plan-rule.ts`) on the child's guard: the
   same check as Plan, so `git log` runs and `touch` is refused. One exception: the project's check commands the user
-  already approved for the done check (`.pi/done-check.json`) run exactly as written, so a `reviewer` can run the
-  tests. Before a read-only run, `subagent` asks the done check for them on the event bus (`checkCommands`); it
-  answers only with a list the user approved on this machine, and never asks. The child's prompt names them, with
-  nothing added (a pipe or another argument is a different command, refused as before). With the done check off,
-  nobody answers and a child runs no checks.
+  already approved for the done check (`.pi/done-check.json`) may run exactly as written, alone or chained with
+  read-only commands; no extra arguments or output redirects. Before a read-only run, `subagent` asks the done check
+  for them on the event bus (`checkCommands`); it answers only with a list the user approved on this machine, and
+  never asks. A check after `cd` is refused because it would run in another folder. The child's prompt names the
+  approved commands. With the done check off, nobody answers and a child runs no checks.
 - **`write`:** pi's normal tools.
 - **Clearer refusals:** when there's no UI, `ToolGuard` says the call needs the user's approval and no one can give
   it here, then includes what needed confirming. When a child reports a refused call, the prompt tells the parent to
@@ -214,9 +214,11 @@ it here (no UI). Tell the user what you needed and why: …").
 - **Writers in parallel each get a worktree.** In a git project, up to three `write` runs work in separate managed
   worktrees; outside git, a single writer runs in place and says so (foreground and background alike).
 - **Children don't commit. A writer's work comes back as a patch:** the child runs in its worktree and is told not to
-  commit. On completion, including a stopped run, `writer.ts` captures the work, removes the worktree, and returns the
-  patch name and files; the main agent reviews it and uses `subagent_apply`. A dirty calling checkout refuses the run
-  and names the files; there is no fallback to in-place work.
+  commit. Paths in the task that name files under the main checkout are rewritten to the same paths in the writer's
+  worktree, and the opening prompt names that folder; paths already there stay unchanged. On completion, including a
+  stopped run, `writer.ts` captures the work, removes the worktree, and returns the patch name and files; the main
+  agent reviews it and uses `subagent_apply`. A dirty calling checkout refuses the run and names the files; there is
+  no fallback to in-place work.
   1. The worktree branches from the **calling checkout's committed `HEAD`** (decided 2026-10-25), matching
      `Session.worktrees.create`. If the parent works inside a worktree, the writer branches from that checkout,
      not the primary checkout. Storage remains under the main checkout's `.pi/worktrees/`. The clean-caller

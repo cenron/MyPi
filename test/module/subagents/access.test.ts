@@ -71,8 +71,16 @@ describe("a read-only child's checks", () => {
   it.each([
     ["an approved check, as written", "npm run check", true],
     ["an approved check with spaces around it", "  npm run check ", true],
-    ["an approved check piped", "npm run check | tail -5", false],
+    ["an approved check chained with readers", "git diff --check && npm run check", true],
+    ["an approved check piped to a reader with fd duplication", "npm run check 2>&1 | tail -40", true],
     ["an approved check with more arguments", "npm run check -- --watch", false],
+    ["an approved check redirected to a file", "npm run check > out.txt", false],
+    ["a reader with output redirected to null, as in Plan", "ls > /dev/null", true],
+    ["an approved check with stderr dropped", "npm run check 2>/dev/null", true],
+    ["an approved check after a reader that drops stderr", "rg foo 2>/dev/null && npm run check", true],
+    ["an approved check after cd", "cd .. && npm run check", false],
+    ["an approved check after a local cd", "cd . && npm run check", false],
+    ["an approved check chained with a writer", "npm run check && npm install", false],
     ["a command that isn't approved", "npm test", false],
     ["a read-only command, as before", "ls", true],
   ])("runs %s: %s", async (_name, command, runs) => {
@@ -87,5 +95,8 @@ describe("a read-only child's checks", () => {
   it("names the checks in the prompt, and adds nothing without them", () => {
     expect(checksPrompt([])).toBe("");
     expect(checksPrompt(["npm test", "npm run lint"])).toContain("`npm test`, `npm run lint`");
+    expect(checksPrompt(["npm test"])).toContain(
+      "each exactly as written, alone or chained with read-only commands (no extra arguments or output redirects)",
+    );
   });
 });

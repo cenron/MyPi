@@ -112,6 +112,10 @@ describe("writer work", () => {
     const fake = fakeSession([], main, { main, commonDir: join(main, ".git") });
     const run = async ({ task, signal }: { task: string; signal: AbortSignal }, cwd?: string) => {
       expect(task).toContain("don't write patch files");
+      expect(task).toContain(`It holds the project's files at the same paths as ${main}; work on them here.`);
+      expect(task).toContain(`${cwd}/src/a.ts`);
+      expect(task).toContain(`${cwd}/src/already-here.ts`);
+      expect(task).not.toContain(`${main}/src/a.ts`);
       expect(cwd).toContain("sub-developer-");
       await put(cwd as string, "partial.txt", "partial work\\n");
       expect(signal.aborted).toBe(true);
@@ -131,7 +135,7 @@ describe("writer work", () => {
       {
         parent: fake.session.ctx,
         agent: developer,
-        task: "Add a file",
+        task: `Add files ${main}/src/a.ts and ${main}/.pi/worktrees/sub-developer-1/src/already-here.ts`,
         settings: {},
         signal: controller.signal,
         onStep: () => {},

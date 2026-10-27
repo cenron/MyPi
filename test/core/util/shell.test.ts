@@ -109,6 +109,7 @@ describe("isReadOnlyCommand", () => {
     "grep -n foo src/*.ts; find . -type f",
     "wc -l docs/{cli,settings,models}.md",
     "grep -rn foo src 2>/dev/null | head -20",
+    "grep -q foo README.md >/dev/null",
     "echo 'a; rm b'",
     "tree -L 2",
     "file a.png",
