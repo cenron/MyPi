@@ -330,7 +330,7 @@ Deferred until internal agents work. The design so far:
 | Plan rule | `onToolCall` in `init()` | Read-only runs allowed, write runs blocked, while the parent is in Plan. |
 | Child session | `createAgentSession`, `ModelRuntime`, `SessionManager`, `resolveCliModel`, `DefaultResourceLoader` | All exported by pi 1.2.0; see "Spike results" below. Dispose a child with `session.dispose()`. |
 | Background | `session.jobs` (`JobManager`), with run details on the job | One list for `job_list`, `job_stop`, `job_wait`, and `/jobs`. |
-| Jobs view | `src/ui/` widget through `ctx.ui.setWidget`, plus `/jobs` | Lists every job, opens output, and stops running jobs; agent-definition management remains milestone 3. |
+| Jobs view | `src/ui/` widget through `ctx.ui.setWidget`, plus `/jobs` | Lists every job, opens output, and stops running jobs; agents are managed in `/agents`. |
 | Rendering | `renderCall` / `renderResult` | The agent and the task's first line; the child's last few steps; Ctrl+O expands. |
 
 ### Spike results (milestone 1 checkpoint 1, 2026-10-26)
@@ -368,8 +368,8 @@ A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscrip
 **Milestone 2: the jobs view and parallel writers**
 
 7. **Done 2026-10-26: Jobs view.** The below-editor line and `/jobs` list every session job, open output, and stop
-   running jobs. Agent-definition management remains milestone 3.
-8. Parallel writers, each in its own worktree (refused while the checkout has uncommitted changes); their work comes
+   running jobs.
+8. **Done 2026-10-26:** Parallel writers, each in its own worktree (refused while the checkout has uncommitted changes); their work comes
    back as a patch and a handoff file, applied through `subagent_apply` after I approve.
 
 **Milestone 3: creating agents**

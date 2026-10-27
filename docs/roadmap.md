@@ -87,7 +87,16 @@ Ideas from [inspiration](inspiration/README.md) that don't fold cleanly into the
   (outline, find_symbol, references, implementations, definition, diagnostics), and `lsp_edit` (rename).
 - [done-check](modules/done-check.md): when a Build run is about to end, LSP errors in the files it changed and the
   project's approved commands from `.pi/done-check.json`, sent back for the agent to fix or explain. Built with
-  MyPi's event bus (`src/core/events.ts`, `channels.ts`).
+  MyPi's event bus (`src/core/events.ts`, `channels.ts`). Also reports new names that already exist elsewhere (the
+  duplicate check, row 14).
+- [subagents](modules/subagents.md), milestones 1–3: `subagent` runs `explore`, `general`, `architect`, `developer`,
+  `reviewer`, and the user's own agents in child sessions, in the background as jobs; up to three writers in their own
+  worktrees return patches applied with `subagent_apply`; `/jobs` lists every job; `agent_manage` and `/agents`
+  create, edit, and delete agents. Later: fork context, steering a running child, and external agents.
+- [context](modules/context.md), pieces A–E: the plan file named in Build's section, steered compaction summaries,
+  and old tool results cleared.
+- [todo](modules/todo.md): Claude Code's task tools, the checklist above the editor, and a reminder after quiet
+  requests.
 - [folder-guard](rules/folder-guard.md), the first core rule: asks before a tool's `path` or a bash command reaches
   outside the session's folder; lsp roots never go above it.
 - Built-in tools: [web_search](tools/web-search.md), [web_fetch](tools/web-fetch.md),
