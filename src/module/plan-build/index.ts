@@ -24,11 +24,18 @@ const FOOTER_ITEMS: Record<Mode, FooterItem> = {
 };
 
 /** Plan, a mode that investigates and plans without changing the project, and Build, which implements. */
-export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thinking?: ThinkingLevel }> {
+export class PlanBuildModule extends BaseModule<{
+  mode: Mode;
+  plan?: string;
+  thinking?: ThinkingLevel;
+  model?: string;
+}> {
   private readonly plansDir = join(this.session.projectRoot, PLANS_DIR);
   private mode: Mode = Mode.PLAN;
   /** The plan file a Build session is implementing: named in its prompt section, saved with the mode, dropped on Plan. */
   private plan: string | undefined;
+  /** The switch to what `/plan implement` carried over, which the first run waits for. */
+  private carrying: Promise<void> | undefined;
   /** The plan `submit_plan` saved in this run, until the dialog takes it or the next run starts. In memory only. */
   private submittedPlan: SubmittedPlan | undefined;
 
@@ -36,8 +43,8 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thi
   private readonly planCommand = planCmd(this.plansDir, {
     toggleMode: () => this.toggleMode(),
     setMode: (mode) => this.setMode(mode),
-    saveBuildTo: (sessionManager, plan, thinking) =>
-      this.saveStateTo(sessionManager, { mode: Mode.BUILD, plan, thinking }),
+    saveBuildTo: (sessionManager, plan, carried) =>
+      this.saveStateTo(sessionManager, { mode: Mode.BUILD, plan, ...carried }),
     getThinkingLevel: () => this.session.pi.getThinkingLevel(),
     jobs: this.session.jobs,
   });
@@ -55,7 +62,7 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thi
     const saved = this.loadState();
     this.mode = isMode(saved?.mode) ? saved.mode : Mode.PLAN;
     this.plan = typeof saved?.plan === "string" ? saved.plan : undefined;
-    this.restoreThinking(saved?.thinking);
+    this.carrying = this.restoreCarried(saved?.model, saved?.thinking);
     this.setFooter(FOOTER_ITEMS[this.mode]);
     this.setPrompt(this.currentPrompt());
     // On resume and /reload pi restores the active tools from the transcript, so this only fixes up a new session.
@@ -84,9 +91,14 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thi
     return [submitPlanTool(this.plansDir, (plan) => (this.submittedPlan = plan)), askUserTool()];
   }
 
-  /** A new run starts with no plan: one submitted in an earlier run belongs to that run. */
-  private onRunStart() {
+  /**
+   * A new run starts with no plan: one submitted in an earlier run belongs to that run. The first run waits for the
+   * model and thinking level `/plan implement` carried over, so its first request already uses them.
+   */
+  private async onRunStart() {
     this.submittedPlan = undefined;
+    await this.carrying;
+    this.carrying = undefined;
   }
 
   /**
@@ -114,14 +126,29 @@ export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thi
   }
 
   /**
-   * Sets the thinking level `/plan implement` carried over from the session it left, then drops it from the saved
-   * state: pi records the level itself, so a later resume keeps any level the user picked since.
+   * Switches to the model and thinking level `/plan implement` carried over from the session it left, the model first
+   * (switching models can change the level), then drops them from the saved state: pi records both itself, so a later
+   * resume keeps whatever the user picked since. A model that can't be used is reported, not replaced silently.
    */
-  private restoreThinking(thinking: unknown) {
-    if (thinking === undefined) return;
+  private async restoreCarried(model: unknown, thinking: unknown) {
+    if (model === undefined && thinking === undefined) return;
 
+    if (typeof model === "string") await this.switchModel(model);
     if (isThinkingLevel(thinking)) this.session.pi.setThinkingLevel(thinking);
     this.saveState({ mode: this.mode, plan: this.plan });
+  }
+
+  private async switchModel(name: string) {
+    const slash = name.indexOf("/");
+    const found =
+      slash > 0 ? this.session.ctx.modelRegistry.find(name.slice(0, slash), name.slice(slash + 1)) : undefined;
+    if (found && (await this.session.pi.setModel(found))) return;
+
+    const current = this.session.ctx.model;
+    this.session.logWarning(
+      `Plan: couldn't switch to ${name}, the model the plan was made with (${found ? "no login for it" : "unknown model"}); ` +
+        `this session uses ${current ? `${current.provider}/${current.id}` : "no model"}. Pick one with /model.`,
+    );
   }
 
   private toggleMode() {

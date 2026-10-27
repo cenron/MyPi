@@ -78,6 +78,51 @@ describe("PlanBuildModule", () => {
     expect(appendEntry).toHaveBeenCalledWith("mypi-module-plan-build", { mode: "build", plan: ".pi/plans/p.md" });
   });
 
+  // A new session starts on the settings' default model; seen 2026-10-26 when a DeepSeek checkpoint opened on GPT.
+  it("switches to the carried model before the first run, then sets the thinking level", async () => {
+    const entry = customEntry("mypi-module-plan-build", {
+      mode: "build",
+      thinking: "low",
+      model: "opencode-go/ds-flash",
+    });
+    const { session, emit, appendEntry } = fakeSession([entry]);
+    new PlanBuildModule(session).init();
+    await emit("before_agent_start", { type: "before_agent_start" });
+
+    expect(session.pi.setModel).toHaveBeenCalledWith({ provider: "opencode-go", id: "ds-flash" });
+    expect(vi.mocked(session.pi.setModel).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(session.pi.setThinkingLevel).mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(appendEntry).toHaveBeenLastCalledWith("mypi-module-plan-build", { mode: "build", plan: undefined });
+  });
+
+  it("holds the first run until the carried model is set", async () => {
+    const entry = customEntry("mypi-module-plan-build", { mode: "build", model: "opencode-go/ds-flash" });
+    const { session, emit } = fakeSession([entry]);
+    let finishSwitch = (_ok: boolean) => {};
+    vi.mocked(session.pi.setModel).mockReturnValueOnce(new Promise((resolve) => (finishSwitch = resolve)));
+    new PlanBuildModule(session).init();
+
+    let started = false;
+    const run = emit("before_agent_start", { type: "before_agent_start" }).then(() => (started = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(started).toBe(false);
+
+    finishSwitch(true);
+    await run;
+    expect(started).toBe(true);
+  });
+
+  it("says so when the carried model can't be used, and keeps the session's", async () => {
+    const entry = customEntry("mypi-module-plan-build", { mode: "build", model: "opencode-go/ds-flash" });
+    const { session, emit, notify } = fakeSession([entry]);
+    vi.mocked(session.pi.setModel).mockResolvedValueOnce(false);
+    new PlanBuildModule(session).init();
+    await emit("before_agent_start", { type: "before_agent_start" });
+
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("couldn't switch to opencode-go/ds-flash"), "warning");
+  });
+
   it("drops an invalid saved thinking level without restoring it", () => {
     const { session, appendEntry } = fakeSession([saved("build", undefined, "extreme")]);
     new PlanBuildModule(session).init();

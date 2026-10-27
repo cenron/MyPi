@@ -68,13 +68,14 @@ describe("implementInNewSession", () => {
     return path;
   };
 
-  it("seeds the new session with the current thinking level", async () => {
+  it("seeds the new session with the current thinking level and model", async () => {
     const { ctx, newSession, newManager } = fakeCommandContext(cwd);
     const seed = vi.fn();
     const getThinkingLevel = vi.fn(() => "low" as const);
-    await implementInNewSession(ctx, await writePlan(), jobs, getThinkingLevel, seed);
+    const withModel = { ...ctx, model: { provider: "opencode-go", id: "deepseek-v4.1-flash" } } as typeof ctx;
+    await implementInNewSession(withModel, await writePlan(), jobs, getThinkingLevel, seed);
     expect(getThinkingLevel).toHaveBeenCalledOnce();
-    expect(seed).toHaveBeenCalledWith(newManager, "low");
+    expect(seed).toHaveBeenCalledWith(newManager, { thinking: "low", model: "opencode-go/deepseek-v4.1-flash" });
     expect(newSession.mock.invocationCallOrder[0]).toBeGreaterThan(getThinkingLevel.mock.invocationCallOrder[0] ?? 0);
   });
 

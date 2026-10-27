@@ -284,6 +284,10 @@ built it in a sub-folder.
     restores it once, then drops it from module state so later resumes respect a level the user picked. The dialog's
     Clear context choice uses the same command. Task seeding lives in [todo](todo.md)'s own prompt section, not
     `buildPrompt(plan)`, so disabling todo removes its instructions.
+    **2026-10-26: the model goes along too.** A new session starts on the settings' default model, so a checkpoint
+    meant for DeepSeek opened on GPT. `/plan implement` saves the model (`provider/id`) beside the thinking level;
+    the new session switches to it (`ctx.modelRegistry.find`, `pi.setModel`), then sets the level, and its first run
+    waits for the switch. A model that can't be used (unknown, or no login) is reported, and the session keeps its own.
 
 ## Open questions
 

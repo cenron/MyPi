@@ -95,6 +95,7 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: 
     getActiveTools: () => [...activeTools],
     getThinkingLevel: vi.fn(() => "high" as const),
     setThinkingLevel: vi.fn(),
+    setModel: vi.fn(async () => true),
     setActiveTools: vi.fn((names: string[]) => {
       activeTools = names.filter((name) => builtins.includes(name) || tools.has(name));
     }),
@@ -103,6 +104,7 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: 
     hasUI: true,
     cwd,
     isProjectTrusted: () => false,
+    modelRegistry: { find: vi.fn((provider: string, id: string) => ({ provider, id })) },
     ui,
     sessionManager: { getBranch: () => branch },
   } as unknown as ExtensionContext;
