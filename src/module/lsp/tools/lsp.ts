@@ -5,7 +5,7 @@ import { Type } from "typebox";
 import { resolveToolPath } from "#core/util/paths";
 import type { ServerManager } from "../manager";
 import { diagnostics } from "./diagnostics";
-import { findInFile, findInProject, outline } from "./find";
+import { declaringFile, findInFile, findInProject, outline } from "./find";
 import { definition, implementations, references } from "./navigate";
 
 const parameters = Type.Object({
@@ -28,9 +28,8 @@ const parameters = Type.Object({
   path: Type.Optional(
     Type.String({
       description:
-        "find_symbol: a file, or a folder inside a project, to search in; without it, the project of the current " +
-        "folder is searched. references and implementations: the file that declares the symbol. Every other action: " +
-        "the file (required).",
+        "find_symbol, references, implementations: a file, or a folder inside a project, to search in; without " +
+        "it, the project of the current folder is searched. Every other action: the file (required).",
     }),
   ),
   name_path: Type.Optional(
@@ -84,6 +83,11 @@ export function lspTool(servers: ServerManager) {
         if (!namePath) throw new Error(`${action} needs a name_path, such as ServerManager/touch.`);
         return namePath;
       };
+      // references and implementations start from the declaring file; given a folder or no path, it's looked up.
+      const declaration = async () =>
+        path !== undefined && !folder
+          ? path
+          : declaringFile(servers, pattern(), path ?? cwd, path !== undefined, cwd, signal);
 
       let text: string;
       switch (action) {
@@ -99,10 +103,10 @@ export function lspTool(servers: ServerManager) {
           break;
         }
         case "references":
-          text = await references(servers, file(), pattern(), cwd, signal);
+          text = await references(servers, await declaration(), pattern(), cwd, signal);
           break;
         case "implementations":
-          text = await implementations(servers, file(), pattern(), cwd, signal);
+          text = await implementations(servers, await declaration(), pattern(), cwd, signal);
           break;
         case "definition": {
           if (!params.name) throw new Error("definition needs a name, as used in the file.");

@@ -85,7 +85,7 @@ dispatches; each action's code is in `find.ts`, `navigate.ts`, or `diagnostics.t
 | Parameter | For | Meaning |
 |---|---|---|
 | `action` | all | `outline`, `find_symbol`, `references`, `implementations`, `definition`, or `diagnostics`. |
-| `path` | all; optional only for `find_symbol` | Resolved like `read`'s path. `find_symbol` takes a file, to search only it, or a folder inside a project, to search that project and keep only matches inside the folder; without it, the search covers the project of the session's folder. Every other action takes a file (a folder is an error): for `references` and `implementations`, the file that declares the symbol, as Serena asks. |
+| `path` | all; optional for `find_symbol`, `references`, and `implementations` | Resolved like `read`'s path. `find_symbol` takes a file, to search only it, or a folder inside a project, to search that project and keep only matches inside the folder; without it, the search covers the project of the session's folder. `references` and `implementations` start from the file that declares the symbol: given a folder or no path, they look it up the same way and use its file when exactly one symbol matches, else they list the matches (every model tried passed a folder first, 2026-10-26). Every other action takes a file (a folder is an error). |
 | `name_path` | `find_symbol`, `references`, `implementations` (required); `definition` (optional) | Which symbol, by Serena's rule (below). For `definition`, the symbol to look for the name in. |
 | `name` | `definition` | The name as used in the file, one identifier: its first whole-word use in the file, or in the `name_path` symbol, is what's looked up. |
 | `include_body` | `find_symbol`, `definition` | `true` adds each symbol's source. Off by default, so finding where something is stays cheap. |
@@ -359,7 +359,8 @@ export const SERVERS = [
 - Changes on disk, from the agent or anything else, are found by checking modification times before each project
   search, not by a watcher.
 - References, implementations, and rename take the file that declares the symbol, as Serena's tools do; definition
-  takes a name as used in a file, not a line and column (2026-10-24).
+  takes a name as used in a file, not a line and column (2026-10-24). References and implementations also take a
+  folder, or no path, and look the declaring file up (2026-10-26).
 - Code from outside the session's folder isn't shown, and a rename that would change a file outside it changes
   nothing (2026-10-24, with the [folder guard](../rules/folder-guard.md)).
 

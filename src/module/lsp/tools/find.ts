@@ -72,25 +72,9 @@ export async function findInProject(
   cwd: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const lookups = await servers.projectClients(dir);
-  if (lookups.length === 0) {
-    throw new Error(
-      `No language server's project files (such as package.json or go.mod) at or above ${displayPath(dir, cwd)}; ` +
-        "pass a file, or a folder inside a project, as path.",
-    );
-  }
-
-  const readies = lookups.filter((lookup) => lookup.kind === "ready");
-  const others = lookups.filter((lookup) => lookup.kind !== "ready");
-  if (readies.length === 0) throw new Error(others.map(unavailable).join("\n"));
-
+  const { readies, others } = await projectsAt(servers, dir, cwd);
   const inside = narrow ? dir : undefined;
-  const found: Found = { matches: [], unchecked: 0 };
-  for (const lookup of readies) {
-    const result = await searchProject(lookup, query.pattern, inside, signal);
-    found.matches.push(...result.matches);
-    found.unchecked += result.unchecked;
-  }
+  const found = await searchProjects(readies, query.pattern, inside, signal);
 
   const where = readies.map((lookup) => {
     const project = `the ${lookup.spec.language} project in ${lookup.root}`;
@@ -98,6 +82,33 @@ export async function findInProject(
   });
   const notSearched = others.map((lookup) => `Not searched: ${unavailable(lookup)}`);
   return [answer(found, query, where, cwd), ...notSearched].join("\n\n");
+}
+
+/**
+ * The file that declares the symbol `pattern` names, searched for in `dir` (only inside it with `narrow`), for the
+ * actions that start from a declaration. Models pass a folder there as often as a file. Throws, listing what it found,
+ * unless exactly one symbol matches.
+ */
+export async function declaringFile(
+  servers: ServerManager,
+  pattern: string,
+  dir: string,
+  narrow: boolean,
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const { readies } = await projectsAt(servers, dir, cwd);
+  const { matches } = await searchProjects(readies, pattern, narrow ? dir : undefined, signal);
+  const [only] = matches;
+  if (matches.length === 1 && only) return only.file;
+
+  const where = displayPath(dir, cwd);
+  if (matches.length === 0)
+    throw new Error(`No symbol matches ${pattern} in ${where}; pass the file that declares it.`);
+  const places = matches.map(({ file, symbol }) => `  ${symbol.path.join("/")} (${displayPath(file, cwd)})`);
+  throw new Error(
+    `${matches.length} symbols match ${pattern} in ${where}; pass one's file as path:\n${places.join("\n")}`,
+  );
 }
 
 /** A symbol's source lines from the text the server read. */
@@ -130,6 +141,38 @@ function answer(found: Found, query: Query, where: string[], cwd: string): strin
   const verb = found.matches.length === 1 ? "matches" : "match";
   const header = `${counted(found.matches.length, "symbol")} ${verb} ${query.pattern} in ${place}:`;
   return capAnswer(header, blocks, "symbol", NARROW) + unchecked;
+}
+
+/** The language server projects `dir` is in, split into the ones ready to search and the rest. */
+async function projectsAt(servers: ServerManager, dir: string, cwd: string) {
+  const lookups = await servers.projectClients(dir);
+  if (lookups.length === 0) {
+    throw new Error(
+      `No language server's project files (such as package.json or go.mod) at or above ${displayPath(dir, cwd)}; ` +
+        "pass a file, or a folder inside a project, as path.",
+    );
+  }
+
+  const readies = lookups.filter((lookup): lookup is ReadyLookup => lookup.kind === "ready");
+  const others = lookups.filter((lookup) => lookup.kind !== "ready");
+  if (readies.length === 0) throw new Error(others.map(unavailable).join("\n"));
+  return { readies, others };
+}
+
+/** Every ready project's matches for `pattern`, and how many candidate files weren't opened. */
+async function searchProjects(
+  readies: readonly ReadyLookup[],
+  pattern: string,
+  inside: string | undefined,
+  signal?: AbortSignal,
+): Promise<Found> {
+  const found: Found = { matches: [], unchecked: 0 };
+  for (const lookup of readies) {
+    const result = await searchProject(lookup, pattern, inside, signal);
+    found.matches.push(...result.matches);
+    found.unchecked += result.unchecked;
+  }
+  return found;
 }
 
 /**

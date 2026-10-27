@@ -88,12 +88,25 @@ describe("lsp references", () => {
     expect(await run({ action: "references", path, name_path: namePath })).toContain(message);
   });
 
+  // Every model tried passed a folder first (2026-10-26), so a folder or no path finds the declaring file.
   it.each([
-    ["without a file", { action: "references", name_path: "touch" }, "references needs a path to a file."],
-    ["for a folder", { action: "references", path: "src", name_path: "touch" }, "references needs a file; src is"],
-    ["without a name path", { action: "references", path: "src/server.ts" }, "references needs a name_path"],
-  ])("fails %s", async (_case, params, message) => {
-    expect(await run(params)).toContain(message);
+    ["a folder", { path: "src" }],
+    ["no path, the project", {}],
+  ])("finds the declaring file from %s", async (_case, where) => {
+    expect(await run({ action: "references", name_path: "ServerManager/touch", ...where })).toMatch(
+      /^3 references to ServerManager\/touch \(src\/server\.ts:2\):/,
+    );
+  });
+
+  it.each([
+    ["several symbols match", "touch", "2 symbols match touch in src; pass one's file as path:"],
+    ["none matches", "nope", "No symbol matches nope in src; pass the file that declares it."],
+  ])("fails when %s in a folder, saying what it found", async (_case, namePath, message) => {
+    expect(await run({ action: "references", path: "src", name_path: namePath })).toContain(message);
+  });
+
+  it("fails without a name path", async () => {
+    expect(await run({ action: "references", path: "src/server.ts" })).toContain("references needs a name_path");
   });
 });
 
