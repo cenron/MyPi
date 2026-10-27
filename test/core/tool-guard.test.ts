@@ -1,11 +1,27 @@
 import { homedir } from "node:os";
-import type { ExtensionAPI, ExtensionContext, ToolAnnotations, ToolCallEvent } from "@earendil-works/pi-coding-agent";
+import {
+  createEventBus,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type ToolAnnotations,
+  type ToolCallEvent,
+} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import type { Approval } from "#core/channels";
+import { subscribe } from "#core/events";
 import { previewAsk, ToolGuard, type ToolRule, type Verdict } from "#core/tool-guard";
 
-/** A guard over a fake pi whose `getAllTools()` lists `tools`. */
+/** A guard over a fake pi whose `getAllTools()` lists `tools`, with a real bus its dialogs publish on. */
 function newGuard(tools: { name: string; annotations?: ToolAnnotations }[] = []) {
-  return new ToolGuard({ getAllTools: () => tools } as unknown as ExtensionAPI);
+  const pi = { getAllTools: () => tools, events: createEventBus() } as unknown as ExtensionAPI;
+  return new ToolGuard(pi);
+}
+
+/** The approvals a guard publishes, collected until the test ends. */
+function collecting(guard: ToolGuard): Approval[] {
+  const approvals: Approval[] = [];
+  subscribe(guard.pi.events, "approval", (approval) => approvals.push(approval));
+  return approvals;
 }
 
 /**
@@ -20,7 +36,14 @@ function fakeContext(options: { hasUI?: boolean; answer?: string | undefined } =
     async (_title: string, _options: string[], _opts?: { signal?: AbortSignal }): Promise<string | undefined> => answer,
   );
   const signal = new AbortController().signal;
-  const ctx = { cwd: "/project", hasUI, signal, ui: { select } } as unknown as ExtensionContext;
+  const ctx = {
+    cwd: "/project",
+    hasUI,
+    signal,
+    ui: { select },
+    model: { provider: "openai", id: "gpt-6-luna" },
+    thinkingLevel: "high",
+  } as unknown as ExtensionContext;
   return { ctx, select, signal };
 }
 
@@ -290,6 +313,84 @@ describe("ToolGuard", () => {
     expect(result?.reason).toContain("no one can give it here");
     expect(result?.reason).toContain("one: Run ls?");
     expect(select).not.toHaveBeenCalled();
+  });
+
+  describe("the approval notice", () => {
+    it.each([
+      ["Yes", { answer: "Yes" }, "yes"],
+      ["No", { answer: "No" }, "no"],
+      ["Escape or abort", { answer: undefined }, "no"],
+      ["Allow for this session", { answer: "Allow for this session" }, "session"],
+      ["no UI", { hasUI: false }, "no-ui"],
+    ])("carries %s as its choice", async (_case, options, choice) => {
+      const guard = newGuard();
+      guard.set("plan-build", ask("Run ls?"));
+      const approvals = collecting(guard);
+      await guard.check(event(), fakeContext(options).ctx);
+      expect(approvals).toEqual([
+        { rules: ["plan-build"], choice, provider: "openai", model: "gpt-6-luna", thinking: "high" },
+      ]);
+    });
+
+    // The choice is what the notice is about, so it can't go out while the dialog is still open.
+    it("goes out after the user has chosen", async () => {
+      const guard = newGuard();
+      guard.set("one", ask("Run ls?"));
+      const approvals = collecting(guard);
+      const { ctx, select } = fakeContext({ answer: "Yes" });
+      select.mockImplementation(async () => {
+        expect(approvals).toEqual([]);
+        return "Yes";
+      });
+      await guard.check(event(), ctx);
+      expect(approvals).toHaveLength(1);
+    });
+
+    it("names every asking rule once, and nothing else", async () => {
+      const guard = newGuard();
+      guard.set("one", rule({ kind: "ask", questions: ["Reach /a?", "Reach /b?"] }));
+      guard.set("quiet", allow);
+      guard.set("two", ask("Really?"));
+      const approvals = collecting(guard);
+      await guard.check(event(), fakeContext().ctx);
+      expect(approvals).toEqual([
+        { rules: ["one", "two"], choice: "yes", provider: "openai", model: "gpt-6-luna", thinking: "high" },
+      ]);
+    });
+
+    it.each([
+      ["no rule asks", () => {}],
+      ["every rule allows", (guard: ToolGuard) => guard.set("one", allow)],
+      ["a block wins", (guard: ToolGuard) => guard.set("blocker", block("no"))],
+    ])("doesn't go out when %s", async (_case, setup) => {
+      const guard = newGuard();
+      setup(guard);
+      const approvals = collecting(guard);
+      await guard.check(event(), fakeContext().ctx);
+      expect(approvals).toEqual([]);
+    });
+
+    // "Allow for this session" remembers the ask lines, so a later identical call shows no dialog to report.
+    it("doesn't go out again for an ask the session already allowed", async () => {
+      const guard = newGuard();
+      guard.set("one", ask("Run ls?"));
+      const approvals = collecting(guard);
+      const { ctx } = fakeContext({ answer: "Allow for this session" });
+      await guard.check(event(), ctx);
+      await guard.check(event(), ctx);
+      expect(approvals).toHaveLength(1);
+    });
+
+    it("says unknown when the call has no model or thinking level", async () => {
+      const guard = newGuard();
+      guard.set("one", ask("Run ls?"));
+      const approvals = collecting(guard);
+      const { ctx } = fakeContext();
+      await guard.check(event(), { ...ctx, model: undefined, thinkingLevel: undefined } as ExtensionContext);
+      expect(approvals).toEqual([
+        { rules: ["one"], choice: "yes", provider: "unknown", model: "unknown", thinking: "unknown" },
+      ]);
+    });
   });
 
   // Pi turns a handler's throw into a blocked call, so a broken rule fails closed.

@@ -1,7 +1,9 @@
 import type {
+  ApprovalTotals,
   DoneCheckTotals,
   FailureTotals,
   NavigationTotals,
+  RuleTotals,
   ShellTotals,
   SubagentTotals,
   TaskTotals,
@@ -25,6 +27,8 @@ export type AnalyticsReport = {
   doneChecks: readonly DoneCheckTotals[];
   tasks: readonly TaskTotals[];
   subagents: readonly SubagentTotals[];
+  approvals: readonly ApprovalTotals[];
+  approvalRules: readonly RuleTotals[];
   skippedSessions: number;
 };
 
@@ -40,6 +44,8 @@ export function renderAnalyticsReport(report: AnalyticsReport, period: ReportPer
   if (navigation !== undefined) sections.push(navigation);
   const features = featureLines(report);
   if (features !== undefined) sections.push(features);
+  const friction = frictionLines(report.approvals, report.approvalRules);
+  if (friction !== undefined) sections.push(friction);
   if (report.skippedSessions > 0) {
     sections.push(`${formatCount(report.skippedSessions, "other pi session")} skipped`);
   }
@@ -125,6 +131,28 @@ function featureLines(report: AnalyticsReport): string | undefined {
     );
   }
   return lines.length === 1 ? undefined : lines.join("\n");
+}
+
+/** The dialogs each model ran into, by choice, then each rule that asked and how often it lost. */
+function frictionLines(approvals: readonly ApprovalTotals[], rules: readonly RuleTotals[]): string | undefined {
+  if (approvals.length === 0) return undefined;
+
+  const width = Math.max(...approvals.map((row) => modelLabel(row).length));
+  const lines = ["Permission dialogs"];
+  for (const row of approvals) {
+    lines.push(
+      `${modelLabel(row).padEnd(width)}   ${formatCount(row.dialogs, "dialog")} · yes ${row.yes} · no ${row.no} · ` +
+        `session ${row.session} · no UI ${row.noUi}`,
+    );
+  }
+  const ruleWidth = Math.max(...rules.map((row) => row.rule.length));
+  for (const row of rules) {
+    lines.push(
+      `  ${row.rule.padEnd(ruleWidth)} ${formatCount(row.dialogs, "dialog")} · yes ${row.yes} · no ${row.no} · ` +
+        `session ${row.session} · no UI ${row.noUi}`,
+    );
+  }
+  return lines.join("\n");
 }
 
 function modelLabel(row: { provider: string; model: string; thinking: string }): string {

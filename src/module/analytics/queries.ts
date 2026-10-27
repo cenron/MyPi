@@ -44,6 +44,21 @@ export type SubagentTotals = {
   cost: number;
 };
 
+/** Permission dialogs in one provider, model, and thinking-level group, by how each ended. */
+export type ApprovalTotals = {
+  provider: string;
+  model: string;
+  thinking: string;
+  dialogs: number;
+  yes: number;
+  no: number;
+  session: number;
+  noUi: number;
+};
+
+/** Permission dialogs one rule asked for, and how many it lost. */
+export type RuleTotals = { rule: string; dialogs: number; yes: number; no: number; session: number; noUi: number };
+
 /** Usage totals grouped by provider, model, and thinking level since a timestamp. */
 export function usageTotals(store: AnalyticsStore, since: number | undefined): UsageTotals[] {
   return store.database
@@ -151,6 +166,35 @@ export function subagentTotals(store: AnalyticsStore, since: number | undefined)
        ${where} GROUP BY agent, u.provider, u.model, u.thinking ORDER BY agent, u.provider, u.model, u.thinking`,
     )
     .all(...sinceArgs(since)) as SubagentTotals[];
+}
+
+/** Permission dialogs per model since a timestamp, counted once each however many rules asked. */
+export function approvalTotals(store: AnalyticsStore, since: number | undefined): ApprovalTotals[] {
+  return store.database
+    .prepare(
+      `SELECT provider, model, thinking, COUNT(DISTINCT dialog_id) AS dialogs,
+        ${choiceCount("yes")} AS yes, ${choiceCount("no")} AS no, ${choiceCount("session")} AS session,
+        ${choiceCount("no-ui")} AS noUi
+       FROM approvals ${sinceClause(since)}
+       GROUP BY provider, model, thinking ORDER BY provider, model, thinking`,
+    )
+    .all(...sinceArgs(since)) as ApprovalTotals[];
+}
+
+/** Permission dialogs per rule since a timestamp, most asked first, with the ones the user refused. */
+export function ruleTotals(store: AnalyticsStore, since: number | undefined): RuleTotals[] {
+  return store.database
+    .prepare(
+      `SELECT rule, COUNT(DISTINCT dialog_id) AS dialogs, ${choiceCount("yes")} AS yes, ${choiceCount("no")} AS no,
+        ${choiceCount("session")} AS session, ${choiceCount("no-ui")} AS noUi
+       FROM approvals ${sinceClause(since)}
+       GROUP BY rule ORDER BY dialogs DESC, rule`,
+    )
+    .all(...sinceArgs(since)) as RuleTotals[];
+}
+
+function choiceCount(choice: string): string {
+  return `COUNT(DISTINCT CASE WHEN choice = '${choice}' THEN dialog_id END)`;
 }
 
 function sinceClause(since: number | undefined): string {

@@ -6,6 +6,8 @@ import type {
   ToolCallEvent,
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
+import type { Approval, ApprovalChoice } from "./channels";
+import { publish } from "./events";
 
 /**
  * A rule's answer: no objection, a block with the reason the model sees, or questions for the user. Each question is
@@ -157,23 +159,25 @@ export class ToolGuard {
 
     const lines = pending.map(({ name, question }) => `${name}: ${question}`);
     const details = lines.map(previewAsk).join("\n\n");
-    if (!ctx.hasUI) return blocked(`${NO_UI_REFUSAL}\n ${details}`);
+    const choice = ctx.hasUI ? await this.choose(ctx, details) : "no-ui";
+    publish(this.pi.events, "approval", approval(ctx, pending, choice));
 
-    // Esc and an abort resolve undefined, which declines like No.
-    const choice = await ctx.ui.select(`Permission required\n${details}`, Object.values(Choice), {
+    if (choice === "session") {
+      for (const line of lines) this.allowed.add(line);
+      for (const onAllowSession of new Set(pending.map((ask) => ask.onAllowSession))) onAllowSession?.();
+    }
+    if (choice === "no-ui") return blocked(`${NO_UI_REFUSAL}\n ${details}`);
+    if (choice === "no") return blocked("The user declined this call.");
+    return undefined;
+  }
+
+  /** Asks the user; Esc and an abort resolve undefined, which declines like No. */
+  private async choose(ctx: ExtensionContext, details: string): Promise<ApprovalChoice> {
+    const answer = await ctx.ui.select(`Permission required\n${details}`, Object.values(Choice), {
       signal: ctx.signal,
     });
-
-    switch (choice) {
-      case Choice.ALLOW_SESSION:
-        for (const line of lines) this.allowed.add(line);
-        for (const onAllowSession of new Set(pending.map((ask) => ask.onAllowSession))) onAllowSession?.();
-        return undefined;
-      case Choice.YES:
-        return undefined;
-      default: // No, Esc, or an abort
-        return blocked("The user declined this call.");
-    }
+    if (answer === Choice.ALLOW_SESSION) return "session";
+    return answer === Choice.YES ? "yes" : "no";
   }
 
   /** The call as rules see it, with the annotations pi lists for the tool, if any. */
@@ -181,6 +185,17 @@ export class ToolGuard {
     const toolInfo = this.pi.getAllTools().find((tool) => tool.name === ev.toolName);
     return { toolName: ev.toolName, input: ev.input, annotations: toolInfo?.annotations };
   }
+}
+
+/** What the approval notice carries: who asked, the choice, and the call's model. No question text. */
+function approval(ctx: ExtensionContext, pending: readonly ToolApprovalRequest[], choice: ApprovalChoice): Approval {
+  return {
+    rules: [...new Set(pending.map(({ name }) => name))],
+    choice,
+    provider: ctx.model?.provider ?? "unknown",
+    model: ctx.model?.id ?? "unknown",
+    thinking: ctx.thinkingLevel ?? "unknown",
+  };
 }
 
 function blocked(reason: string): ToolCallEventResult {

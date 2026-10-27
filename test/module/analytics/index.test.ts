@@ -2,10 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { publish } from "#core/events";
 import { DONE_CHECK_NOTICE } from "#core/job-notice";
 import { MYPI_SESSION_MARKER_TYPE } from "#core/session-marker";
 import { AnalyticsModule } from "#module/analytics/index";
-import { usageTotals } from "#module/analytics/queries";
+import { approvalTotals, usageTotals } from "#module/analytics/queries";
 import { AnalyticsStore } from "#module/analytics/store";
 import { fakeSession } from "../../fakes";
 
@@ -306,6 +307,54 @@ describe("AnalyticsModule", () => {
     store.close();
   });
 
+  it("records a permission dialog published while it runs", async () => {
+    const agentDir = await mkdtemp(join(tmpdir(), "mypi-analytics-module-"));
+    folders.push(agentDir);
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+
+    const fake = fakeSession();
+    const module = new AnalyticsModule(fake.session);
+    module.init();
+    publish(fake.session.pi.events, "approval", {
+      rules: ["plan-build"],
+      choice: "no",
+      provider: "openai",
+      model: "gpt-6-luna",
+      thinking: "high",
+    });
+    const command = module.commands()[0];
+    await vi.waitFor(async () => {
+      const report = await command?.execute({} as never, ["all"]);
+      expect(report).toContain(
+        "Permission dialogs\nopenai/gpt-6-luna · high   1 dialog · yes 0 · no 1 · session 0 · no UI 0\n" +
+          "  plan-build 1 dialog · yes 0 · no 1 · session 0 · no UI 0",
+      );
+    });
+    await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
+  });
+
+  it("finishes recording a permission dialog before shutdown closes the store", async () => {
+    const agentDir = await mkdtemp(join(tmpdir(), "mypi-analytics-module-"));
+    folders.push(agentDir);
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+
+    const fake = fakeSession();
+    const module = new AnalyticsModule(fake.session);
+    module.init();
+    publish(fake.session.pi.events, "approval", {
+      rules: ["plan-build"],
+      choice: "yes",
+      provider: "openai",
+      model: "gpt-6-luna",
+      thinking: "high",
+    });
+    await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
+
+    const store = new AnalyticsStore(join(agentDir, "analytics", "analytics.sqlite"));
+    expect(approvalTotals(store, undefined)).toMatchObject([{ model: "gpt-6-luna", dialogs: 1, yes: 1 }]);
+    store.close();
+  });
+
   it("warns and reports when the store cannot be opened", async () => {
     const folder = await mkdtemp(join(tmpdir(), "mypi-analytics-module-"));
     folders.push(folder);
@@ -318,6 +367,20 @@ describe("AnalyticsModule", () => {
     module.init();
     await vi.waitFor(() =>
       expect(fake.notify).toHaveBeenCalledWith(expect.stringContaining("Analytics indexing failed"), "warning"),
+    );
+
+    publish(fake.session.pi.events, "approval", {
+      rules: ["plan-build"],
+      choice: "yes",
+      provider: "openai",
+      model: "gpt-6-luna",
+      thinking: "high",
+    });
+    await vi.waitFor(() =>
+      expect(fake.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Analytics couldn't record a permission dialog"),
+        "warning",
+      ),
     );
 
     const report = await module.commands()[0]?.execute({} as never, []);

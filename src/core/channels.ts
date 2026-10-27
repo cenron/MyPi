@@ -17,6 +17,21 @@ export type Problem = {
   origin?: string;
 };
 
+/** How a permission dialog ended: the user's choice, or a refusal because no one could be asked (no UI). */
+export type ApprovalChoice = "yes" | "no" | "session" | "no-ui";
+
+/**
+ * One permission dialog, after it ended: the rules that asked (a rule that asked twice counts once), the choice, and
+ * the model of the call. No question text, which holds commands and paths.
+ */
+export type Approval = {
+  rules: readonly string[];
+  choice: ApprovalChoice;
+  provider: string;
+  model: string;
+  thinking: string;
+};
+
 /**
  * Every notice MyPi publishes, by channel, with what it carries. One place to see what parts tell each other; each
  * says who publishes and who listens.
@@ -24,6 +39,8 @@ export type Problem = {
 export type MyPiNotices = {
   /** How many jobs are running. `JobManager` publishes; `Session` updates the below-editor jobs line. */
   jobs: number;
+  /** A permission dialog and its choice. `ToolGuard` publishes; analytics records it. */
+  approval: Approval;
 };
 
 /** The subset todo shares with the done check; completed tasks do not block a Build run. */

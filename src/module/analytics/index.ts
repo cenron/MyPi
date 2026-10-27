@@ -1,15 +1,18 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { Approval } from "#core/channels";
 import type { Command, ModuleInfo } from "#core/types";
 import { ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { BaseModule } from "../base";
 import { indexSessions } from "./indexer";
 import {
+  approvalTotals,
   doneCheckTotals,
   failureTotals,
   navigationTotals,
+  ruleTotals,
   shellTotals,
   subagentTotals,
   taskTotals,
@@ -26,6 +29,7 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 export class AnalyticsModule extends BaseModule {
   private store: AnalyticsStore | undefined;
   private indexing: Promise<void> = Promise.resolve();
+  private readonly approvalWrites = new Set<Promise<void>>();
   private readonly analyticsCommand = analyticsCmd(async (all) => {
     const store = await this.refresh();
     const since = all ? undefined : Date.now() - SEVEN_DAYS_MS;
@@ -38,6 +42,8 @@ export class AnalyticsModule extends BaseModule {
       doneChecks: doneCheckTotals(store, since),
       tasks: taskTotals(store, since),
       subagents: subagentTotals(store, since),
+      approvals: approvalTotals(store, since),
+      approvalRules: ruleTotals(store, since),
       skippedSessions: store.skippedCount(),
     };
     return renderAnalyticsReport(report, all ? "all history" : "last 7 days");
@@ -54,11 +60,14 @@ export class AnalyticsModule extends BaseModule {
 
   init(): void {
     this.setReadable([analyticsDir()]);
+    // A permission dialog lives only in the moment it's asked, so it's recorded as the notice arrives.
+    this.subscribe("approval", (approval) => this.recordApproval(approval));
     void this.refresh().catch((error: unknown) =>
       this.session.logWarning(`Analytics indexing failed: ${errorMessage(error)}`),
     );
     this.session.pi.on("session_shutdown", async () => {
       await this.indexing;
+      await Promise.all(this.approvalWrites);
       this.store?.close();
       this.store = undefined;
     });
@@ -68,13 +77,27 @@ export class AnalyticsModule extends BaseModule {
     return [this.analyticsCommand];
   }
 
+  /** Records the live notice and tracks it so shutdown can't close SQLite before the write finishes. */
+  private recordApproval(approval: Approval): void {
+    const write = this.open()
+      .then((store) => store.recordApproval(approval))
+      .catch((error: unknown) =>
+        this.session.logWarning(`Analytics couldn't record a permission dialog: ${errorMessage(error)}`),
+      );
+    this.approvalWrites.add(write);
+    void write.then(() => this.approvalWrites.delete(write));
+  }
+
+  /** The store, opened once; waits out a running index so a live row can't land in a schema rebuild. */
+  private open(): Promise<AnalyticsStore> {
+    return this.indexing.then(() => {
+      this.store ??= new AnalyticsStore(join(analyticsDir(), "analytics.sqlite"));
+      return this.store;
+    });
+  }
+
   private refresh(): Promise<AnalyticsStore> {
-    const ready = this.indexing.then(async () => {
-      let store = this.store;
-      if (store === undefined) {
-        store = new AnalyticsStore(join(analyticsDir(), "analytics.sqlite"));
-        this.store = store;
-      }
+    const ready = this.open().then(async (store) => {
       await indexSessions(
         [
           { path: join(getAgentDir(), "sessions"), mypiOnly: false },

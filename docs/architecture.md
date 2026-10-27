@@ -133,6 +133,10 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
     and No (`showExtensionConfirm` in `interactive-mode.js`), so the dialog looks the same plus the third choice. No,
     Esc, and an abort (select resolves `undefined`) block with `The user declined this call.` Without a UI an `ask`
     blocks. Modules never ask themselves, so dialogs don't stack and the `hasUI` check lives in one place.
+  - Every dialog it shows, and every no-UI refusal, goes out on the bus's `approval` channel once its choice is
+    known: the rules that asked (each named once), the choice (`yes`, `no`, `session`, `no-ui`), and the call's model
+    and thinking level. No question text, since a question holds commands and paths; analytics records the notice
+    ([analytics](modules/analytics.md)), breaking down choices per model and per rule.
   - A long ask is shortened for the dialog by `previewAsk`: at most 12 lines, each cut at 160 characters, with a note
     saying how much was left out and that Yes allows all of it. Without it, a command with a pasted page made the
     dialog taller than the terminal and hid its choices. The no-UI block reason gets the same short version. Approvals
@@ -180,8 +184,8 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   who publishes or asks and who listens or answers. Modules use `BaseModule`'s `publish`, `subscribe`, `ask`, and
   `answer`; core calls the functions with `session.pi.events`. For messages between parts that core doesn't combine;
   the services below stay services. See [done check](modules/done-check.md#the-event-bus).
-  - **`channels.ts`** holds the contracts: `MyPiNotices`, `MyPiQuestions`, and what they carry (`Problem`, `Duplicate`, and
-    `OpenTask`), each naming who publishes or asks and who listens or answers. `events.ts` is only the mechanism and
+  - **`channels.ts`** holds the contracts: `MyPiNotices`, `MyPiQuestions`, and what they carry (`Problem`, `Duplicate`,
+    `OpenTask`, and `Approval`), each naming who publishes or asks and who listens or answers. `events.ts` is only the mechanism and
     never changes for a feature.
   - **Deleting a part that owns a channel:** delete its folder, then remove the channels only it asks or publishes
     from `channels.ts`. Every `ask`, `answer`, `publish`, and `subscribe` left on them fails the typecheck, which

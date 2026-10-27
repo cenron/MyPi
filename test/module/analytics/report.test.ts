@@ -27,6 +27,8 @@ function report(overrides: Partial<AnalyticsReport>): AnalyticsReport {
     doneChecks: [],
     tasks: [],
     subagents: [],
+    approvals: [],
+    approvalRules: [],
     skippedSessions: 0,
     ...overrides,
   };
@@ -135,6 +137,35 @@ describe("renderAnalyticsReport", () => {
     expect(text).toContain("MyPi features\nopenai/gpt-6-luna · high   2 done-check reports · 1 pass");
     expect(text).toContain("openai/gpt-6-luna · high   1 task-tool run · 4 calls");
     expect(text).toContain("reviewer · openai/gpt-6-luna · high   2 runs · $0.42 child cost");
+  });
+
+  it("renders permission dialogs per model and per rule", () => {
+    const text = renderAnalyticsReport(
+      report({
+        approvals: [
+          {
+            provider: "openai",
+            model: "gpt-6-luna",
+            thinking: "high",
+            dialogs: 4,
+            yes: 2,
+            no: 1,
+            session: 1,
+            noUi: 0,
+          },
+        ],
+        approvalRules: [
+          { rule: "plan-build", dialogs: 3, yes: 1, no: 1, session: 1, noUi: 0 },
+          { rule: "folder-guard", dialogs: 1, yes: 1, no: 0, session: 0, noUi: 0 },
+        ],
+      }),
+      "all history",
+    );
+    expect(text).toContain(
+      "Permission dialogs\nopenai/gpt-6-luna · high   4 dialogs · yes 2 · no 1 · session 1 · no UI 0\n" +
+        "  plan-build   3 dialogs · yes 1 · no 1 · session 1 · no UI 0\n" +
+        "  folder-guard 1 dialog · yes 1 · no 0 · session 0 · no UI 0",
+    );
   });
 
   it("reports how many other pi sessions were skipped", () => {

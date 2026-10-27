@@ -1,7 +1,8 @@
 # Analytics
 
-**Status:** slices 1–2 built 2026-10-27. Slice 3's code and report are implemented and reviewed; the exact live cost
-comparison in its plan remains open. Permission dialogs and benchmarks remain planned.
+**Status:** slices 1–3 built 2026-10-27; slice 4 implemented and reviewed 2026-10-28, with its live check open.
+Permission dialogs are the one measure that doesn't come from the session files: `ToolGuard` publishes each dialog on
+the bus and the module records it as it arrives. Benchmarks remain planned.
 
 ## Goal
 
@@ -42,6 +43,8 @@ Two kinds of measure, kept apart:
   session's cost and context share; each self-build plan's Observations log carries reviewed measures per checkpoint.
 - **The module:** reads both session-file folders into one local database shared across pi windows and projects. It
   indexes existing history and appended complete JSONL lines; no transcript content is retained.
+- **The bus, for the one thing the files don't hold:** permission dialogs. `ToolGuard` publishes each one on the
+  `approval` channel after its choice ([architecture](../architecture.md)), and the module records it as it arrives.
 
 ## What to measure
 
@@ -57,7 +60,7 @@ Two kinds of measure, kept apart:
 | Todo | Is the list used, at the right size, and finished? | Task tool calls per run; tasks per plan step (one per box, or one per checkpoint); tasks left open at the end; reminders sent and whether a task tool call followed within a few requests; open-task reports from the done check | counted | Seeding wording; the reminder interval; whether the open-task report earns its place |
 | Subagents | Which agents are used, what they cost, what they catch | Runs per agent, model, effort; tokens, cost, time, outcome, refusals; summed under the prompt that started them (from the child's own session) | counted, plus reviewed for "caught a real bug" | Which model for reviews; whether a builtin is worth keeping |
 | Memory | Are memories missed? | Runs that changed files outside `.pi/` and how many also wrote a memory; prompts with a stated preference and no memory after | counted | Whether to build the end-of-run nudge (see [memory](memory.md#saving-without-being-asked)) |
-| Friction | How often does MyPi stop the agent to ask, and is it right? | Permission dialogs per session (asked, allowed, declined); which were false is reviewed | counted, plus reviewed | Folder-guard and Plan rules to loosen or fix |
+| Friction | How often does MyPi stop the agent to ask, and is it right? | Permission dialogs per model and per rule, broken down by choice; which were false is reviewed | counted, plus reviewed | Folder-guard and Plan rules to loosen or fix |
 | Self-builds | Is pi getting better at building MyPi? | Per checkpoint: passes, early stops, cost, context (counted); rebuilt APIs, untested rules, silent spec changes, wrong self-reports (reviewed) | both | Plan format, which features to build next |
 
 ## Findings
@@ -142,6 +145,15 @@ Dated, with the window and model; newest last. Each says what was decided.
   running session had grown since the script read it. Tool calls differed by 7 for the same reason. Decided: the script
   is gone; `/analytics` is the count.
 
+- **2026-10-27, analytics milestone 1, built by three models on real work** (one plan, four checkpoints, high
+  thinking): GPT-6 Luna built checkpoints 1 and 3 ($0.50 and $0.37 on its subscription, two passes each, one
+  compaction each); DeepSeek V4.1 Flash built checkpoint 2 for $0.20, about 3% of OpenCode Go's 5-hour window, in two
+  passes with no compaction, but reached outside the repo most (9 folder-guard prompts: 2 declined, 4 false, which
+  led to the guard reading MyPi's own data and ignoring `sed` scripts); Qwen 3.8 Max spent $2.29 on the smallest
+  checkpoint and hit the Go 5-hour limit before finishing (Luna finished it). The done check's open-task report fired
+  on pi for the first time (checkpoint 3). Decided: Luna and DeepSeek for building; Qwen only when its quality is
+  worth about 13× the price, and not on the Go plan's 5-hour budget.
+
 ## What pi offers
 
 Checked against the installed pi 1.2.0 (2026-10-22):
@@ -164,7 +176,8 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 - One SQLite database at `join(getAgentDir(), "analytics", "analytics.sqlite")`, outside the repo, shared by every pi
   window. It stores per-file indexing progress, one row per assistant reply or `usage` entry, one row per tool call
   (settled by its result, including a code-search flag), one row per shell command name in a `bash` call, and
-  content-free MyPi feature rows. Only MyPi's sessions count (the user's call, 2026-10-26): every session in
+  content-free MyPi feature rows, and one row per rule of each permission dialog, written live as the dialog ends.
+  Only MyPi's sessions count (the user's call, 2026-10-26): every session in
   `subagents/sessions/` (only MyPi writes there); a session with the `mypi-session` marker (`Session.markAsMyPi`,
   once per session) or a MyPi entry or tool in its first 16 lines; and a session from before the marker
   (2026-10-27), read in full once and kept if it shows a MyPi tool or notice anywhere. Other pi sessions are
@@ -176,6 +189,9 @@ Checked against the installed pi 1.2.0 (2026-10-22):
   are written in one transaction. The `schema_version` is rebuilt from session files when it changes.
 - Indexing is incremental: it resumes at the byte offset after the last complete line. Shrunk files and files whose
   header session id changed are reindexed. Every branch entry counts; the tree is not filtered to its current leaf.
+- Permission dialogs have no file to index, so they're written as they happen: one row per asking rule, sharing a
+  random dialog id, which lets the report count a dialog once however many rules asked. They stay when a session file
+  is deleted, since none of them belongs to a file.
 
 ## Privacy
 
@@ -188,6 +204,8 @@ Checked against the installed pi 1.2.0 (2026-10-22):
   failure's first line can quote the path or input it failed on; it stays short and local for that reason. Feature rows
   store only done-check report/pass and job-notice kinds and timestamps. Task tool calls are already counted by tool
   name; subagent calls keep only the agent name, not their task argument. Child sessions keep the parent session path.
+- A permission dialog keeps only its rules, its choice, the model, and the time: never the question, which quotes the
+  command or path it asks about.
 - Local only: nothing leaves the machine.
 - **In the reports, too:** only counts and short failure lines go into tracked docs; never raw session data, session
   paths, or anything from a user's own files. Per-checkpoint detail stays in git-ignored plans.
@@ -211,6 +229,8 @@ Checked against the installed pi 1.2.0 (2026-10-22):
     session), task-tool calls and sessions that used them per model, and subagent runs and summed child cost by agent,
     model, and thinking level. Child cost is included from the child's indexed usage rows and linked through
     `parentSession`.
+  - **Permission dialogs:** per model and per rule, how many dialogs ended in each choice (yes, no, allow for this
+    session, no UI).
 - Can be turned off with `/modules`, and the database deleted to start over.
 
 ## Slices
@@ -225,7 +245,9 @@ Checked against the installed pi 1.2.0 (2026-10-22):
    session files. The index keeps only notice kind and timestamp; it links child headers through `parentSession` and
    retains the parent's subagent agent name, never the task argument. The follow-up restricts indexing to MyPi sessions
    and reports how many other pi sessions were skipped.
-4. Permission-dialog friction from a live notice.
+4. **Built 2026-10-28:** permission-dialog friction. `ToolGuard` publishes each dialog and each no-UI refusal on the
+   bus's `approval` channel after its choice; the module records it live into the same database, and `/analytics` gains
+   the `Permission dialogs` section.
 
 ## Lessons from other projects
 

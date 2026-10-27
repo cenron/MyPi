@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import type { Approval } from "#core/channels";
 import type { FeatureRow, SessionHeader, ToolCallRow, ToolResultRow, UsageRow } from "./entries";
 import { ensureSchemaVersion, openSQLite, withTransaction } from "./sqlite";
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 /** A transcript's indexed position and its session metadata. */
 export type AnalyticsFile = {
@@ -59,6 +61,12 @@ export class AnalyticsStore {
         );
         CREATE TABLE skipped_files (file_path TEXT PRIMARY KEY);`);
     });
+    // Outside the rebuild: the other tables come back from the session files, but a dialog is recorded only once.
+    this.database.exec(`CREATE TABLE IF NOT EXISTS approvals (
+      dialog_id TEXT NOT NULL, rule TEXT NOT NULL, timestamp INTEGER NOT NULL, provider TEXT NOT NULL,
+      model TEXT NOT NULL, thinking TEXT NOT NULL, choice TEXT NOT NULL,
+      PRIMARY KEY(dialog_id, rule)
+    );`);
   }
 
   /** Replaces a transcript's rows and progress after a reset or reindex. */
@@ -125,6 +133,24 @@ export class AnalyticsStore {
         this.database.prepare("DELETE FROM features WHERE file_path = ?").run(path);
         this.database.prepare("DELETE FROM files WHERE file_path = ?").run(path);
         this.database.prepare("DELETE FROM skipped_files WHERE file_path = ?").run(path);
+      }
+    });
+  }
+
+  /**
+   * Records one permission dialog as it happens, one row per rule that asked, so the report can count dialogs by rule
+   * and by choice. The session files don't hold dialogs, so this is the store's one live write.
+   */
+  recordApproval(approval: Approval): void {
+    const dialogId = randomUUID();
+    const timestamp = Date.now();
+    withTransaction(this.database, () => {
+      const insert = this.database.prepare(
+        `INSERT OR IGNORE INTO approvals(dialog_id, rule, timestamp, provider, model, thinking, choice)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const rule of approval.rules) {
+        insert.run(dialogId, rule, timestamp, approval.provider, approval.model, approval.thinking, approval.choice);
       }
     });
   }
