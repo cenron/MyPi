@@ -132,6 +132,12 @@ describe("AnalyticsModule", () => {
     expect(module.info.commands[0]).toBe(command?.info);
     const report = await command?.execute({} as never, []);
     const allHistory = await command?.execute({} as never, ["all"]);
+    const tool = module.tools()[0];
+    expect(module.info.commands[0]).toBe(command?.info);
+    expect(tool?.name).toBe("analytics");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    const toolReport = await tool?.execute("call", {}, undefined, undefined, {} as never);
+    const toolAllHistory = await tool?.execute("call", { period: "all" }, undefined, undefined, {} as never);
     await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
 
     expect(report).toContain("Model usage · last 7 days");
@@ -148,6 +154,8 @@ describe("AnalyticsModule", () => {
     expect(allHistory).toContain("Model usage · all history");
     expect(allHistory).toContain("openai/gpt-5 · high           1 reply");
     expect(allHistory).toContain("failed old");
+    expect(toolReport).toEqual({ content: [{ type: "text", text: report }], details: undefined });
+    expect(toolAllHistory).toEqual({ content: [{ type: "text", text: allHistory }], details: undefined });
   });
 
   it("reports feature counts and attributes child cost to the parent call", async () => {
@@ -403,6 +411,8 @@ describe("AnalyticsModule", () => {
     );
 
     const report = await module.commands()[0]?.execute({} as never, []);
+    const toolResult = await module.tools()[0]?.execute("call", {}, undefined, undefined, {} as never);
     expect(report).toMatch(/Analytics indexing failed/);
+    expect(toolResult).toMatchObject({ isError: true, details: undefined, content: [{ text: report }] });
   });
 });

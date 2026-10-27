@@ -30,12 +30,14 @@ export type AnalyticsReport = {
   approvals: readonly ApprovalTotals[];
   approvalRules: readonly RuleTotals[];
   skippedSessions: number;
+  /** When the oldest indexed usage happened: how far back "all history" goes. */
+  historyStart: number | undefined;
 };
 
 /** Formats the counted measures as a plain-text report, one section per question. */
 export function renderAnalyticsReport(report: AnalyticsReport, period: ReportPeriod): string {
   const sections: string[] = [];
-  if (report.usage.length > 0) sections.push(modelLines(report.usage, period));
+  if (report.usage.length > 0) sections.push(modelLines(report.usage, period, report.historyStart));
   if (report.tools.length > 0) sections.push(toolLines(report.tools));
   if (report.failures.length > 0) sections.push(failureLines(report.failures));
   const shell = shellLines(report.shell);
@@ -52,9 +54,11 @@ export function renderAnalyticsReport(report: AnalyticsReport, period: ReportPer
   return sections.length === 0 ? "No usage recorded for this period." : sections.join("\n\n");
 }
 
-function modelLines(rows: readonly UsageTotals[], period: ReportPeriod): string {
+function modelLines(rows: readonly UsageTotals[], period: ReportPeriod, historyStart: number | undefined): string {
   const width = Math.max(...rows.map((row) => modelLabel(row).length));
-  const lines = [`Model usage · ${period}`];
+  // The start date says how much history there is, so "all history" after a fresh start isn't read as months.
+  const since = historyStart === undefined ? "" : ` · history from ${localDate(historyStart)}`;
+  const lines = [`Model usage · ${period}${since}`];
   for (const row of rows) {
     const cacheShare = row.input + row.cacheRead === 0 ? 0 : row.cacheRead / (row.input + row.cacheRead);
     lines.push(
@@ -177,4 +181,9 @@ function formatTokens(count: number): string {
   if (count < 1000000) return `${Math.round(count / 1000)}k`;
   if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
   return `${Math.round(count / 1000000)}M`;
+}
+
+/** A timestamp's local date as `YYYY-MM-DD` (the `en-CA` locale writes dates that way). */
+function localDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString("en-CA");
 }

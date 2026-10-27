@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Approval } from "#core/channels";
 import type { Command, ModuleInfo } from "#core/types";
 import { ModuleLoadMode } from "#core/types";
@@ -11,6 +11,7 @@ import {
   approvalTotals,
   doneCheckTotals,
   failureTotals,
+  historyStart,
   navigationTotals,
   ruleTotals,
   shellTotals,
@@ -22,6 +23,7 @@ import {
 import type { AnalyticsReport } from "./report";
 import { renderAnalyticsReport } from "./report";
 import { AnalyticsStore } from "./store";
+import { analyticsTool } from "./tools/analytics";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -30,24 +32,7 @@ export class AnalyticsModule extends BaseModule {
   private store: AnalyticsStore | undefined;
   private indexing: Promise<void> = Promise.resolve();
   private readonly approvalWrites = new Set<Promise<void>>();
-  private readonly analyticsCommand = analyticsCmd(async (all) => {
-    const store = await this.refresh();
-    const since = all ? undefined : Date.now() - SEVEN_DAYS_MS;
-    const report: AnalyticsReport = {
-      usage: usageTotals(store, since),
-      tools: toolTotals(store, since),
-      failures: failureTotals(store, since),
-      shell: shellTotals(store, since),
-      navigation: navigationTotals(store, since),
-      doneChecks: doneCheckTotals(store, since),
-      tasks: taskTotals(store, since),
-      subagents: subagentTotals(store, since),
-      approvals: approvalTotals(store, since),
-      approvalRules: ruleTotals(store, since),
-      skippedSessions: store.skippedCount(),
-    };
-    return renderAnalyticsReport(report, all ? "all history" : "last 7 days");
-  });
+  private readonly analyticsCommand = analyticsCmd((all) => this.report(all));
 
   get info(): ModuleInfo {
     return {
@@ -75,6 +60,31 @@ export class AnalyticsModule extends BaseModule {
 
   commands(): Command[] {
     return [this.analyticsCommand];
+  }
+
+  tools(): ToolDefinition[] {
+    return [analyticsTool((all) => this.report(all))];
+  }
+
+  /** Refreshes the index and renders the report shared by `/analytics` and the analytics tool. */
+  async report(all: boolean): Promise<string> {
+    const store = await this.refresh();
+    const since = all ? undefined : Date.now() - SEVEN_DAYS_MS;
+    const report: AnalyticsReport = {
+      usage: usageTotals(store, since),
+      tools: toolTotals(store, since),
+      failures: failureTotals(store, since),
+      shell: shellTotals(store, since),
+      navigation: navigationTotals(store, since),
+      doneChecks: doneCheckTotals(store, since),
+      tasks: taskTotals(store, since),
+      subagents: subagentTotals(store, since),
+      approvals: approvalTotals(store, since),
+      approvalRules: ruleTotals(store, since),
+      skippedSessions: store.skippedCount(),
+      historyStart: historyStart(store),
+    };
+    return renderAnalyticsReport(report, all ? "all history" : "last 7 days");
   }
 
   /** Records the live notice and tracks it so shutdown can't close SQLite before the write finishes. */

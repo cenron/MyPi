@@ -69,6 +69,7 @@ describe("built-in tool hooks", () => {
       "register web_fetch",
       "register submit_plan",
       "register ask_user",
+      "register analytics",
       "register lsp",
       "register lsp_edit",
       "register subagent",

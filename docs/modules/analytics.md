@@ -1,6 +1,6 @@
 # Analytics
 
-**Status:** slices 1–3 built 2026-10-27; slice 4 implemented and reviewed 2026-10-28, with its live check open.
+**Status:** slices 1–5 built 2026-10-27 (slice 5: the `analytics` tool, so the model reads the same report).
 Permission dialogs are the one measure that doesn't come from the session files: `ToolGuard` publishes each dialog on
 the bus and the module records it as it arrives. Benchmarks remain planned.
 
@@ -64,6 +64,9 @@ Two kinds of measure, kept apart:
 | Self-builds | Is pi getting better at building MyPi? | Per checkpoint: passes, early stops, cost, context (counted); rebuilt APIs, untested rules, silent spec changes, wrong self-reports (reviewed) | both | Plan format, which features to build next |
 
 ## Findings
+
+These are dated decisions from past windows, not live numbers. Read the `analytics` tool or `/analytics` for the
+current report.
 
 Dated, with the window and model; newest last. Each says what was decided.
 
@@ -244,10 +247,12 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 - When loaded, it indexes eligible MyPi session files in the background and indexes again before reporting. A pi
   session started after the marker is checked only through its first 16 lines; an excluded path is remembered and
   never read again, even if it grows. `/analytics` reports the count of skipped sessions. No pi hot-path events are used for analytics data.
-- `/analytics` shows the last 7 days; `/analytics all` shows all indexed history. Sections:
+- `/analytics` and the read-only `analytics` tool return the same report text. `/analytics` and the tool's default
+  show the last 7 days; `/analytics all` and `period: "all"` show all indexed history. Sections:
   - **Model usage:** one compact line per provider, model, and thinking level with replies, input, output, cache-read
-    share, and cost. Usage entries contribute tokens and cost but not reply counts; token counts use the footer's
-    compact units.
+    share, and cost, under a header naming the period and the day the indexed history starts (`history from
+    2026-10-27`), so "all history" after a fresh start isn't read as months. Usage entries contribute tokens and cost
+    but not reply counts; token counts use the footer's compact units.
   - **Tools:** calls, the failure share (excluding `bash` calls that only exited non-zero), and the non-zero-exit
     share per tool when nonzero; then the five most frequent failure lines, excluding non-zero exits.
   - **Shell commands with no tool:** the most-run command names (up to eight), leaving out `grep`, `find`, `ls`, and
@@ -275,9 +280,11 @@ Checked against the installed pi 1.2.0 (2026-10-22):
    session files. The index keeps only notice kind and timestamp; it links child headers through `parentSession` and
    retains the parent's subagent agent name, never the task argument. The follow-up restricts indexing to MyPi sessions
    and reports how many other pi sessions were skipped.
-4. **Built 2026-10-28:** permission-dialog friction. `ToolGuard` publishes each dialog and each no-UI refusal on the
-   bus's `approval` channel after its choice; the module records it live into the same database, and `/analytics` gains
-   the `Permission dialogs` section.
+4. **Built 2026-10-27 (`d731fc7`):** permission-dialog friction. `ToolGuard` publishes each dialog and each no-UI
+   refusal on the bus's `approval` channel after its choice; the module records it live into the same database, and
+   the report gains the `Permission dialogs` section.
+5. **Built 2026-10-27:** the read-only `analytics` tool returns the exact report text shown by `/analytics`, with a
+   `period` parameter for all history.
 
 ## Lessons from other projects
 
@@ -315,7 +322,8 @@ the passive numbers above come from everyday work, so they can't tell two models
 - How to group failure messages so the same failure counts once?
 - Which commands count as "has no tool": everything except a short list MyPi already covers (`grep`, `find`, `ls`,
   `cat` have pi tools), or all of them, filtered in the report?
-- Does the report live in pi (`/analytics`) only, or also as a file or an Artifact to read outside pi?
+- Does the report need an export outside pi? The user's `/analytics` command and the model's `analytics` tool return
+  the same text.
 - Should the reviewed measures get a light structure (a few fixed fields in each Observations line) so they can be
   counted across plans, or stay prose?
 

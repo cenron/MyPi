@@ -59,6 +59,12 @@ export type ApprovalTotals = {
 /** Permission dialogs one rule asked for, and how many it lost. */
 export type RuleTotals = { rule: string; dialogs: number; yes: number; no: number; session: number; noUi: number };
 
+/** When the oldest indexed usage happened, or undefined with none. */
+export function historyStart(store: AnalyticsStore): number | undefined {
+  const row = store.database.prepare("SELECT MIN(timestamp) AS first FROM usage").get() as { first: number | null };
+  return row.first ?? undefined;
+}
+
 /** Usage totals grouped by provider, model, and thinking level since a timestamp. */
 export function usageTotals(store: AnalyticsStore, since: number | undefined): UsageTotals[] {
   return store.database

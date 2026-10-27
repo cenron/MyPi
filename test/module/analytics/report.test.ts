@@ -30,6 +30,7 @@ function report(overrides: Partial<AnalyticsReport>): AnalyticsReport {
     approvals: [],
     approvalRules: [],
     skippedSessions: 0,
+    historyStart: undefined,
     ...overrides,
   };
 }
@@ -53,6 +54,12 @@ describe("renderAnalyticsReport", () => {
     expect(text).toContain(
       "Model usage · last 7 days\nopenai/gpt-6-luna · high   3,980 replies · in 100k · out 9.6M · cache 96% · $3.99",
     );
+  });
+
+  it("names the day the indexed history starts", () => {
+    const historyStart = new Date(2026, 9, 27, 12).getTime();
+    const text = renderAnalyticsReport(report({ usage: [totals(10, 2)], historyStart }), "all history");
+    expect(text).toContain("Model usage · all history · history from 2026-10-27\n");
   });
 
   it("writes one reply in the singular", () => {
