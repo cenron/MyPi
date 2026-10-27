@@ -6,7 +6,16 @@ import { ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { BaseModule } from "../base";
 import { indexSessions } from "./indexer";
-import { failureTotals, navigationTotals, shellTotals, toolTotals, usageTotals } from "./queries";
+import {
+  doneCheckTotals,
+  failureTotals,
+  navigationTotals,
+  shellTotals,
+  subagentTotals,
+  taskTotals,
+  toolTotals,
+  usageTotals,
+} from "./queries";
 import type { AnalyticsReport } from "./report";
 import { renderAnalyticsReport } from "./report";
 import { AnalyticsStore } from "./store";
@@ -26,6 +35,10 @@ export class AnalyticsModule extends BaseModule {
       failures: failureTotals(store, since),
       shell: shellTotals(store, since),
       navigation: navigationTotals(store, since),
+      doneChecks: doneCheckTotals(store, since),
+      tasks: taskTotals(store, since),
+      subagents: subagentTotals(store, since),
+      skippedSessions: store.skippedCount(),
     };
     return renderAnalyticsReport(report, all ? "all history" : "last 7 days");
   });
@@ -63,7 +76,11 @@ export class AnalyticsModule extends BaseModule {
         this.store = store;
       }
       await indexSessions(
-        [join(getAgentDir(), "sessions"), join(getAgentDir(), "subagents", "sessions")],
+        [
+          { path: join(getAgentDir(), "sessions"), mypiOnly: false },
+          // MyPi's subagents write here and nothing else does, so runs from before the marker count too.
+          { path: join(getAgentDir(), "subagents", "sessions"), mypiOnly: true },
+        ],
         store,
         homedir(),
       );

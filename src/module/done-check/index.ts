@@ -5,6 +5,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { OpenTask } from "#core/channels";
 import { answeredItems } from "#core/events";
+import { DONE_CHECK_NOTICE } from "#core/job-notice";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { isPlanMode } from "#core/util/mode";
@@ -28,9 +29,6 @@ import { changesNotIgnored, doneCheckPassed, doneCheckReport, filesToCheck } fro
 
 /** Most times one run is sent back; after that the agent may stop with whatever is left. */
 const MAX_ROUNDS = 3;
-
-/** The report's entry type in the session. */
-const REPORT_TYPE = "mypi-done-check";
 
 const YES = "Yes";
 
@@ -111,7 +109,7 @@ export class DoneCheckModule extends BaseModule {
 
     const passed = doneCheckPassed(result.sources, result.commands, files.length);
     if (passed === undefined) return undefined;
-    return { entries: [{ type: "custom_message", customType: REPORT_TYPE, content: passed, display: true }] };
+    return { entries: [{ type: "custom_message", customType: DONE_CHECK_NOTICE, content: passed, display: true }] };
   }
 
   /** The report for changed files, approved commands, and any open tasks. */
@@ -178,7 +176,7 @@ export class DoneCheckModule extends BaseModule {
     run.rounds++;
     run.lastReport = report;
     return {
-      entries: [{ type: "custom_message", customType: REPORT_TYPE, content: report, display: true }],
+      entries: [{ type: "custom_message", customType: DONE_CHECK_NOTICE, content: report, display: true }],
       continue: true,
     };
   }

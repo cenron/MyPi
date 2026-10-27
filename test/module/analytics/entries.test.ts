@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DONE_CHECK_NOTICE, JOB_NOTICE } from "#core/job-notice";
 import { parseEntry, type ToolCallRow, type ToolResultRow } from "#module/analytics/entries";
 
 const HOME = "/home/user";
@@ -180,6 +181,7 @@ describe("parseEntry", () => {
       id: "session-id",
       cwd: "/project",
       version,
+      timestamp: Date.parse(header.timestamp),
     });
   });
 
@@ -206,6 +208,46 @@ describe("parseEntry", () => {
   it("ignores a result that names no call", () => {
     const line = JSON.stringify({ type: "message", message: { role: "toolResult", isError: true } });
     expect(parseEntry(line, HOME)?.results).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "done-check report",
+      DONE_CHECK_NOTICE,
+      "Done check: 1 error in files changed during this run.",
+      "done-check-report",
+    ],
+    ["done-check pass", DONE_CHECK_NOTICE, "Done check passed: tsc passed.", "done-check-pass"],
+    ["job notice", JOB_NOTICE, "Job finished.", "job"],
+  ] as const)("records the %s without keeping its content", (_name, customType, content, kind) => {
+    const entry = parseEntry(
+      JSON.stringify({
+        type: "custom_message",
+        id: "notice-1",
+        timestamp: "2026-10-26T10:01:00.000Z",
+        customType,
+        content,
+      }),
+      HOME,
+    );
+    expect(entry?.features?.map(({ kind: recorded }) => recorded)).toEqual([kind]);
+    expect(entry).not.toHaveProperty("content");
+  });
+
+  it("keeps the parent session path from a subagent header", () => {
+    expect(parseEntry(JSON.stringify({ ...header, parentSession: "/sessions/parent.jsonl" }), HOME)?.header).toEqual({
+      id: "session-id",
+      cwd: "/project",
+      version: 3,
+      timestamp: Date.parse(header.timestamp),
+      parentSession: "/sessions/parent.jsonl",
+    });
+  });
+
+  it("keeps the agent name on a subagent tool call", () => {
+    const entry = parseEntry(call("subagent", { agent: "reviewer", task: "secret" }), HOME);
+    expect(entry?.calls?.[0]?.agentName).toBe("reviewer");
+    expect(entry?.calls?.[0]).not.toHaveProperty("task");
   });
 
   it("keeps no command names when tokenize gives up", () => {

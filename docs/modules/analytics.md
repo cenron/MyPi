@@ -1,8 +1,7 @@
 # Analytics
 
-**Status:** slice 2 built 2026-10-27: a local index of reply usage and tool calls from pi's session files, and
-`/analytics` with model, tool, shell-command, and code-navigation sections. MyPi features, permission dialogs, and
-benchmarks remain planned.
+**Status:** slices 1–2 built 2026-10-27. Slice 3's code and report are implemented and reviewed; the exact live cost
+comparison in its plan remains open. Permission dialogs and benchmarks remain planned.
 
 ## Goal
 
@@ -164,8 +163,15 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 
 - One SQLite database at `join(getAgentDir(), "analytics", "analytics.sqlite")`, outside the repo, shared by every pi
   window. It stores per-file indexing progress, one row per assistant reply or `usage` entry, one row per tool call
-  (settled by its result, including a code-search flag), and one row per shell command name in a `bash` call. The
-  session files are the source of truth, and rows are removed when their transcript files disappear.
+  (settled by its result, including a code-search flag), one row per shell command name in a `bash` call, and
+  content-free MyPi feature rows. Only MyPi's sessions count (the user's call, 2026-10-26): every session in
+  `subagents/sessions/` (only MyPi writes there); a session with the `mypi-session` marker (`Session.markAsMyPi`,
+  once per session) or a MyPi entry or tool in its first 16 lines; and a session from before the marker
+  (2026-10-27), read in full once and kept if it shows a MyPi tool or notice anywhere. Other pi sessions are
+  remembered by path only and never indexed. Subagent
+  headers retain their `parentSession` link; the parent subagent call's agent name is kept to group child cost. The
+  session files are the source of truth, and indexed and skipped paths are removed when their transcript files
+  disappear.
 - Built with Node's `node:sqlite` `DatabaseSync`, WAL mode, and a 5-second busy timeout. A file's rows and progress
   are written in one transaction. The `schema_version` is rebuilt from session files when it changes.
 - Indexing is incremental: it resumes at the byte offset after the last complete line. Shrunk files and files whose
@@ -174,19 +180,23 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 ## Privacy
 
 - Record command names, never full command lines or arguments: they can hold paths, secrets, or private data.
-- No file contents, prompts, or replies. Usage rows keep provider, model, thinking level, usage counts, cost, stop
-  reason, timestamp, session id, and project folder. Tool-call rows keep the same session and model columns plus the
+- Only MyPi sessions are indexed. Other pi sessions contribute only their file path to the local skip list; `/analytics`
+  reports the number skipped without showing paths. No file contents, prompts, or replies. Usage rows keep provider,
+  model, thinking level, usage counts, cost, stop reason, timestamp, session id, and project folder. Tool-call rows keep the same session and model columns plus the
   tool name, the failure flag, whether a `bash` call is a code search, shell command names (with the home folder
   written `~`), the read starting line, and a failure's first line cut to 120 characters, home shortened to `~`. A
-  failure's first line can quote the path or input it failed on; it stays short and local for that reason.
+  failure's first line can quote the path or input it failed on; it stays short and local for that reason. Feature rows
+  store only done-check report/pass and job-notice kinds and timestamps. Task tool calls are already counted by tool
+  name; subagent calls keep only the agent name, not their task argument. Child sessions keep the parent session path.
 - Local only: nothing leaves the machine.
 - **In the reports, too:** only counts and short failure lines go into tracked docs; never raw session data, session
   paths, or anything from a user's own files. Per-checkpoint detail stays in git-ignored plans.
 
 ## Behavior
 
-- When loaded, it indexes session files in the background and indexes again before reporting. No pi hot-path events
-  are used in slices 1 and 2.
+- When loaded, it indexes eligible MyPi session files in the background and indexes again before reporting. A pi
+  session started after the marker is checked only through its first 16 lines; an excluded path is remembered and
+  never read again, even if it grows. `/analytics` reports the count of skipped sessions. No pi hot-path events are used for analytics data.
 - `/analytics` shows the last 7 days; `/analytics all` shows all indexed history. Sections:
   - **Model usage:** one compact line per provider, model, and thinking level with replies, input, output, cache-read
     share, and cost. Usage entries contribute tokens and cost but not reply counts; token counts use the footer's
@@ -197,6 +207,10 @@ Checked against the installed pi 1.2.0 (2026-10-22):
     gives none.
   - **Code navigation:** per model, `lsp` calls, code searches (`rg`/`grep` in `bash` with no `node_modules` in the
     command, plus the `grep` and `find` tools), reads from line 1, and the `lsp` share.
+  - **MyPi features:** done-check reports and passes per model (attributed to the latest preceding usage in the same
+    session), task-tool calls and sessions that used them per model, and subagent runs and summed child cost by agent,
+    model, and thinking level. Child cost is included from the child's indexed usage rows and linked through
+    `parentSession`.
 - Can be turned off with `/modules`, and the database deleted to start over.
 
 ## Slices
@@ -206,7 +220,11 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 2. **Built 2026-10-27:** tool-call rows with failure status, a code-search flag, shell command names, and read
    starting lines; the tools, failure, shell-command, and code-navigation sections; the handwritten measuring script
    retired.
-3. Done-check, todo, and subagent measures.
+3. **Built 2026-10-27:** the `MyPi features` report section counts done-check reports and passes by model, task-tool
+   calls and sessions that used them, and subagent runs by agent/model/thinking with child cost summed from the linked
+   session files. The index keeps only notice kind and timestamp; it links child headers through `parentSession` and
+   retains the parent's subagent agent name, never the task argument. The follow-up restricts indexing to MyPi sessions
+   and reports how many other pi sessions were skipped.
 4. Permission-dialog friction from a live notice.
 
 ## Lessons from other projects

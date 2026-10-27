@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DONE_CHECK_NOTICE } from "#core/job-notice";
+import { MYPI_SESSION_MARKER_TYPE } from "#core/session-marker";
 import { AnalyticsModule } from "#module/analytics/index";
 import { usageTotals } from "#module/analytics/queries";
 import { AnalyticsStore } from "#module/analytics/store";
@@ -145,6 +147,143 @@ describe("AnalyticsModule", () => {
     expect(allHistory).toContain("Model usage · all history");
     expect(allHistory).toContain("openai/gpt-5 · high           1 reply");
     expect(allHistory).toContain("failed old");
+  });
+
+  it("reports feature counts and attributes child cost to the parent call", async () => {
+    const agentDir = await mkdtemp(join(tmpdir(), "mypi-analytics-features-"));
+    folders.push(agentDir);
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+    const mainRoot = join(agentDir, "sessions", "project");
+    const childRoot = join(agentDir, "subagents", "sessions");
+    await mkdir(mainRoot, { recursive: true });
+    await mkdir(childRoot, { recursive: true });
+    const parentPath = join(mainRoot, "parent.jsonl");
+    const timestamp = new Date().toISOString();
+    const parent = `${[
+      { type: "session", version: 3, id: "parent", timestamp, cwd: "/project" },
+      {
+        type: "message",
+        id: "task",
+        timestamp,
+        message: {
+          role: "assistant",
+          provider: "openai",
+          model: "gpt-6-luna",
+          thinkingLevel: "high",
+          content: [{ type: "toolCall", id: "task-call", name: "task_create", arguments: {} }],
+        },
+      },
+      {
+        type: "message",
+        id: "child-call",
+        timestamp,
+        message: {
+          role: "assistant",
+          provider: "openai",
+          model: "gpt-6-luna",
+          thinkingLevel: "high",
+          content: [{ type: "toolCall", id: "sub-call", name: "subagent", arguments: { agent: "reviewer" } }],
+        },
+      },
+      {
+        type: "usage",
+        id: "usage-old-model",
+        timestamp,
+        provider: "openai",
+        model: "gpt-5",
+        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+      },
+      {
+        type: "usage",
+        id: "usage-current-model",
+        timestamp,
+        provider: "openai",
+        model: "gpt-6-luna",
+        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+      },
+      {
+        type: "custom_message",
+        id: "notice-report",
+        timestamp,
+        customType: DONE_CHECK_NOTICE,
+        content: "Done check: an error",
+      },
+      {
+        type: "custom_message",
+        id: "notice-pass",
+        timestamp,
+        customType: DONE_CHECK_NOTICE,
+        content: "Done check passed: tsc passed.",
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n")}\n`;
+    await writeFile(parentPath, parent);
+    await writeFile(
+      join(childRoot, "child.jsonl"),
+      `${[
+        { type: "session", version: 3, id: "child", timestamp, cwd: "/project", parentSession: parentPath },
+        { type: "custom", id: "marker", customType: MYPI_SESSION_MARKER_TYPE, data: {} },
+        {
+          type: "message",
+          id: "reply",
+          timestamp,
+          message: {
+            role: "assistant",
+            provider: "openai",
+            model: "gpt-6-luna",
+            thinkingLevel: "high",
+            usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, cost: { total: 0.42 } },
+          },
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n")}\n`,
+    );
+
+    const fake = fakeSession();
+    const module = new AnalyticsModule(fake.session);
+    module.init();
+    const report = await module.commands()[0]?.execute({} as never, ["all"]);
+    await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
+    expect(report).toContain("1 task-tool run · 1 call");
+    expect(report).toContain("openai/gpt-6-luna · unknown   1 done-check report · 1 pass");
+    expect(report).not.toContain("gpt-5 · unknown   1 done-check report");
+    expect(report).toContain("reviewer · openai/gpt-6-luna · high   1 run · $0.42 child cost");
+  });
+
+  it("attributes a same-timestamp notice only to usage earlier in the transcript", async () => {
+    const agentDir = await mkdtemp(join(tmpdir(), "mypi-analytics-order-"));
+    folders.push(agentDir);
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+    const sessions = join(agentDir, "sessions", "project");
+    await mkdir(sessions, { recursive: true });
+    const timestamp = new Date().toISOString();
+    const usage = (id: string, model: string) => ({
+      type: "usage",
+      id,
+      timestamp,
+      provider: "openai",
+      model,
+      usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+    });
+    const entries = [
+      { type: "session", version: 3, id: "ordered", timestamp, cwd: "/project" },
+      { type: "custom", id: "marker", customType: MYPI_SESSION_MARKER_TYPE, data: {} },
+      usage("before", "earlier-model"),
+      { type: "custom_message", id: "notice", timestamp, customType: DONE_CHECK_NOTICE, content: "Done check: error" },
+      usage("after", "later-model"),
+    ];
+    await writeFile(join(sessions, "ordered.jsonl"), `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+
+    const fake = fakeSession();
+    const module = new AnalyticsModule(fake.session);
+    module.init();
+    const report = await module.commands()[0]?.execute({} as never, ["all"]);
+    await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
+
+    expect(report).toContain("earlier-model · unknown   1 done-check report · 0 passes");
+    expect(report).not.toContain("later-model · unknown   1 done-check report");
   });
 
   it("waits for a running index before closing the store", async () => {

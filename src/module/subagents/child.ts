@@ -11,6 +11,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { MYPI_SESSION_MARKER_TYPE } from "#core/session-marker";
 import type { ThinkingLevel } from "#core/util/thinking";
 import { checksPrompt, childAccess } from "./access";
 import type { AgentDefinition } from "./agents";
@@ -64,6 +65,7 @@ export async function runChild(run: ChildRun, cwd = run.parent.cwd): Promise<Chi
   const manager = SessionManager.create(cwd, join(subagentsDir(), "sessions"), {
     parentSession: parent.sessionManager.getSessionFile(),
   });
+  manager.appendCustomEntry(MYPI_SESSION_MARKER_TYPE, {});
   const resources = await childResources(cwd, agent, run.checks ?? []);
   if (signal.aborted) throw new Error("aborted");
   const { session } = await createAgentSession({

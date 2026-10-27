@@ -1,7 +1,8 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
-import { createTask, TASK_STATUSES, TASK_TOOLS, type Task, updateTask } from "./tasks";
+import { TASK_TOOLS } from "#core/util/task-tools";
+import { createTask, TASK_STATUSES, type Task, updateTask } from "./tasks";
 
 const TASK_UPDATE_STATUSES = [...TASK_STATUSES, "deleted"] as const;
 

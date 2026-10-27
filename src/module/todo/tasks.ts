@@ -1,5 +1,6 @@
 import type { ContextEvent } from "@earendil-works/pi-coding-agent";
 import { isRecord } from "#core/util/guards";
+import { TASK_TOOLS } from "#core/util/task-tools";
 
 /** The statuses task_update can set on a task (deleted removes it). */
 export const TASK_STATUSES = ["pending", "in_progress", "completed"] as const;
@@ -19,14 +20,6 @@ export type Task = {
 type TaskChanges = Partial<Pick<Task, "subject" | "description" | "activeForm">> & {
   status?: TaskStatus | "deleted";
 };
-
-/** The task tool names shared by their definitions and branch-state reconstruction. */
-export const TASK_TOOLS = {
-  create: "task_create",
-  update: "task_update",
-  list: "task_list",
-  get: "task_get",
-} as const;
 
 const TASK_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(TASK_TOOLS));
 /** Quiet model requests between reminders; Claude Code doesn't publish its own count. */

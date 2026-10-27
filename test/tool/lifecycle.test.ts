@@ -43,6 +43,7 @@ describe("built-in tool hooks", () => {
       // plan-build's init() turns its tools on here, one call per tool.
       setActiveTools: () => calls.push("module init"),
       sendUserMessage: () => {},
+      appendEntry: () => {},
       registerMessageRenderer: () => {},
       registerToolRenderer: () => {},
     } as unknown as ExtensionAPI;

@@ -1,3 +1,4 @@
+import { DONE_CHECK_NOTICE, JOB_NOTICE } from "#core/job-notice";
 import { isRecord } from "#core/util/guards";
 import { tokenize } from "#core/util/shell";
 
@@ -6,6 +7,8 @@ const MAX_FAILURE_LINE = 120;
 /** One model-attributed usage event from the transcript, with no conversation content. */
 export type UsageRow = {
   entryId: string;
+  /** Byte offset of the line in the source transcript, assigned by the indexer. */
+  position?: number;
   isReply: boolean;
   timestamp: number;
   provider: string;
@@ -30,10 +33,20 @@ export type ToolCallRow = {
   commandNames: string[];
   codeSearch: boolean;
   fromLineOne: boolean;
+  agentName?: string;
 };
 
 /** A tool result's outcome, linked to its call by id. */
 export type ToolResultRow = { callId: string; failed: boolean; failureLine?: string };
+
+/** The analytics rows one complete JSONL line holds. */
+export type FeatureRow = {
+  entryId: string;
+  kind: "done-check-report" | "done-check-pass" | "job";
+  timestamp: number;
+  /** Byte offset of the line in the source transcript, assigned by the indexer. */
+  position?: number;
+};
 
 /** The analytics rows one complete JSONL line holds. */
 export type ParsedEntry = {
@@ -41,10 +54,11 @@ export type ParsedEntry = {
   usage?: UsageRow;
   calls?: ToolCallRow[];
   results?: ToolResultRow[];
+  features?: FeatureRow[];
 };
 
 /** Header data needed to associate usage with its session and project. */
-export type SessionHeader = { id: string; cwd: string; version: number };
+export type SessionHeader = { id: string; cwd: string; version: number; timestamp?: number; parentSession?: string };
 
 /** Parses one session line into the rows analytics keeps, with the home folder shortened to `~`. */
 export function parseEntry(line: string, homeDir: string): ParsedEntry | undefined {
@@ -58,11 +72,39 @@ export function parseEntry(line: string, homeDir: string): ParsedEntry | undefin
 
   if (value.type === "session") {
     if (typeof value.id !== "string" || typeof value.cwd !== "string") return undefined;
-    return { header: { id: value.id, cwd: value.cwd, version: typeof value.version === "number" ? value.version : 1 } };
+    return {
+      header: {
+        id: value.id,
+        cwd: value.cwd,
+        version: typeof value.version === "number" ? value.version : 1,
+        ...(typeof value.timestamp === "string" ? { timestamp: Date.parse(value.timestamp) } : {}),
+        ...(typeof value.parentSession === "string" ? { parentSession: value.parentSession } : {}),
+      },
+    };
   }
   if (value.type === "usage") {
     const usage = usageRow(value, value, "usage");
     return usage === undefined ? undefined : { usage };
+  }
+  if (value.type === "custom_message") {
+    if (typeof value.customType !== "string" || typeof value.timestamp !== "string" || typeof value.id !== "string") {
+      return undefined;
+    }
+    const timestamp = Date.parse(value.timestamp);
+    if (Number.isNaN(timestamp)) return undefined;
+    if (value.customType === DONE_CHECK_NOTICE && typeof value.content === "string") {
+      return {
+        features: [
+          {
+            entryId: value.id,
+            kind: value.content.startsWith("Done check passed:") ? "done-check-pass" : "done-check-report",
+            timestamp,
+          },
+        ],
+      };
+    }
+    if (value.customType === JOB_NOTICE) return { features: [{ entryId: value.id, kind: "job", timestamp }] };
+    return undefined;
   }
   if (value.type !== "message" || !isRecord(value.message)) return undefined;
 
@@ -139,6 +181,7 @@ function toolCallRows(
       commandNames: block.name === "bash" ? commandNames(args.command, homeDir) : [],
       codeSearch: block.name === "bash" && isCodeSearch(args.command),
       fromLineOne: block.name === "read" && startsAtLineOne(args.offset),
+      ...(block.name === "subagent" && typeof args.agent === "string" ? { agentName: args.agent } : {}),
     });
   }
   return calls;

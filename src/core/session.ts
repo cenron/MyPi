@@ -6,6 +6,7 @@ import { subscribe } from "./events";
 import { JobManager } from "./job-manager";
 import { ModuleManager } from "./module-manager";
 import { PromptManager } from "./prompt-manager";
+import { MYPI_SESSION_MARKER_NAME } from "./session-marker";
 import { ToolGuard } from "./tool-guard";
 import { type Project, Worktrees } from "./worktree";
 
@@ -45,6 +46,14 @@ export class Session {
     this.worktrees = new Worktrees(ctx.cwd);
     subscribe(pi.events, "jobs", (running) => this.updateJobsWidget(running));
     pi.on("session_shutdown", () => this.clearJobsWidget());
+  }
+
+  /**
+   * Marks this session as one MyPi ran in, once: analytics counts only marked sessions. A `/reload` or a resume finds
+   * the mark and adds nothing. Not in the constructor, so building a `Session` never writes to the session file.
+   */
+  markAsMyPi() {
+    if (this.load(MYPI_SESSION_MARKER_NAME) === undefined) this.save(MYPI_SESSION_MARKER_NAME, {});
   }
 
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */

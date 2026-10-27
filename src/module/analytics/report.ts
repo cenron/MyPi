@@ -1,4 +1,13 @@
-import type { FailureTotals, NavigationTotals, ShellTotals, ToolTotals, UsageTotals } from "./queries";
+import type {
+  DoneCheckTotals,
+  FailureTotals,
+  NavigationTotals,
+  ShellTotals,
+  SubagentTotals,
+  TaskTotals,
+  ToolTotals,
+  UsageTotals,
+} from "./queries";
 
 const MAX_FAILURE_LINES = 5;
 const MAX_SHELL_COMMANDS = 8;
@@ -13,6 +22,10 @@ export type AnalyticsReport = {
   failures: readonly FailureTotals[];
   shell: readonly ShellTotals[];
   navigation: readonly NavigationTotals[];
+  doneChecks: readonly DoneCheckTotals[];
+  tasks: readonly TaskTotals[];
+  subagents: readonly SubagentTotals[];
+  skippedSessions: number;
 };
 
 /** Formats the counted measures as a plain-text report, one section per question. */
@@ -25,6 +38,11 @@ export function renderAnalyticsReport(report: AnalyticsReport, period: ReportPer
   if (shell !== undefined) sections.push(shell);
   const navigation = navigationLines(report.navigation);
   if (navigation !== undefined) sections.push(navigation);
+  const features = featureLines(report);
+  if (features !== undefined) sections.push(features);
+  if (report.skippedSessions > 0) {
+    sections.push(`${formatCount(report.skippedSessions, "other pi session")} skipped`);
+  }
   return sections.length === 0 ? "No usage recorded for this period." : sections.join("\n\n");
 }
 
@@ -89,6 +107,24 @@ function navigationLines(rows: readonly NavigationTotals[]): string | undefined 
     );
   }
   return lines.join("\n");
+}
+
+function featureLines(report: AnalyticsReport): string | undefined {
+  const lines = ["MyPi features"];
+  for (const row of report.doneChecks) {
+    lines.push(
+      `${modelLabel(row)}   ${formatCount(row.reports, "done-check report")} · ${formatCount(row.passes, "pass", "passes")}`,
+    );
+  }
+  for (const row of report.tasks) {
+    lines.push(`${modelLabel(row)}   ${formatCount(row.runs, "task-tool run")} · ${formatCount(row.calls, "call")}`);
+  }
+  for (const row of report.subagents) {
+    lines.push(
+      `${row.agent} · ${modelLabel(row)}   ${formatCount(row.runs, "run")} · $${row.cost.toFixed(2)} child cost`,
+    );
+  }
+  return lines.length === 1 ? undefined : lines.join("\n");
 }
 
 function modelLabel(row: { provider: string; model: string; thinking: string }): string {

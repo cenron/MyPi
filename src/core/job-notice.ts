@@ -10,6 +10,9 @@ import { jobDuration, jobEnding } from "./util/jobs";
 /** The custom message type of a job's exit notice. */
 export const JOB_NOTICE = "mypi-job";
 
+/** The custom message type of the done-check's report and pass notices. */
+export const DONE_CHECK_NOTICE = "mypi-done-check";
+
 /** How many of a job's last lines a notice carries. */
 export const NOTICE_LINES = 20;
 

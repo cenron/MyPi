@@ -30,9 +30,10 @@ describe("AnalyticsStore", () => {
     const version = store.database.prepare("SELECT version FROM schema_version").get() as { version: number };
     const columns = store.database.prepare("PRAGMA table_info(usage)").all() as { name: string }[];
 
-    expect(version.version).toBe(5);
+    expect(version.version).toBe(9);
     expect(columns.map(({ name }) => name)).toContain("entry_id");
     expect(usageTotals(store, undefined)).toEqual([]);
+    expect(store.skippedCount()).toBe(0);
     store.close();
   });
 });

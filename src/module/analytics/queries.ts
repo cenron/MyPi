@@ -1,3 +1,4 @@
+import { TASK_TOOLS } from "#core/util/task-tools";
 import type { AnalyticsStore } from "./store";
 
 /** Aggregated usage in one provider, model, and thinking-level group. */
@@ -30,6 +31,17 @@ export type NavigationTotals = {
   lsp: number;
   searches: number;
   fromLineOne: number;
+};
+
+export type DoneCheckTotals = { provider: string; model: string; thinking: string; reports: number; passes: number };
+export type TaskTotals = { provider: string; model: string; thinking: string; runs: number; calls: number };
+export type SubagentTotals = {
+  agent: string;
+  provider: string;
+  model: string;
+  thinking: string;
+  runs: number;
+  cost: number;
 };
 
 /** Usage totals grouped by provider, model, and thinking level since a timestamp. */
@@ -91,6 +103,54 @@ export function navigationTotals(store: AnalyticsStore, since: number | undefine
        GROUP BY c.provider, c.model, c.thinking ORDER BY c.provider, c.model, c.thinking`,
     )
     .all(...sinceArgs(since)) as NavigationTotals[];
+}
+
+export function doneCheckTotals(store: AnalyticsStore, since: number | undefined): DoneCheckTotals[] {
+  const where = since === undefined ? "" : "WHERE f.timestamp >= ?";
+  return store.database
+    .prepare(
+      `SELECT COALESCE(u.provider, 'unknown') AS provider, COALESCE(u.model, 'unknown') AS model,
+        COALESCE(u.thinking, 'unknown') AS thinking,
+        SUM(CASE WHEN f.kind = 'done-check-report' THEN 1 ELSE 0 END) AS reports,
+        SUM(CASE WHEN f.kind = 'done-check-pass' THEN 1 ELSE 0 END) AS passes
+       FROM features f LEFT JOIN usage u ON u.rowid =
+         (SELECT previous.rowid FROM usage previous WHERE previous.file_path = f.file_path
+          AND (previous.timestamp < f.timestamp OR
+            (previous.timestamp = f.timestamp AND previous.position <= f.position))
+          ORDER BY previous.timestamp DESC, previous.position DESC LIMIT 1)
+       ${where} GROUP BY provider, model, thinking ORDER BY provider, model, thinking`,
+    )
+    .all(...sinceArgs(since)) as DoneCheckTotals[];
+}
+
+export function taskTotals(store: AnalyticsStore, since: number | undefined): TaskTotals[] {
+  const tools = Object.values(TASK_TOOLS);
+  const placeholders = tools.map(() => "?").join(", ");
+  const where = since === undefined ? "" : "c.timestamp >= ? AND ";
+  return store.database
+    .prepare(
+      `SELECT c.provider, c.model, c.thinking, COUNT(DISTINCT c.file_path) AS runs, COUNT(*) AS calls
+       FROM tool_calls c WHERE ${where}c.tool IN (${placeholders})
+       GROUP BY c.provider, c.model, c.thinking ORDER BY c.provider, c.model, c.thinking`,
+    )
+    .all(...sinceArgs(since), ...tools) as TaskTotals[];
+}
+
+export function subagentTotals(store: AnalyticsStore, since: number | undefined): SubagentTotals[] {
+  const where = since === undefined ? "" : "WHERE u.timestamp >= ?";
+  return store.database
+    .prepare(
+      `SELECT COALESCE(parent_call.agent_name, 'unknown') AS agent, u.provider, u.model, u.thinking,
+        COUNT(DISTINCT child.file_path) AS runs, SUM(u.cost) AS cost
+       FROM usage u JOIN files child ON child.file_path = u.file_path AND child.parent_session IS NOT NULL
+       JOIN tool_calls parent_call ON parent_call.file_path = child.parent_session AND parent_call.call_id =
+         (SELECT call_id FROM tool_calls candidate WHERE candidate.file_path = child.parent_session
+          AND candidate.tool = 'subagent' AND candidate.timestamp <=
+            (SELECT MIN(child_usage.timestamp) FROM usage child_usage WHERE child_usage.file_path = child.file_path)
+          ORDER BY candidate.timestamp DESC LIMIT 1)
+       ${where} GROUP BY agent, u.provider, u.model, u.thinking ORDER BY agent, u.provider, u.model, u.thinking`,
+    )
+    .all(...sinceArgs(since)) as SubagentTotals[];
 }
 
 function sinceClause(since: number | undefined): string {

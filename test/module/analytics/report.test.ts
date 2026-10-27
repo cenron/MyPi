@@ -18,7 +18,18 @@ function totals(input: number, output: number, cacheRead = 0, replies = 1, cost 
 }
 
 function report(overrides: Partial<AnalyticsReport>): AnalyticsReport {
-  return { usage: [], tools: [], failures: [], shell: [], navigation: [], ...overrides };
+  return {
+    usage: [],
+    tools: [],
+    failures: [],
+    shell: [],
+    navigation: [],
+    doneChecks: [],
+    tasks: [],
+    subagents: [],
+    skippedSessions: 0,
+    ...overrides,
+  };
 }
 
 describe("renderAnalyticsReport", () => {
@@ -108,6 +119,26 @@ describe("renderAnalyticsReport", () => {
     const text = renderAnalyticsReport(report({ failures }), "all history");
     expect(text).toContain("failure 5");
     expect(text).not.toContain("failure 0");
+  });
+
+  it("renders done-check, task-tool, and subagent measures", () => {
+    const text = renderAnalyticsReport(
+      report({
+        doneChecks: [{ provider: "openai", model: "gpt-6-luna", thinking: "high", reports: 2, passes: 1 }],
+        tasks: [{ provider: "openai", model: "gpt-6-luna", thinking: "high", runs: 1, calls: 4 }],
+        subagents: [
+          { agent: "reviewer", provider: "openai", model: "gpt-6-luna", thinking: "high", runs: 2, cost: 0.42 },
+        ],
+      }),
+      "all history",
+    );
+    expect(text).toContain("MyPi features\nopenai/gpt-6-luna · high   2 done-check reports · 1 pass");
+    expect(text).toContain("openai/gpt-6-luna · high   1 task-tool run · 4 calls");
+    expect(text).toContain("reviewer · openai/gpt-6-luna · high   2 runs · $0.42 child cost");
+  });
+
+  it("reports how many other pi sessions were skipped", () => {
+    expect(renderAnalyticsReport(report({ skippedSessions: 3 }), "all history")).toBe("3 other pi sessions skipped");
   });
 
   it("reports when nothing was recorded", () => {

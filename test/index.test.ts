@@ -10,6 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
+import { MYPI_SESSION_MARKER_TYPE } from "#core/session-marker";
 import { ToolGuard } from "#core/tool-guard";
 import { Worktrees } from "#core/worktree/index";
 import { loadModules } from "#module/index";
@@ -29,6 +30,10 @@ function loadExtension() {
   const commands = new Map<string, CommandOptions>();
   const handlers = new Map<string, Handler>();
   const registered = new Set(["read", "bash", "edit", "write"]);
+  const branch: unknown[] = [];
+  const appendEntry = vi.fn((customType: string, data: unknown) => {
+    branch.push({ type: "custom", customType, data });
+  });
   const mcpServers: string[] = [];
   const toolRenderers: unknown[] = [];
   let active = [...registered];
@@ -52,6 +57,7 @@ function loadExtension() {
     },
     sendUserMessage: () => {},
     registerMessageRenderer: () => {},
+    appendEntry,
     registerToolRenderer: (resolver: unknown) => {
       toolRenderers.push(resolver);
     },
@@ -61,7 +67,7 @@ function loadExtension() {
     },
   } as unknown as ExtensionAPI;
   mypi(pi);
-  return { pi, commands, handlers, activeTools: () => active, mcpServers, toolRenderers };
+  return { pi, commands, handlers, activeTools: () => active, mcpServers, toolRenderers, appendEntry, branch };
 }
 
 function fakeContext() {
@@ -135,6 +141,16 @@ describe("mypi extension", () => {
     ctx.hasUI = false;
     const read = { type: "tool_call", toolCallId: "1", toolName: "read", input: { path: "/outside/file" } };
     await expect(handlers.get("tool_call")?.(read, ctx)).resolves.toMatchObject({ block: true });
+  });
+
+  it("marks a MyPi session once across repeated session starts", async () => {
+    const { handlers, appendEntry, branch } = loadExtension();
+    const ctx = { ...fakeContext(), sessionManager: { getBranch: () => branch } } as unknown as ExtensionContext;
+    await handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, ctx);
+    await handlers.get("session_start")?.({ type: "session_start", reason: "resume" }, ctx);
+    expect(appendEntry).toHaveBeenCalledOnce();
+    expect(appendEntry).toHaveBeenCalledWith(MYPI_SESSION_MARKER_TYPE, {});
+    expect(branch).toContainEqual({ type: "custom", customType: MYPI_SESSION_MARKER_TYPE, data: {} });
   });
 
   it("registers no commands before a session starts", () => {

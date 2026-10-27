@@ -1,8 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { SessionHeader, ToolCallRow, ToolResultRow, UsageRow } from "./entries";
+import type { FeatureRow, SessionHeader, ToolCallRow, ToolResultRow, UsageRow } from "./entries";
 import { ensureSchemaVersion, openSQLite, withTransaction } from "./sqlite";
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 9;
 
 /** A transcript's indexed position and its session metadata. */
 export type AnalyticsFile = {
@@ -17,6 +17,7 @@ export type FileRows = {
   usage: UsageRow[];
   calls: ToolCallRow[];
   results: ToolResultRow[];
+  features: FeatureRow[];
 };
 
 /** Local SQLite store for indexed transcript usage. */
@@ -27,13 +28,15 @@ export class AnalyticsStore {
     this.database = openSQLite(path);
     ensureSchemaVersion(this.database, SCHEMA_VERSION, () => {
       this.database.exec(`DROP TABLE IF EXISTS usage; DROP TABLE IF EXISTS files;
-        DROP TABLE IF EXISTS tool_calls; DROP TABLE IF EXISTS shell_commands;
+        DROP TABLE IF EXISTS tool_calls; DROP TABLE IF EXISTS shell_commands; DROP TABLE IF EXISTS features;
+        DROP TABLE IF EXISTS skipped_files;
         CREATE TABLE files (
-          file_path TEXT PRIMARY KEY, size INTEGER NOT NULL, offset INTEGER NOT NULL, session_id TEXT NOT NULL
+          file_path TEXT PRIMARY KEY, size INTEGER NOT NULL, offset INTEGER NOT NULL, session_id TEXT NOT NULL,
+          parent_session TEXT
         );
         CREATE TABLE usage (
           file_path TEXT NOT NULL, session_id TEXT NOT NULL, cwd TEXT NOT NULL, entry_id TEXT NOT NULL,
-          is_reply INTEGER NOT NULL, timestamp INTEGER NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
+          position INTEGER NOT NULL, is_reply INTEGER NOT NULL, timestamp INTEGER NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
           thinking TEXT NOT NULL, input INTEGER NOT NULL, output INTEGER NOT NULL, cache_read INTEGER NOT NULL,
           cache_write INTEGER NOT NULL, cost REAL NOT NULL, stop_reason TEXT NOT NULL,
           PRIMARY KEY(file_path, entry_id)
@@ -41,14 +44,20 @@ export class AnalyticsStore {
         CREATE TABLE tool_calls (
           file_path TEXT NOT NULL, session_id TEXT NOT NULL, cwd TEXT NOT NULL, call_id TEXT NOT NULL,
           timestamp INTEGER NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, thinking TEXT NOT NULL,
-          tool TEXT NOT NULL, code_search INTEGER NOT NULL, from_line_one INTEGER NOT NULL, failed INTEGER,
+          tool TEXT NOT NULL, code_search INTEGER NOT NULL, from_line_one INTEGER NOT NULL, agent_name TEXT, failed INTEGER,
           failure_line TEXT,
           PRIMARY KEY(file_path, call_id)
         );
         CREATE TABLE shell_commands (
           file_path TEXT NOT NULL, call_id TEXT NOT NULL, name TEXT NOT NULL, timestamp INTEGER NOT NULL,
           PRIMARY KEY(file_path, call_id, name)
-        );`);
+        );
+        CREATE TABLE features (
+          file_path TEXT NOT NULL, entry_id TEXT NOT NULL, kind TEXT NOT NULL, timestamp INTEGER NOT NULL,
+          position INTEGER NOT NULL,
+          PRIMARY KEY(file_path, entry_id)
+        );
+        CREATE TABLE skipped_files (file_path TEXT PRIMARY KEY);`);
     });
   }
 
@@ -58,6 +67,7 @@ export class AnalyticsStore {
       this.database.prepare("DELETE FROM usage WHERE file_path = ?").run(file.path);
       this.database.prepare("DELETE FROM tool_calls WHERE file_path = ?").run(file.path);
       this.database.prepare("DELETE FROM shell_commands WHERE file_path = ?").run(file.path);
+      this.database.prepare("DELETE FROM features WHERE file_path = ?").run(file.path);
       this.insertRows(file, rows);
       this.saveProgress(file);
     });
@@ -78,11 +88,29 @@ export class AnalyticsStore {
       .get(path) as { size: number; offset: number; sessionId: string } | undefined;
   }
 
-  /** Paths of the indexed transcripts, so the indexer can remove source files that disappeared. */
+  /** Whether a transcript was excluded as another extension's session. */
+  isSkipped(path: string): boolean {
+    return this.database.prepare("SELECT 1 FROM skipped_files WHERE file_path = ?").get(path) !== undefined;
+  }
+
+  /** Remembers an excluded transcript by path only, so later growth never makes it eligible. */
+  skipFile(path: string): void {
+    this.database.prepare("INSERT OR IGNORE INTO skipped_files(file_path) VALUES (?)").run(path);
+  }
+
+  /** Number of existing transcripts excluded as another extension's sessions. */
+  skippedCount(): number {
+    const row = this.database.prepare("SELECT COUNT(*) AS count FROM skipped_files").get() as { count: number };
+    return row.count;
+  }
+
+  /** Paths of indexed and skipped transcripts, so the indexer can remove source files that disappeared. */
   filePaths(): string[] {
-    return (this.database.prepare("SELECT file_path FROM files").all() as { file_path: string }[]).map(
-      ({ file_path }) => file_path,
-    );
+    return (
+      this.database.prepare("SELECT file_path FROM files UNION SELECT file_path FROM skipped_files").all() as {
+        file_path: string;
+      }[]
+    ).map(({ file_path }) => file_path);
   }
 
   /** Removes transcripts whose source files are confirmed to be gone. */
@@ -94,7 +122,9 @@ export class AnalyticsStore {
         this.database.prepare("DELETE FROM usage WHERE file_path = ?").run(path);
         this.database.prepare("DELETE FROM tool_calls WHERE file_path = ?").run(path);
         this.database.prepare("DELETE FROM shell_commands WHERE file_path = ?").run(path);
+        this.database.prepare("DELETE FROM features WHERE file_path = ?").run(path);
         this.database.prepare("DELETE FROM files WHERE file_path = ?").run(path);
+        this.database.prepare("DELETE FROM skipped_files WHERE file_path = ?").run(path);
       }
     });
   }
@@ -105,9 +135,9 @@ export class AnalyticsStore {
 
   private insertRows(file: AnalyticsFile, rows: FileRows): void {
     const insertUsage = this.database.prepare(
-      `INSERT OR IGNORE INTO usage(file_path, session_id, cwd, entry_id, is_reply, timestamp, provider, model,
+      `INSERT OR IGNORE INTO usage(file_path, session_id, cwd, entry_id, position, is_reply, timestamp, provider, model,
         thinking, input, output, cache_read, cache_write, cost, stop_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const row of rows.usage) {
       insertUsage.run(
@@ -115,6 +145,7 @@ export class AnalyticsStore {
         file.header.id,
         file.header.cwd,
         row.entryId,
+        row.position ?? 0,
         row.isReply ? 1 : 0,
         row.timestamp,
         row.provider,
@@ -131,8 +162,8 @@ export class AnalyticsStore {
 
     const insertCall = this.database.prepare(
       `INSERT OR IGNORE INTO tool_calls(file_path, session_id, cwd, call_id, timestamp, provider, model, thinking,
-        tool, code_search, from_line_one)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        tool, code_search, from_line_one, agent_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertCommand = this.database.prepare(
       "INSERT OR IGNORE INTO shell_commands(file_path, call_id, name, timestamp) VALUES (?, ?, ?, ?)",
@@ -150,10 +181,18 @@ export class AnalyticsStore {
         call.tool,
         call.codeSearch ? 1 : 0,
         call.fromLineOne ? 1 : 0,
+        call.agentName ?? null,
       );
       for (const name of call.commandNames) {
         insertCommand.run(file.path, call.callId, name, call.timestamp);
       }
+    }
+
+    const insertFeature = this.database.prepare(
+      "INSERT OR IGNORE INTO features(file_path, entry_id, kind, timestamp, position) VALUES (?, ?, ?, ?, ?)",
+    );
+    for (const feature of rows.features) {
+      insertFeature.run(file.path, feature.entryId, feature.kind, feature.timestamp, feature.position ?? 0);
     }
 
     const settleCall = this.database.prepare(
@@ -166,7 +205,9 @@ export class AnalyticsStore {
 
   private saveProgress(file: AnalyticsFile): void {
     this.database
-      .prepare("INSERT OR REPLACE INTO files(file_path, size, offset, session_id) VALUES (?, ?, ?, ?)")
-      .run(file.path, file.size, file.offset, file.header.id);
+      .prepare(
+        "INSERT OR REPLACE INTO files(file_path, size, offset, session_id, parent_session) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(file.path, file.size, file.offset, file.header.id, file.header.parentSession ?? null);
   }
 }
