@@ -22,7 +22,7 @@ MyPi/
 │   └── tools/             # One doc per built-in tool (tools that belong to no module)
 ├── src/
 │   ├── mypi.ts            # MyPi class: pi event handlers
-│   ├── core/              # Session, ModuleManager, Notifier, PromptManager, ToolGuard, JobManager, shared types (incl. Module), util/   (#core/<file>)
+│   ├── core/              # Session, ModuleManager, PromptManager, ToolGuard, JobManager, shared types (incl. Module), util/   (#core/<file>)
 │   ├── command/           # Slash commands: registry, one file or folder per command          (#command/<file>)
 │   ├── tool/              # Built-in tools: registerTools, one file or folder per tool, utils.ts for helpers they share   (#tool/<file>)
 │   ├── mcp/               # MCP servers MyPi registers with pi: registerMcpServers, one file per server   (#mcp/<file>)

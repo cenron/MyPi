@@ -36,7 +36,7 @@ async function runCommand(cmd: Command, args: string, ctx: ExtensionCommandConte
     try {
       session.logError(errorMessage(error));
     } catch {
-      // Replacement can invalidate the notifier too. Let pi report the original failure, not a stale-context error.
+      // Replacement can invalidate the session's context too. Let pi report the original failure, not a stale-context error.
       throw error;
     }
   }

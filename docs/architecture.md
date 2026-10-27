@@ -82,7 +82,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`pickLoaded(reason, saved, modules)`**, a private `ModuleManager` method, is the only place the load rule is
   written. `start` and `select` both use it. Tests reach it through them, with the fake session and modules in
   `test/fakes.ts`. See [Module loading](#module-loading).
-- **`Notifier`** sends those messages to `ctx.ui.notify` and skips them when `ctx.hasUI` is false (print and JSON
+- **`Session.notify`** (private) sends those messages to `ctx.ui.notify` and skips them when `ctx.hasUI` is false (print and JSON
   modes).
 - **`PromptManager`** (`prompt-manager.ts`) holds one system prompt section per module, keyed by `info.name`, and is
   `session.promptManager`. Modules set theirs with `BaseModule.setPrompt(text)`; `undefined` clears it. Core sets one

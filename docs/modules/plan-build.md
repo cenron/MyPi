@@ -56,9 +56,9 @@ module.
 ## Shared footer and editor
 
 Plan-build is the first module to need a footer label and a key, and later modules will too, so both are shared MyPi
-UI in `src/ui/`, built per session by `Session` (like `Notifier`) and reached through `BaseModule` helpers.
+UI in `src/ui/`, built per session by `Session` and reached through `BaseModule` helpers.
 
-**Footer** (`src/ui/footer.ts`, built). `Session` builds it next to `Notifier` and exposes it as `session.footer`. A
+**Footer** (`src/ui/footer.ts`, built). `Session` builds it and exposes it as `session.footer`. A
 module calls `setFooter(item)`, where `FooterItem` is `{ text, color: FooterColor }`, or `setFooter(undefined)` to
 clear. Each module gets one slot, keyed by `info.name`.
 

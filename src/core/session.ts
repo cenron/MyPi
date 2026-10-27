@@ -5,7 +5,6 @@ import { jobsLine } from "#ui/jobs-line";
 import { subscribe } from "./events";
 import { JobManager } from "./job-manager";
 import { ModuleManager } from "./module-manager";
-import { Notifier } from "./notifier";
 import { PromptManager } from "./prompt-manager";
 import { ToolGuard } from "./tool-guard";
 import { type Project, Worktrees } from "./worktree";
@@ -28,7 +27,6 @@ export class Session {
   readonly worktrees: Worktrees;
   /** Where MyPi keeps a project's `.pi/` state: the main checkout in git, else the session's folder. */
   readonly projectRoot: string;
-  private readonly notifier: Notifier;
   private jobsInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
@@ -38,7 +36,6 @@ export class Session {
     readonly project: Project | undefined,
   ) {
     this.projectRoot = project?.main ?? ctx.cwd;
-    this.notifier = new Notifier(ctx);
     this.moduleManager = new ModuleManager(this);
     this.footer = new Footer(ctx);
     this.editor = new Editor(ctx);
@@ -73,15 +70,20 @@ export class Session {
   }
 
   log(msg: string) {
-    this.notifier.info(msg);
+    this.notify(msg, "info");
   }
 
   logWarning(msg: string) {
-    this.notifier.warn(msg);
+    this.notify(msg, "warning");
   }
 
   logError(msg: string) {
-    this.notifier.error(msg);
+    this.notify(msg, "error");
+  }
+
+  /** Sends a notification through pi, and drops it when there is no UI (print and JSON modes). */
+  private notify(msg: string, type: "info" | "warning" | "error") {
+    if (this.ctx.hasUI) this.ctx.ui.notify(msg, type);
   }
 
   private updateJobsWidget(running: number) {
