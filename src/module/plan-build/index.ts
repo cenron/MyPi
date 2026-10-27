@@ -23,7 +23,7 @@ const FOOTER_ITEMS: Record<Mode, FooterItem> = {
   [Mode.BUILD]: { text: "BUILD", color: FooterColor.DIM },
 };
 
-/** The prompt section for each mode. */
+/** Plan, a mode that investigates and plans without changing the project, and Build, which implements. */
 export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thinking?: ThinkingLevel }> {
   private readonly plansDir = join(this.session.projectRoot, PLANS_DIR);
   private mode: Mode = Mode.PLAN;

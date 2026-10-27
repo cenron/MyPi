@@ -81,8 +81,9 @@ export function doneCheckReport(
   const errors = problems
     .filter((problem) => problem.severity === "error")
     .toSorted((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column);
-  if (errors.length === 0 && failures.length === 0 && openTasks.length === 0 && duplicates.length === 0)
+  if (errors.length === 0 && failures.length === 0 && openTasks.length === 0 && duplicates.length === 0) {
     return undefined;
+  }
 
   const shown = errors.slice(0, MAX_REPORTED_ERRORS).map((error) => errorLine(error, cwd));
   const hidden = errors.length - shown.length;

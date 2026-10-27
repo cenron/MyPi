@@ -4,7 +4,6 @@ import { formatResults } from "#tool/web-search/format";
 import { webSearchTool } from "#tool/web-search/index";
 import { EXA_SEARCH_TOOL } from "#tool/web-search/tools/exa";
 import { PARALLEL_SEARCH_TOOL } from "#tool/web-search/tools/parallel";
-import { fakeSession } from "../../fakes";
 import { answered, fakeContext } from "../fakes";
 
 const results = [{ url: "https://a.test", title: "A", excerpt: "Some text." }];
@@ -17,7 +16,7 @@ const parallel = answered({
 const exa = answered({ content: [{ type: "text", text: "Title: A\nURL: https://a.test\nHighlights:\nSome text." }] });
 
 describe("webSearchTool", () => {
-  const { definition } = webSearchTool(fakeSession().session);
+  const { definition } = webSearchTool();
   const run = (ctx: ExtensionToolContext, signal?: AbortSignal) =>
     definition.execute("call-1", { query: "q" }, signal, undefined, ctx);
 

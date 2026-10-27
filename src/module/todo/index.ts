@@ -96,23 +96,23 @@ export class TodoModule extends BaseModule {
     this.session.ctx.ui.setWorkingMessage(activeTask?.activeForm ?? activeTask?.subject);
   }
 
+  /** Only after `drawTasks`' UI check, or from the key, which only a UI has. */
   private drawWidget() {
-    if (!this.session.ctx.hasUI) return;
-
+    const { ui } = this.session.ctx;
     const lines = this.widgetVisible ? todoWidgetLines(this.tasks) : [];
     if (lines.length === 0) {
-      this.session.ctx.ui.setWidget(WIDGET_KEY, undefined, { placement: "aboveEditor" });
+      ui.setWidget(WIDGET_KEY, undefined, { placement: "aboveEditor" });
       return;
     }
 
     const content = lines.map(({ text, status }) => {
-      if (status === "in_progress") return this.session.ctx.ui.theme.fg("accent", text);
+      if (status === "in_progress") return ui.theme.fg("accent", text);
       if (status === "completed") {
-        return this.session.ctx.ui.theme.fg("dim", this.session.ctx.ui.theme.strikethrough(text));
+        return ui.theme.fg("dim", ui.theme.strikethrough(text));
       }
-      if (status === "pending") return this.session.ctx.ui.theme.fg("muted", text);
-      return this.session.ctx.ui.theme.fg("dim", text);
+      if (status === "pending") return ui.theme.fg("muted", text);
+      return ui.theme.fg("dim", text);
     });
-    this.session.ctx.ui.setWidget(WIDGET_KEY, content, { placement: "aboveEditor" });
+    ui.setWidget(WIDGET_KEY, content, { placement: "aboveEditor" });
   }
 }

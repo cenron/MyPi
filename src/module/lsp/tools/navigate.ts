@@ -89,8 +89,9 @@ export async function definition(
   cwd: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  if (!IDENTIFIER.test(usage.name))
+  if (!IDENTIFIER.test(usage.name)) {
     throw new Error(`name must be one identifier, such as parseConfig; got ${usage.name}.`);
+  }
 
   const { lookup, document, lines } = await usageScope(servers, usage, cwd, signal);
   const where = `${displayPath(usage.file, cwd)}${lines ? `, in ${lines.label}` : ""}`;

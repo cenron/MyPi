@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type AgentToolResult, defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { Session } from "#core/session";
 import type { Tool } from "#tool/types";
 import { reuseText } from "#ui/render";
 import { formatResults } from "./format";
@@ -19,7 +18,7 @@ const parameters = Type.Object({
  * `web_search`: searches the web through Parallel, or Exa when Parallel can't answer, and returns titles, URLs, and
  * excerpts.
  */
-export function webSearchTool(_session: Session): Tool {
+export function webSearchTool(): Tool {
   // The year goes into the description, so searches about recent things ask for the right one, as OpenCode does.
   const year = new Date().getFullYear();
   // Tried in this order. One Parallel session id per tool instance, so each pi session (and each reload) gets its own.

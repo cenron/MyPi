@@ -42,7 +42,7 @@ function createTools(session: Session): Tool[] {
     jobListTool(session),
     jobWaitTool(session),
     jobStopTool(session),
-    webSearchTool(session),
-    webFetchTool(session),
+    webSearchTool(),
+    webFetchTool(),
   ];
 }

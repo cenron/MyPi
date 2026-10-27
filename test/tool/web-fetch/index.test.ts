@@ -2,7 +2,6 @@ import { readFile, rm } from "node:fs/promises";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { publicLookup } from "#tool/web-fetch/address";
 import { webFetchTool } from "#tool/web-fetch/index";
-import { fakeSession } from "../../fakes";
 
 const PAGE = "https://example.com/page";
 
@@ -111,7 +110,7 @@ const replyWith = (...replies: Reply[]) => {
 type Params = { url: string; format?: "markdown" | "html"; timeout?: number };
 
 const run = (params: Params, signal?: AbortSignal) =>
-  webFetchTool(fakeSession().session).definition.execute("call-1", params, signal, undefined, {} as never);
+  webFetchTool().definition.execute("call-1", params, signal, undefined, {} as never);
 
 const textOf = async (params: Params) => {
   const result = await run(params);
@@ -423,7 +422,7 @@ describe("web_fetch", () => {
     });
 
     it("closes its connections on shutdown, and a second shutdown is harmless", () => {
-      const tool = webFetchTool(fakeSession().session);
+      const tool = webFetchTool();
       tool.shutdown?.();
       tool.shutdown?.();
       expect(net.agents.at(-1)?.closed).toBe(2);
@@ -431,7 +430,7 @@ describe("web_fetch", () => {
   });
 
   describe("the definition", () => {
-    const { definition } = webFetchTool(fakeSession().session);
+    const { definition } = webFetchTool();
 
     it("is read-only and open-world, so plan-build allows it without asking", () => {
       expect(definition.annotations).toEqual({ readOnlyHint: true, openWorldHint: true });

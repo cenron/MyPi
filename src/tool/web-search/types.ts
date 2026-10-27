@@ -5,7 +5,7 @@ export type SearchResult = { url: string; title?: string; excerpt?: string; publ
 
 /** A search service web_search can call. */
 export type SearchBackend = {
-  /** Short id, such as `parallel`, for details and messages. */
+  /** Short id, such as `parallel_search`, for details and messages. */
   id: string;
   /** Display name, such as `Parallel`. */
   name: string;

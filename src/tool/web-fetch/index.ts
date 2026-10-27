@@ -8,7 +8,6 @@ import {
 
 import { Type } from "typebox";
 import { Agent, fetch } from "undici";
-import type { Session } from "#core/session";
 import { errorMessage, isNodeError } from "#core/util/errors";
 import type { Tool } from "#tool/types";
 import { reuseText } from "#ui/render";
@@ -57,7 +56,7 @@ type FetchOptions = { format: Format; signal: AbortSignal; dispatcher: Agent };
  * `docs/tools/web-fetch.md`. Local and private addresses are refused, on every redirect hop and again when each
  * connection opens.
  */
-export function webFetchTool(_session: Session): Tool {
+export function webFetchTool(): Tool {
   // Connections go through publicLookup, so an address is checked when it's dialed, not just before.
   const dispatcher = new Agent({ connect: { lookup: publicLookup } });
 
@@ -99,8 +98,9 @@ export function webFetchTool(_session: Session): Tool {
 
 /** Throws unless `url` is http or https: for the URL asked for, and for every redirect. */
 function assertHttp(url: URL): void {
-  if (url.protocol !== "http:" && url.protocol !== "https:")
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Only http: and https: URLs are supported");
+  }
 }
 
 /**
