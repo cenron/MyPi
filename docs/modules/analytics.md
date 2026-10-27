@@ -153,6 +153,34 @@ Dated, with the window and model; newest last. Each says what was decided.
   checkpoint and hit the Go 5-hour limit before finishing (Luna finished it). The done check's open-task report fired
   on pi for the first time (checkpoint 3). Decided: Luna and DeepSeek for building; Qwen only when its quality is
   worth about 13× the price, and not on the Go plan's 5-hour budget.
+- **2026-10-27, the first full report** (all indexed history, 2026-10-18 to 2026-10-27, 328 MyPi sessions, nearly
+  all on the 25th and 26th; costs are list prices, not what a subscription billed):
+  - **Subagents are the cost, through `inherit`.** Child sessions spent $14.46 of $17.25 (84%) and made 5,338 of
+    6,663 replies. A child on gpt-6-luna cost about $0.03 a run; children that inherited gpt-6.1-sol ($6.69, 12 runs)
+    or Qwen 3.8 Max ($2.54, 5 runs) cost about $0.56 a run and made up most of it. The parent's model is the lever,
+    since every builtin agent inherits it.
+  - **Subagents hit approval walls.** 76 "no one can give it here (no UI)" refusals, all inside subagents: 56 from
+    Plan's rule (tests, chained lines, `cd` before a reader), about 20 from the folder guard. `e921173` (approved
+    checks) and `26344d2` (`cd`) fixed most; the refusals after them came from two pis started before `26344d2`. Left:
+    writers in a worktree handed the main checkout's paths, and approved checks inside a longer line.
+  - **herdr is the most-run shell command** (775 calls, 93 failed): many failures print herdr's own help (a wrong
+    subcommand), 37 are `agent_prompt_stalled`, 9 are `wait-output` timeouts. pi driving pi needs a wrapper or a
+    short syntax sheet.
+  - **`bash`'s failure share misleads.** 18% of calls failed, but 297 of the 389 failures outside herdr are `npm` or
+    `npx`, mostly test and typecheck runs exiting non-zero while building. The report can't tell a non-zero exit from
+    a broken call.
+  - **Lifetime numbers hide a change.** gpt-6-luna's `lsp` share is 10.5% over all history against 53–60% in the
+    windows measured after the nudge; the 7-day default now covers almost everything. The report can't yet measure
+    "the same way after" (step 4 of the loop).
+  - **Settled:** cache-read share is 96–99% on every hosted model, so caching isn't where tokens go. Per reply,
+    gpt-6-luna and DeepSeek V4.1 Flash cost about 0.1¢, gpt-6.1-sol about 0.95¢, Qwen 3.8 Max about 2¢. DeepSeek
+    writes the longest replies (555 output tokens each) and has the lowest `lsp` share (2%). One permission dialog
+    recorded so far: too few to read.
+
+  Decided: subagents keep `inherit` (the parent's model is chosen with that in mind); fix writers' paths and checks in
+  a longer line, and split non-zero exits from other failures; then start over from an empty history (the sessions
+  indexed here went to the Trash) and measure the next work. Still open: a date or per-milestone window for
+  `/analytics`, and herdr usage errors.
 
 ## What pi offers
 
