@@ -155,29 +155,7 @@ export async function captureWork(
   const patchPath = join(patches, `${prepared.name}.patch`);
   const handoffPath = join(patches, `${prepared.name}.md`);
   await writeFile(patchPath, patch);
-  await writeFile(
-    handoffPath,
-    [
-      `# ${agent.name}`,
-      "",
-      "## Task",
-      task,
-      "",
-      `## Base commit\n${prepared.base}`,
-      "",
-      "## Files",
-      ...files.map((file) => `- ${file}`),
-      "",
-      "## Diff stat",
-      diffStat.trimEnd(),
-      "",
-      `## Patch\n${patchPath}`,
-      "",
-      "## Summary",
-      answer,
-      "",
-    ].join("\n"),
-  );
+  await writeFile(handoffPath, handoffText({ agent, task, base: prepared.base, files, diffStat, patchPath, answer }));
   await session.worktrees.discard(prepared.name);
 
   return { name: prepared.name, files, patchPath, handoffPath, diffStat };
@@ -210,4 +188,36 @@ async function freeName(session: Session, main: string, agentName: string): Prom
     const name = `sub-${slug}-${number}`;
     if (!taken.has(name) && !existsSync(join(main, PATCHES_DIR, `${name}.patch`))) return name;
   }
+}
+
+/** The handoff note beside a patch: what the writer was asked, from which commit, what it changed, and its answer. */
+function handoffText(work: {
+  agent: AgentDefinition;
+  task: string;
+  base: string;
+  files: readonly string[];
+  diffStat: string;
+  patchPath: string;
+  answer: string;
+}): string {
+  return [
+    `# ${work.agent.name}`,
+    "",
+    "## Task",
+    work.task,
+    "",
+    `## Base commit\n${work.base}`,
+    "",
+    "## Files",
+    ...work.files.map((file) => `- ${file}`),
+    "",
+    "## Diff stat",
+    work.diffStat.trimEnd(),
+    "",
+    `## Patch\n${work.patchPath}`,
+    "",
+    "## Summary",
+    work.answer,
+    "",
+  ].join("\n");
 }

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
+  type AgentSession,
   createAgentSession,
   DefaultResourceLoader,
   type ExtensionContext,
@@ -76,21 +77,7 @@ export async function runChild(run: ChildRun, cwd = run.parent.cwd): Promise<Chi
     sessionManager: manager,
   });
 
-  // Reports each step, and records each file a write or edit changed once the call succeeds. The end event has no
-  // arguments, so the start keeps the path by call id.
-  const pending = new Map<string, string>();
-  const changedFiles = new Set<string>();
-  const unsubscribe = session.subscribe((event) => {
-    if (event.type === "tool_execution_start") {
-      onStep(`${event.toolName}: ${JSON.stringify(event.args)}`);
-      const path = changedPath(event.toolName, event.args);
-      if (path) pending.set(event.toolCallId, path);
-    }
-    if (event.type === "tool_execution_end" && !event.isError) {
-      const path = pending.get(event.toolCallId);
-      if (path) changedFiles.add(path);
-    }
-  });
+  const steps = trackSteps(session, onStep);
 
   let timedOut = false;
   const abort = () => void session.abort();
@@ -110,15 +97,36 @@ export async function runChild(run: ChildRun, cwd = run.parent.cwd): Promise<Chi
       answer: session.getLastAssistantText() ?? "The agent gave no answer.",
       usage: runUsage(session.messages),
       sessionFile: manager.getSessionFile(),
-      changedFiles: [...changedFiles],
+      changedFiles: [...steps.changedFiles],
       timedOut,
     };
   } finally {
     clearTimeout(timeout);
     signal.removeEventListener("abort", abort);
-    unsubscribe();
+    steps.stop();
     await session.dispose();
   }
+}
+
+/**
+ * Reports each of the child's steps, and records each file a write or edit changed once the call succeeds. The end
+ * event has no arguments, so the start keeps the path by call id.
+ */
+function trackSteps(session: AgentSession, onStep: (step: string) => void) {
+  const pending = new Map<string, string>();
+  const changedFiles = new Set<string>();
+  const stop = session.subscribe((event) => {
+    if (event.type === "tool_execution_start") {
+      onStep(`${event.toolName}: ${JSON.stringify(event.args)}`);
+      const path = changedPath(event.toolName, event.args);
+      if (path) pending.set(event.toolCallId, path);
+    }
+    if (event.type === "tool_execution_end" && !event.isError) {
+      const path = pending.get(event.toolCallId);
+      if (path) changedFiles.add(path);
+    }
+  });
+  return { changedFiles, stop };
 }
 
 /**
