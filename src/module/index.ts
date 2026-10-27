@@ -1,6 +1,7 @@
 import type { SessionStartEvent } from "@earendil-works/pi-coding-agent";
 import type { Session } from "#core/session";
 import type { ModuleClass } from "#core/types";
+import { AnalyticsModule } from "./analytics";
 import { ContextModule } from "./context";
 import { DoneCheckModule } from "./done-check";
 import { LspModule } from "./lsp";
@@ -11,6 +12,7 @@ import { TodoModule } from "./todo";
 
 const modules: ModuleClass[] = [
   PlanBuildModule,
+  AnalyticsModule,
   MemoryModule,
   LspModule,
   DoneCheckModule,

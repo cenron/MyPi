@@ -121,7 +121,12 @@ describe("mypi extension", () => {
     await expect(
       handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, ctx),
     ).resolves.toBeUndefined();
-    expect(ctx.ui.notify).toHaveBeenCalledExactlyOnceWith(
+    expect(
+      vi
+        .mocked(ctx.ui.notify)
+        .mock.calls.filter(([message]) => message.includes("Project discovery failed: Git discovery failed")),
+    ).toHaveLength(1);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Project discovery failed: Git discovery failed"),
       "warning",
     );
@@ -185,7 +190,7 @@ describe("mypi extension", () => {
 
     const identity = (event.systemPromptOptions.sections as Record<string, string>)["mypi-identity"];
     expect(identity).toContain("You are MyPi");
-    expect(identity).toContain("Model: openai/gpt-6.1-sol. Modules running: plan-build, memory");
+    expect(identity).toContain("Model: openai/gpt-6.1-sol. Modules running: plan-build, analytics, memory");
   });
 
   // The folder rule is core: it guards every session, and allows what the prompt points the agent at.

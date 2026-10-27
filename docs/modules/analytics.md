@@ -1,7 +1,8 @@
 # Analytics
 
-**Status:** idea (recorded 2026-10-22). Not built yet; measured by hand during MyPi's self-builds since 2026-10-26
-(see [Findings](#findings)), which shapes what the module will collect.
+**Status:** slice 1 built 2026-10-26: a local index of reply usage from pi's session files and `/analytics`. Tool calls,
+code navigation, MyPi features, permission dialogs, and benchmarks remain planned; measured by hand during MyPi's
+self-builds (see [Findings](#findings)).
 
 ## Goal
 
@@ -37,13 +38,12 @@ Two kinds of measure, kept apart:
 
 ## Where the data comes from
 
-- **Now (by hand):** pi's session files, the source of truth for what happened: main sessions in
-  `~/.pi/agent/sessions/<folder>/`, subagent runs in `~/.pi/agent/subagents/sessions/`. A local script in the
-  git-ignored `.pi/plans/measure-tool-use.py` counts code navigation per session (`lsp` calls, `rg`/`grep` searches
-  outside `node_modules`, reads from line 1, reads of a later part, shell reads). The footer gives each session's cost
-  and context share. Each self-build plan's Observations log carries these per checkpoint.
-- **Later (the module):** pi's events, as below, into one local database, so the same numbers come without a script
-  and across every project.
+- **By hand:** pi's session files, the source of truth for what happened: main sessions in
+  `~/.pi/agent/sessions/<folder>/`, subagent runs in `~/.pi/agent/subagents/sessions/`. The git-ignored
+  `.pi/plans/measure-tool-use.py` counts code navigation per session; the footer gives each session's cost and context
+  share. Each self-build plan's Observations log carries reviewed measures per checkpoint.
+- **The module:** reads both session-file folders into one local database shared across pi windows and projects. It
+  indexes existing history and appended complete JSONL lines; no transcript content is retained.
 
 ## What to measure
 
@@ -158,18 +158,20 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 
 ## Storage
 
-- One SQLite database under `~/.pi/` (outside the repo, so nothing personal is committed), shared by every pi window:
-  one row per event or a running total per (model, effort, day), to decide.
-- Several pi instances write at once, so the database runs in WAL mode with a busy timeout, and every write is a
-  short transaction.
-- **Sharing it with pi-durable** (for [subagents](subagents.md)): possible in the same file, but pi-durable says "one
-  process owns a storage at a time", and several pi windows write analytics at once. So likely the same folder,
-  separate files: `analytics.sqlite` for this module, and pi-durable's per-session files beside it.
+- One SQLite database at `join(getAgentDir(), "analytics", "analytics.sqlite")`, outside the repo, shared by every pi
+  window. It stores per-file indexing progress and one row per assistant reply or `usage` entry; the session files are
+  the source of truth, and rows are removed when their transcript files disappear.
+- Built with Node's `node:sqlite` `DatabaseSync`, WAL mode, and a 5-second busy timeout. A file's usage rows and
+  progress are written in one transaction. The `schema_version` is rebuilt from session files when it changes.
+- Indexing is incremental: it resumes at the byte offset after the last complete line. Shrunk files and files whose
+  header session id changed are reindexed. Every branch entry counts; the tree is not filtered to its current leaf.
 
 ## Privacy
 
 - Record command names, never full command lines or arguments: they can hold paths, secrets, or private data.
-- No file contents, prompts, or replies; only counts, sizes, names, and failure text cut short.
+- No file contents, prompts, or replies; slice 1 retains only provider, model, thinking level, usage counts, cost,
+  stop reason, timestamp, session id, and project folder. Later tool-call measures may retain only the tool name,
+  failure flag, shell command names, read starting line, and a short failure line.
 - Local only: nothing leaves the machine.
 - **By hand, too:** the measuring script reads arguments locally to classify calls but prints only counts and each
   session's first-prompt snippet; only aggregates go into tracked docs (this file, module docs), never raw session
@@ -177,10 +179,20 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 
 ## Behavior
 
-- Collects silently while loaded; the session isn't slowed (writes are batched or quick).
-- A command, such as `/analytics`, shows a summary: tokens and cache share per model and effort, the most-failed tools,
-  the most-run shell commands with no tool, the code-navigation mix, and each feature's numbers from the table above.
+- When loaded, it indexes session files in the background and indexes again before reporting. No pi hot-path events
+  are used in slice 1.
+- `/analytics` shows one compact assistant-reply line per provider, model, and thinking level for the last 7 days;
+  `/analytics all` shows all indexed history. Usage entries contribute tokens and cost but not reply counts. Token
+  counts use the footer's compact units; the line reports input, output, cache-read share, and cost to two decimals.
 - Can be turned off with `/modules`, and the database deleted to start over.
+
+## Slices
+
+1. **Built 2026-10-26:** SQLite store, incremental session-file indexer, assistant and `usage` rows, and the first
+   `/analytics` summary. This is the baseline; later slices add tool calls, MyPi feature counts, and permission dialogs.
+2. Tool calls and code navigation; retire the handwritten measuring script.
+3. Done-check, todo, and subagent measures.
+4. Permission-dialog friction from a live notice.
 
 ## Lessons from other projects
 
