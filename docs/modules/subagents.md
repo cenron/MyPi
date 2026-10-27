@@ -237,6 +237,11 @@ it here (no UI). Tell the user what you needed and why: …").
      the result lists the files. Drop deletes both files; Cancel changes nothing. Unknown names list the available
      patches, and without a UI the tool refuses because my approval is required. The prompt says never to use
      `git apply` through `bash`, which wouldn't ask me. Patches are applied one at a time.
+- **A writer pi quit in the middle of is recovered on the next start.** pi's shutdown stops jobs without waiting, so
+  a running writer's work can't be captured then; its worktree and branch were left behind (seen 2026-10-26). Each
+  writer now writes its pi's process id beside its worktree (`.pi/worktrees/<name>.owner`). When the subagents module
+  starts, a writer worktree whose pi is gone becomes a patch and handoff, as a finished writer's would, and the user
+  is told where; one with no changes is just removed. Another pi window's running writer is left alone.
 - **A repository with no commit refuses a worktree writer**, saying to make a first commit: a worktree starts from a
   commit. Found 2026-10-26 in a live check, where git's raw "ambiguous argument 'HEAD'" left the model guessing.
 - **Uncommitted changes in the calling checkout refuse a worktree writer:** the worktree comes from its `HEAD`, so

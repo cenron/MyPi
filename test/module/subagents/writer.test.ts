@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { subagentTool } from "#module/subagents/tools/subagent";
-import { captureWork, PATCHES_DIR, prepareWriter, runWriter } from "#module/subagents/writer";
+import { captureWork, PATCHES_DIR, prepareWriter, recoverWriters, runWriter } from "#module/subagents/writer";
 import { fakeSession } from "../../fakes";
 
 const execute = promisify(execFile);
@@ -289,5 +290,42 @@ describe("writer work", () => {
     expect(captured.files).toEqual(["committed.txt"]);
     expect(patch).toContain("child commit");
     expect(captured.diffStat).toContain("committed.txt");
+  });
+});
+
+describe("recovering writers pi closed mid-run", () => {
+  /** A pid that no process has any more: one that has just exited. */
+  const goneProcess = () => String(spawnSync("true").pid);
+
+  it("saves a writer's work as a patch when its pi is gone, and removes the worktree", async () => {
+    const prepared = await prepareWriter(session, developer);
+    await put(prepared.path, "half-done.txt", "partial\n");
+    await writeFile(`${prepared.path}.owner`, goneProcess());
+
+    const [recovered] = await recoverWriters(session);
+
+    expect(recovered?.files).toEqual(["half-done.txt"]);
+    expect(await readFile(recovered?.patchPath as string, "utf8")).toContain("partial");
+    expect(await readFile(recovered?.handoffPath as string, "utf8")).toContain("pi closed before this writer finished");
+    expect(await session.worktrees.list()).toHaveLength(1);
+    expect(existsSync(`${prepared.path}.owner`)).toBe(false);
+  });
+
+  it("leaves a writer alone while the pi that runs it is still running", async () => {
+    const prepared = await prepareWriter(session, developer);
+    await put(prepared.path, "in-progress.txt");
+
+    expect(await recoverWriters(session)).toEqual([]);
+    expect(await session.worktrees.list()).toHaveLength(2);
+  });
+
+  it("removes a writer's worktree with no changes, saving no patch", async () => {
+    const prepared = await prepareWriter(session, developer);
+    await writeFile(`${prepared.path}.owner`, goneProcess());
+
+    const [recovered] = await recoverWriters(session);
+
+    expect(recovered).toEqual({ name: prepared.name, files: [] });
+    expect(await session.worktrees.list()).toHaveLength(1);
   });
 });

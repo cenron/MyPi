@@ -2,12 +2,14 @@ import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
+import { errorMessage } from "#core/util/errors";
 import { BaseModule } from "../base";
 import { type AgentDefinition, loadAgents, projectAgentDir, userAgentDir } from "./agents";
 import { agentsCmd } from "./agents-view";
 import { subagentApplyTool } from "./tools/apply";
 import { agentManageRule, agentManageTool } from "./tools/manage";
 import { subagentTool } from "./tools/subagent";
+import { recoverWriters } from "./writer";
 
 /** Subagents: agents the main session hands work to. Loads their definitions and lists them in the prompt. */
 export class SubagentsModule extends BaseModule {
@@ -46,6 +48,8 @@ export class SubagentsModule extends BaseModule {
     });
     this.onToolCall(agentManageRule(this.manageCallbacks(), this.session.ctx.cwd));
     this.reloadAgents();
+    // Not awaited: init stays synchronous, and the user is told what was recovered when it's done.
+    void this.recoverWriters();
   }
 
   private manageCallbacks() {
@@ -59,6 +63,20 @@ export class SubagentsModule extends BaseModule {
       builtinNames: () => this.builtinNames,
       reload: () => this.reloadAgents(),
     };
+  }
+
+  /** Saves the work of writers a pi quit in the middle of as patches, and tells the user where they are. */
+  private async recoverWriters() {
+    try {
+      for (const work of await recoverWriters(this.session)) {
+        const what = work.patchPath
+          ? `its work is saved as ${work.patchPath}; ask to apply it (subagent_apply) or drop it`
+          : "it had changed nothing, so its worktree was removed";
+        this.session.logWarning(`Subagents: pi closed while writer ${work.name} was running; ${what}.`);
+      }
+    } catch (error) {
+      this.session.logWarning(`Subagents: couldn't recover writers pi closed mid-run: ${errorMessage(error)}`);
+    }
   }
 
   private reloadAgents() {

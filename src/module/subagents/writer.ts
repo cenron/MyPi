@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Session } from "#core/session";
+import { isNodeError } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
 import { slugify } from "#core/util/slug";
 import { git } from "#core/worktree/git";
@@ -40,16 +41,12 @@ export type WriterResult = ChildResult & {
 /** `git rev-parse --verify --quiet`'s exit code, with no message, when the name isn't a commit. */
 const NOT_A_COMMIT = 1;
 
-/** Whether the checkout's HEAD points at a commit; a new repository's doesn't until its first commit. */
-async function hasCommit(cwd: string): Promise<boolean> {
-  try {
-    await git(cwd, ["rev-parse", "--verify", "--quiet", "HEAD"]);
-    return true;
-  } catch (error) {
-    if ((error as { code?: unknown }).code === NOT_A_COMMIT) return false;
-    throw error;
-  }
-}
+/** The handoff's task and summary for work recovered from a writer that didn't finish. */
+const RECOVERED_TASK = "Unknown: pi closed before this writer finished.";
+const RECOVERED_ANSWER = "pi closed while this writer was running; the patch holds what it had changed by then.";
+
+/** What every writer worktree's name starts with: `sub-<agent>-<n>`. */
+const WRITER_PREFIX = "sub-";
 
 /** Longest agent-name part of a worktree name, leaving room for `sub-` and the number. */
 const MAX_SLUG_CHARS = 40;
@@ -80,6 +77,8 @@ export async function prepareWriter(session: Session, agent: AgentDefinition): P
     const name = await freeName(session, project.main, agent.name);
     const base = (await git(session.ctx.cwd, ["rev-parse", "HEAD"])).trim();
     const worktree = await session.worktrees.create(name);
+    // Beside the checkout, in the ignored worktrees folder: which pi runs this writer, for `recoverWriters`.
+    await writeFile(ownerFile(worktree.path), String(process.pid));
     return { name, base, path: worktree.path, main: project.main };
   });
 }
@@ -133,7 +132,7 @@ export async function runWriter(session: Session, run: ChildRun, runChildSession
 export async function captureWork(
   session: Session,
   prepared: PreparedWriter,
-  agent: AgentDefinition,
+  agent: Pick<AgentDefinition, "name">,
   task: string,
   answer: string,
 ): Promise<CapturedWork> {
@@ -145,7 +144,7 @@ export async function captureWork(
     .filter(Boolean);
 
   if (!files.length) {
-    await session.worktrees.discard(prepared.name);
+    await discardWriter(session, prepared);
     return { name: prepared.name, files };
   }
 
@@ -156,9 +155,32 @@ export async function captureWork(
   const handoffPath = join(patches, `${prepared.name}.md`);
   await writeFile(patchPath, patch);
   await writeFile(handoffPath, handoffText({ agent, task, base: prepared.base, files, diffStat, patchPath, answer }));
-  await session.worktrees.discard(prepared.name);
+  await discardWriter(session, prepared);
 
   return { name: prepared.name, files, patchPath, handoffPath, diffStat };
+}
+
+/**
+ * Turns the writer worktrees a pi left when it quit mid-run into patches, as `captureWork` would have: pi's shutdown
+ * stops jobs without waiting, so a running writer's work can't be captured then. Only worktrees whose pi is gone, so
+ * another pi window's running writer is left alone.
+ */
+export async function recoverWriters(session: Session): Promise<CapturedWork[]> {
+  const project = session.project;
+  if (!project) return [];
+
+  const orphans = (await session.worktrees.list()).filter(
+    (worktree) => worktree.managedName?.startsWith(WRITER_PREFIX) && !ownerRunning(worktree.path),
+  );
+  const recovered: CapturedWork[] = [];
+  for (const { managedName: name = "", path, head = "HEAD" } of orphans) {
+    const base = (await git(project.main, ["merge-base", "HEAD", head])).trim();
+    const agent = { name: name.slice(WRITER_PREFIX.length).replace(/-\d+$/, "") };
+    recovered.push(
+      await captureWork(session, { name, base, path, main: project.main }, agent, RECOVERED_TASK, RECOVERED_ANSWER),
+    );
+  }
+  return recovered;
 }
 
 /** Runs worktree allocation in order so simultaneous starts cannot choose the same free name. */
@@ -192,7 +214,7 @@ async function freeName(session: Session, main: string, agentName: string): Prom
 
 /** The handoff note beside a patch: what the writer was asked, from which commit, what it changed, and its answer. */
 function handoffText(work: {
-  agent: AgentDefinition;
+  agent: Pick<AgentDefinition, "name">;
   task: string;
   base: string;
   files: readonly string[];
@@ -220,4 +242,44 @@ function handoffText(work: {
     work.answer,
     "",
   ].join("\n");
+}
+
+/** Whether the checkout's HEAD points at a commit; a new repository's doesn't until its first commit. */
+async function hasCommit(cwd: string): Promise<boolean> {
+  try {
+    await git(cwd, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === NOT_A_COMMIT) return false;
+    throw error;
+  }
+}
+
+/** The file beside a writer's worktree naming the pi process that runs it. */
+function ownerFile(worktreePath: string): string {
+  return `${worktreePath}.owner`;
+}
+
+/** Discards a writer's worktree and branch, and the file naming its owner. */
+async function discardWriter(session: Session, prepared: PreparedWriter): Promise<void> {
+  await session.worktrees.discard(prepared.name);
+  await rm(ownerFile(prepared.path), { force: true });
+}
+
+/** Whether the pi that started the writer at `worktreePath` still runs; a worktree with no owner file has none. */
+function ownerRunning(worktreePath: string): boolean {
+  let pid: number;
+  try {
+    pid = Number(readFileSync(ownerFile(worktreePath), "utf8"));
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") return false;
+    throw error;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: a process with that id runs, as another user.
+    return isNodeError(error) && error.code === "EPERM";
+  }
 }
