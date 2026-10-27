@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { EXA_SEARCH_TOOL, exaBackend } from "#tool/web-search/backends/exa";
+import { PARALLEL_SEARCH_TOOL, parallelBackend } from "#tool/web-search/backends/parallel";
+import { TAVILY_SEARCH_TOOL, tavilyBackend } from "#tool/web-search/backends/tavily";
+import { TINYFISH_SEARCH_TOOL, tinyfishBackend } from "#tool/web-search/backends/tinyfish";
 import { createSearchBackendsRule } from "#tool/web-search/rule";
-import { EXA_SEARCH_TOOL, exaBackend } from "#tool/web-search/tools/exa";
-import { PARALLEL_SEARCH_TOOL, parallelBackend } from "#tool/web-search/tools/parallel";
-import { TAVILY_SEARCH_TOOL, tavilyBackend } from "#tool/web-search/tools/tavily";
-import { TINYFISH_SEARCH_TOOL, tinyfishBackend } from "#tool/web-search/tools/tinyfish";
 
 const rule = createSearchBackendsRule([parallelBackend("session"), exaBackend(), tinyfishBackend(), tavilyBackend()]);
 const reason =

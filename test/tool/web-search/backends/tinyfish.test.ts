@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TINYFISH_SEARCH_TOOL, tinyfishBackend, toResults } from "#tool/web-search/tools/tinyfish";
+import { TINYFISH_SEARCH_TOOL, tinyfishBackend, toResults } from "#tool/web-search/backends/tinyfish";
 import { answered, fakeContext } from "../../fakes";
 
 describe("TinyFish toResults", () => {

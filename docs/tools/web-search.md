@@ -83,8 +83,8 @@ which is cleaner.
 | Tool | `webSearchTool()` in `src/tool/web-search/index.ts`, registered by `registerTools` (see [Where the code goes](README.md#where-the-code-goes)) | TypeBox `parameters`. `annotations: { readOnlyHint: true, openWorldHint: true }`, so plan-build's rule allows it without asking. `promptSnippet` adds a line to pi's tool list in the system prompt. `reachesTools` lists the backend tools, so pi waits for their servers to connect. The tool's `rule` keeps their search tools callable only through `web_search`. `details` is `SearchDetails { query; backend: { id, name }; results }`, for rendering. |
 | Backend | `SearchBackend { id; name; tool; search(ctx, query) → SearchResult[] }` and `SearchResult { url; title?; excerpt?; published? }` in `src/tool/web-search/types.ts` | One file per backend. `search` takes the tool's `ctx` and no signal: `ctx.executeTool` uses the calling tool's signal. A failed search throws. |
 | MCP call | Each backend is a server in MyPi's [MCP server list](../mcp/README.md), connected by pi's own client. Backends call `callMcpTool(ctx, tool, …)` (`src/tool/utils.ts`) with the tool name declared beside that backend. `src/tool/web-search/rule.ts` derives its `SEARCH_BACKEND_TOOLS` set from the backend list. | Decided 2026-10-22, instead of OpenCode's `mcpCall` POST helper: pi already handles connecting, keys in headers, Exa's event stream, and turning a server off in `/mcp`. `web_search` declares `reachesTools`, so pi waits for the servers to connect before the call runs. Its own rule blocks a backend's search tool unless its parent is `web_search`; ToolGuard resolves nested-call parents by id. Pi doesn't retry tool calls (only connecting, and read-only requests once), so an HTTP 429 reaches the backend as `MCP HTTP request failed with status 429: <body>`, without `Retry-After`. |
-| Backends | Parallel, Exa, TinyFish, then Tavily when `TAVILY_API_KEY` is set | Order decided 2026-10-27 after a LoFiChan session hit both free tiers. TinyFish works keyless as MyPi; Tavily's MCP connected but its keyless search hit this machine's monthly cap, so it registers only with a key. A keyless Tavily REST API exists if wanted later. A self-hosted SearXNG is the unmetered option, for later (see [Later](#later)). DuckDuckGo is out: it has no search API (the Instant Answer API returns topic summaries), only HTML scraping, which breaks with the page and meets CAPTCHAs; OpenCode doesn't use it either. |
-| Fallback | `searchInOrder` in `src/tool/web-search/search.ts`: on HTTP 429, a rate-limit message, HTTP 5xx, or the backend's tool not found (its server off in `/mcp` or not connected), try the next backend. After a rate limit, rest that backend for five minutes; if every backend is resting, try them all anyway. | The 2026-10-27 LoFiChan session hit both Parallel and Exa free tiers: the text-only Parallel limit stopped fallback, then every call retried it. Keep the order, recognize limit text, and spread calls with a short rest instead of OpenCode's session-pinned random selection. |
+| Backends | Parallel, Exa, TinyFish, then Tavily when `TAVILY_API_KEY` is set; that list is the rotation order, not a fixed first choice | Order decided 2026-10-27 after a LoFiChan session hit both free tiers. Each search starts at the next backend, wrapping around the configured list. TinyFish works keyless as MyPi; Tavily's MCP connected but its keyless search hit this machine's monthly cap, so it registers only with a key. A keyless Tavily REST API exists if wanted later. A self-hosted SearXNG is the unmetered option, for later (see [Later](#later)). DuckDuckGo is out: it has no search API (the Instant Answer API returns topic summaries), only HTML scraping, which breaks with the page and meets CAPTCHAs; OpenCode doesn't use it either. |
+| Fallback | `searchInOrder` in `src/tool/web-search/search.ts`: on HTTP 429, a rate-limit message, HTTP 5xx, or the backend's tool not found (its server off in `/mcp` or not connected), try the next backend. A rate-limit rest uses a stated delay ("retry after 60", "try again in 5 minutes", in seconds, minutes, or hours) or a reset timestamp when the message names one, otherwise five minutes, capped at one hour. Each search starts at the next backend in rotation, skips resting backends, and tries all in rotated order when every backend is resting. | Pi's MCP client drops `Retry-After` and `X-RateLimit-Reset` response headers, so only error text can specify a rest. The 2026-10-27 LoFiChan session hit both Parallel and Exa free tiers: the text-only Parallel limit stopped fallback, then every call retried it. The rotation spreads requests; an expired rest re-enters the rotation automatically. |
 | Keys | `PARALLEL_API_KEY`, `EXA_API_KEY`, `TINYFISH_API_KEY`, and `TAVILY_API_KEY`. When set, each server's config names its variable in a header; pi resolves it when connecting. | Parallel, Exa, and TinyFish work keyless. TinyFish's key replaces its keyless access header. Tavily registers only with a key because its keyless MCP search hit the monthly cap in the first MyPi probe. Keys never appear in MyPi's code, config, or logs. A full `mcp.json` entry overrides MyPi's. See [Keys](../mcp/README.md#keys). |
 | Rendering | `renderCall` / `renderResult`, from `formatCall` and `formatResult` in `src/tool/web-search/render.ts` | `web_search "query"`, then `10 results from Parallel` and one `Title · site` line per result, collapsed, or each result's title, URL, date, and excerpt, expanded (slice 4). |
 | Exposure | `exposure: "direct"` to start | `"deferred"` keeps the tool out of every request until `tool_search` loads it, which saves tokens if search is rare. |
@@ -99,7 +99,7 @@ which is cleaner.
 
 ## Slices
 
-1. **Done.** The Parallel backend over `ctx.executeTool`, in `src/tool/web-search/tools/parallel.ts`.
+1. **Done.** The Parallel backend over `ctx.executeTool`, in `src/tool/web-search/backends/parallel.ts`.
    - `parallelBackend(sessionId)` calls `PARALLEL_SEARCH_TOOL` (`mcp__parallel__web_search`, a constant: pi doesn't
      export its naming rule) with `{ objective: query, search_queries: [query], session_id }`. Slice 2 makes the
      session id with `randomUUID()` once per tool instance, since Parallel asks for one for its free-tier limits.
@@ -109,7 +109,7 @@ which is cleaner.
      structured content.
    - `toResults(reply)` maps `results`: an entry without a string `url` is skipped, a title or `publish_date` is kept
      only when it's a non-empty string, and excerpts are joined with a blank line. No `results` list throws.
-   - Tests: `test/tool/web-search/tools/parallel.test.ts`, a `toResults` table, a recorded reply cut to 3 results,
+   - Tests: `test/tool/web-search/backends/parallel.test.ts`, a `toResults` table, a recorded reply cut to 3 results,
      and the request and the nested reply through a fake `ctx`. The error outcome is tested with `callMcpTool`, in
      `test/tool/utils.test.ts`.
    - Live (2026-10-22), with `execute` pointed at the backend for the test only: in Plan mode, one `web_search` call
@@ -134,11 +134,11 @@ which is cleaner.
 3. **Done.** Exa as a second backend, and fallback.
    - `exaServer` in `src/mcp/exa.ts`: `exa`, `deferred`, with `web_fetch_exa` hidden. See the
      [MCP server list](../mcp/README.md#exa).
-   - The backends live in `src/tool/web-search/tools/`. They call their servers with `callMcpTool(ctx, tool, args)`
+   - The backends live in `src/tool/web-search/backends/`. They call their servers with `callMcpTool(ctx, tool, args)`
      from `src/tool/utils.ts` (`#tool/utils`, shared by the built-in tools), which throws an error outcome's text and
      returns the whole MCP result. `textOf` there joins a result's text parts; web_fetch's renderer uses it too. Value
      checks (`isRecord`, `isNonEmptyString`) are in `src/core/util/guards.ts`.
-   - `exaBackend()` in `tools/exa.ts` sends `{ query, objective: query, numResults: 10 }` (Exa requires an objective;
+   - `exaBackend()` in `backends/exa.ts` sends `{ query, objective: query, numResults: 10 }` (Exa requires an objective;
      10 is as many as Parallel returns) and parses the text of the whole result, since Exa sends no
      `structuredContent`.
    - `parseExa(text)` splits on `\n\n---\n\n` before a `Title:` line, since page text has `---` lines too (tables,
@@ -151,7 +151,7 @@ which is cleaner.
      tools directly. A cancel is rethrown as it is.
    - `reachesTools` lists configured backend tools in order: Parallel, Exa, TinyFish, then Tavily only when its key is set. The header and `details.backend` name the one that answered.
    - Tests: `test/tool/utils.test.ts`, and under `test/tool/web-search/`, mirroring
-     `src/`: `tools/exa.test.ts` (a `parseExa` table and a recorded reply cut short), `search.test.ts` (a table of the
+     `src/`: `backends/exa.test.ts` (a `parseExa` table and a recorded reply cut short), `search.test.ts` (a table of the
      fallback rules, and the order, with fake backends), and `index.test.ts` for wiring. Shared fakes in
      `test/tool/fakes.ts`: a `ctx` that answers by tool name, and says "not found" for any other, as pi does.
    - Live (2026-10-22, Plan mode, after `/reload`): with both servers on, the search came from Parallel. With Parallel

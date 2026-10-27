@@ -3,14 +3,14 @@ import { type AgentToolResult, defineTool } from "@earendil-works/pi-coding-agen
 import { Type } from "typebox";
 import type { Tool } from "#tool/types";
 import { reuseText } from "#ui/render";
+import { exaBackend } from "./backends/exa";
+import { parallelBackend } from "./backends/parallel";
+import { tavilyBackend } from "./backends/tavily";
+import { tinyfishBackend } from "./backends/tinyfish";
 import { formatResults } from "./format";
 import { formatCall, formatResult } from "./render";
 import { createSearchBackendsRule } from "./rule";
 import { searchInOrder } from "./search";
-import { exaBackend } from "./tools/exa";
-import { parallelBackend } from "./tools/parallel";
-import { tavilyBackend } from "./tools/tavily";
-import { tinyfishBackend } from "./tools/tinyfish";
 import type { SearchDetails } from "./types";
 
 const parameters = Type.Object({
@@ -31,6 +31,7 @@ export function webSearchTool(): Tool {
     ...(process.env.TAVILY_API_KEY ? [tavilyBackend()] : []),
   ];
   const restingUntil = new Map<string, number>();
+  let turn = 0;
 
   const definition = defineTool({
     name: "web_search",
@@ -50,7 +51,9 @@ export function webSearchTool(): Tool {
     renderResult: (result, { expanded }, theme, context) =>
       reuseText(context.lastComponent, formatResult(result, expanded, context.isError, theme)),
     async execute(_toolCallId, { query }, signal, _onUpdate, ctx): Promise<AgentToolResult<SearchDetails>> {
-      const { backend, results } = await searchInOrder(backends, ctx, query, signal, restingUntil);
+      const startIndex = turn % backends.length;
+      turn++;
+      const { backend, results } = await searchInOrder(backends, ctx, query, signal, { restingUntil, startIndex });
       return {
         content: [{ type: "text", text: formatResults(query, backend.name, results) }],
         details: { query, backend: { id: backend.id, name: backend.name }, results },

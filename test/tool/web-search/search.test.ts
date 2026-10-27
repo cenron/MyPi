@@ -1,6 +1,6 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { searchInOrder } from "#tool/web-search/search";
+import { restFor, searchInOrder } from "#tool/web-search/search";
 import type { SearchBackend } from "#tool/web-search/types";
 
 const RATE_LIMITED = "MCP HTTP request failed with status 429: Too Many Requests";
@@ -46,7 +46,7 @@ describe("searchInOrder", () => {
     const first = backend("First");
     const restingUntil = new Map([[first.id, 10_000]]);
     const backends = [first, backend("Second", "boom")];
-    await expect(searchInOrder(backends, ctx, "q", undefined, restingUntil, () => 1)).rejects.toThrow(
+    await expect(searchInOrder(backends, ctx, "q", undefined, { restingUntil, now: () => 1 })).rejects.toThrow(
       new Error(
         "Web search failed (Second): boom\n" +
           "Skipped resting backends: First.\n" +
@@ -75,14 +75,14 @@ describe("searchInOrder", () => {
     const restingUntil = new Map<string, number>();
     const first = backend("First", RATE_LIMITED);
     const second = backend("Second");
-    await searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => now);
+    await searchInOrder([first, second], ctx, "q", undefined, { restingUntil, now: () => now });
     first.search.mockImplementation(async () => results);
 
-    await searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => now);
+    await searchInOrder([first, second], ctx, "q", undefined, { restingUntil, now: () => now });
     expect(first.search).toHaveBeenCalledTimes(1);
 
     now += 5 * 60 * 1000;
-    await searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => now);
+    await searchInOrder([first, second], ctx, "q", undefined, { restingUntil, now: () => now });
     expect(first.search).toHaveBeenCalledTimes(2);
   });
 
@@ -94,12 +94,84 @@ describe("searchInOrder", () => {
       [second.id, 10_000],
     ]);
 
-    await expect(searchInOrder([first, second], ctx, "q", undefined, restingUntil, () => 1)).resolves.toEqual({
+    await expect(searchInOrder([first, second], ctx, "q", undefined, { restingUntil, now: () => 1 })).resolves.toEqual({
       backend: first,
       results,
     });
     expect(first.search).toHaveBeenCalledTimes(1);
     expect(second.search).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [PARALLEL_RATE_LIMITED, 5 * 60 * 1000],
+    ["MCP HTTP request failed with status 429: You've hit the free MCP rate limit for Exa", 5 * 60 * 1000],
+    ["rate limited; retry after 60", 60 * 1000],
+    ["rate limited; reset time 1700000060", 60 * 1000],
+    ["rate limited; retry after 999999", 60 * 60 * 1000],
+    ["rate limited; try again in 5 minutes", 5 * 60 * 1000],
+    ["rate limited; retry after 2 hours", 60 * 60 * 1000],
+    ["rate limited; try again in 30s", 30 * 1000],
+    ["nonsense", 5 * 60 * 1000],
+  ])("rests according to the limit message %s", (message, expected) => {
+    expect(restFor(message, 1_700_000_000_000)).toBe(expected);
+  });
+
+  it("rotates the starting backend and still falls through in order", async () => {
+    const first = backend("First");
+    const second = backend("Second", "MCP HTTP request failed with status 503");
+    const third = backend("Third");
+
+    expect((await searchInOrder([first, second, third], ctx, "q", undefined, { startIndex: 1 })).backend).toBe(third);
+    expect(first.search).not.toHaveBeenCalled();
+    expect(second.search).toHaveBeenCalledTimes(1);
+    expect(third.search).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a resting backend in its rotated turn and uses it after expiry", async () => {
+    let now = 1_000;
+    const restingUntil = new Map<string, number>();
+    const first = backend("First", RATE_LIMITED);
+    const second = backend("Second");
+    const third = backend("Third");
+    const backends = [first, second, third];
+
+    await searchInOrder(backends, ctx, "q", undefined, { restingUntil, now: () => now });
+    first.search.mockImplementation(async () => results);
+    await searchInOrder(backends, ctx, "q", undefined, { restingUntil, now: () => now, startIndex: 0 });
+    expect(first.search).toHaveBeenCalledTimes(1);
+    now += 5 * 60 * 1000;
+    await searchInOrder(backends, ctx, "q", undefined, { restingUntil, now: () => now, startIndex: 0 });
+    expect(first.search).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips a resting backend after the rotated start and reaches the next backend", async () => {
+    const first = backend("First");
+    const second = backend("Second");
+    const third = backend("Third");
+    const restingUntil = new Map([[first.id, 10_000]]);
+
+    const result = await searchInOrder([first, second, third], ctx, "q", undefined, {
+      restingUntil,
+      now: () => 1,
+      startIndex: 2,
+    });
+    expect(result.backend).toBe(third);
+    expect(first.search).not.toHaveBeenCalled();
+  });
+
+  it("skips a backend until its stated reset time, then uses it again", async () => {
+    let now = 1_700_000_000_000;
+    const restingUntil = new Map<string, number>();
+    const first = backend("First", "rate limit; retry after 60 seconds");
+    const second = backend("Second");
+    await searchInOrder([first, second], ctx, "q", undefined, { restingUntil, now: () => now });
+    first.search.mockImplementation(async () => results);
+
+    await searchInOrder([first, second], ctx, "q", undefined, { restingUntil, now: () => now });
+    expect(first.search).toHaveBeenCalledTimes(1);
+    now += 60_000;
+    await searchInOrder([first, second], ctx, "q", undefined, { restingUntil, now: () => now });
+    expect(first.search).toHaveBeenCalledTimes(2);
   });
 
   it("passes a cancel through as it is", async () => {

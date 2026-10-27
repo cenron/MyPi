@@ -1,11 +1,12 @@
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EXA_SEARCH_TOOL } from "#tool/web-search/backends/exa";
+import { PARALLEL_SEARCH_TOOL } from "#tool/web-search/backends/parallel";
+import { TAVILY_SEARCH_TOOL } from "#tool/web-search/backends/tavily";
+import { TINYFISH_SEARCH_TOOL } from "#tool/web-search/backends/tinyfish";
 import { formatResults } from "#tool/web-search/format";
 import { webSearchTool } from "#tool/web-search/index";
-import { EXA_SEARCH_TOOL } from "#tool/web-search/tools/exa";
-import { PARALLEL_SEARCH_TOOL } from "#tool/web-search/tools/parallel";
-import { TAVILY_SEARCH_TOOL } from "#tool/web-search/tools/tavily";
-import { TINYFISH_SEARCH_TOOL } from "#tool/web-search/tools/tinyfish";
+import type { SearchDetails } from "#tool/web-search/types";
 import { answered, fakeContext } from "../fakes";
 
 const results = [{ url: "https://a.test", title: "A", excerpt: "Some text." }];
@@ -65,13 +66,32 @@ describe("webSearchTool", () => {
     ]);
   });
 
-  it("sends the same Parallel session id with every search", async () => {
+  it("rotates the starting backend across searches", async () => {
+    const tinyfish = answered({
+      content: [
+        { type: "text", text: JSON.stringify({ results: [{ url: "https://tinyfish.test", title: "TinyFish" }] }) },
+      ],
+    });
+    const { ctx } = fakeContext({
+      [PARALLEL_SEARCH_TOOL]: parallel,
+      [EXA_SEARCH_TOOL]: exa,
+      [TINYFISH_SEARCH_TOOL]: tinyfish,
+    });
+
+    const answers = [];
+    for (let index = 0; index < 3; index++) {
+      const result = await run(ctx);
+      answers.push((result.details as SearchDetails | undefined)?.backend.name);
+    }
+    expect(answers).toEqual(["Parallel", "Exa", "TinyFish"]);
+  });
+
+  it("sends the Parallel session id when Parallel is its turn", async () => {
     const { ctx, executeTool } = fakeContext({ [PARALLEL_SEARCH_TOOL]: parallel });
     await run(ctx);
     await run(ctx);
-    const [first, second] = executeTool.mock.calls.map(([, args]) => args.session_id);
-    expect(first).toEqual(expect.any(String));
-    expect(second).toBe(first);
+    const sessionIds = executeTool.mock.calls.map(([, args]) => args.session_id);
+    expect(sessionIds.filter((sessionId) => sessionId !== undefined)).toEqual([expect.any(String), expect.any(String)]);
   });
 
   it("reaches every backend's tool, so pi waits for their servers", () => {

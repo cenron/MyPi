@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PARALLEL_SEARCH_TOOL, parallelBackend, toResults } from "#tool/web-search/tools/parallel";
+import { PARALLEL_SEARCH_TOOL, parallelBackend, toResults } from "#tool/web-search/backends/parallel";
 import { answered, fakeContext } from "../../fakes";
 
 /** Parallel's reply to a real search (2026-10-21), cut to 3 results with shorter excerpts and placeholder ids. */

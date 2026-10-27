@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TAVILY_SEARCH_TOOL, tavilyBackend, toResults } from "#tool/web-search/tools/tavily";
+import { TAVILY_SEARCH_TOOL, tavilyBackend, toResults } from "#tool/web-search/backends/tavily";
 import { answered, fakeContext } from "../../fakes";
 
 describe("Tavily toResults", () => {
