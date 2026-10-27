@@ -10,20 +10,10 @@ import { Type } from "typebox";
 import { Agent, fetch } from "undici";
 import type { Session } from "#core/session";
 import { errorMessage, isNodeError } from "#core/util/errors";
-import {
-  decode,
-  describeFetchError,
-  failWith,
-  isImage,
-  isTextual,
-  mimeOf,
-  readCapped,
-  timeoutSignal,
-} from "#core/util/http";
-
 import type { Tool } from "#tool/types";
-import { reuseText } from "#tool/utils";
+import { reuseText } from "#ui/render";
 import { assertPublicHost, BLOCKED, publicLookup } from "./address";
+import { decode, describeFetchError, failWith, isImage, isTextual, mimeOf, readCapped, timeoutSignal } from "./http";
 import { htmlToMarkdown } from "./markdown";
 import { formatCall, formatResult } from "./render";
 import { truncate } from "./truncate";

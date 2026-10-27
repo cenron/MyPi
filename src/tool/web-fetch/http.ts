@@ -1,5 +1,5 @@
 import { formatSize } from "@earendil-works/pi-coding-agent";
-import { errorMessage, isNodeError } from "./errors";
+import { errorMessage, isNodeError } from "#core/util/errors";
 
 /** Text types that `text/*`, `+json`, and `+xml` don't cover. */
 const TEXTUAL_TYPES = new Set([

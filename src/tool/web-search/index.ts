@@ -3,7 +3,7 @@ import { type AgentToolResult, defineTool } from "@earendil-works/pi-coding-agen
 import { Type } from "typebox";
 import type { Session } from "#core/session";
 import type { Tool } from "#tool/types";
-import { reuseText } from "#tool/utils";
+import { reuseText } from "#ui/render";
 import { formatResults } from "./format";
 import { formatCall, formatResult } from "./render";
 import { searchInOrder } from "./search";

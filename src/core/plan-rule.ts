@@ -1,6 +1,6 @@
-import type { ToolRule, Verdict } from "#core/tool-guard";
-import { isInside, resolveToolPath } from "#core/util/paths";
-import { isReadOnlyCommand } from "#core/util/shell";
+import type { ToolRule, Verdict } from "./tool-guard";
+import { isInside, resolveToolPath } from "./util/paths";
+import { isReadOnlyCommand } from "./util/shell";
 
 /**
  * Tools Plan never objects to. Pi's built-in readers carry no annotations, so they're listed by name; `codemode`'s

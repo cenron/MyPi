@@ -1,5 +1,6 @@
 import type { AgentToolResult, Theme } from "@earendil-works/pi-coding-agent";
-import { expandKey, siteOf, textOf } from "#tool/utils";
+import { siteOf } from "#tool/utils";
+import { expandKey, textOf } from "#ui/render";
 import type { SearchDetails, SearchResult } from "./types";
 
 /** The call's arguments as the renderer sees them: the query may be missing while the model is still writing it. */

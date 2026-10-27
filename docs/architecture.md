@@ -196,7 +196,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   end; `Session` listens to update the below-editor jobs line, and `stopAll()` stops publishing. Generic on purpose: shell
   commands are one kind (`shellJob` in `src/tool/bash/`, through pi's own `createLocalBashOperations().exec`, which
   kills the process tree on abort), and subagent runs are a second. Every kind's end goes through `noticeOnEnd` in
-  `src/tool/jobs/notice.ts`, which also feeds `job_wait` and the subagents' grouped completions. `MyPi.onSessionEnd` calls `stopAll()` before the
+  `src/core/job-notice.ts`, which also feeds `job_wait` and the subagents' grouped completions. `MyPi.onSessionEnd` calls `stopAll()` before the
   tools' shutdown. See [background process](tools/background-process.md).
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
@@ -262,8 +262,8 @@ each module as `loaded: <name>` or `not loaded: <name>`; see [Module loading](#m
 - pi turns an error thrown in `execute` into an error result for the model, so there's no wrapper like `runCommand`.
 - Tools can't be unregistered (only withdrawn by registering again with `exposure: "hidden"`). As with commands, a
   tool that isn't registered on the next `session_start` is gone after `/reload`.
-- Set `annotations` truthfully: `ToolGuard` and plan-build's rule read `readOnlyHint`.
-- A renderer returns `reuseText(context.lastComponent, text)` (`src/tool/utils.ts`): one `Text` per slot, reused
+- Set `annotations` truthfully: `ToolGuard` and the Plan rule (`src/core/plan-rule.ts`) read `readOnlyHint`.
+- A renderer returns `reuseText(context.lastComponent, text)` (`src/ui/render.ts`): one `Text` per slot, reused
   across redraws, as pi's own tools do.
 - **Overriding a pi tool:** a tool registered with a built-in's name replaces it. `bash` (`src/tool/bash/`) builds pi's
   own with `createBashToolDefinition`, spreads it to keep its prompt text and `outputSchema`, adds its own parameters,

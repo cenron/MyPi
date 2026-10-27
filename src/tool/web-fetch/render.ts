@@ -1,6 +1,6 @@
 import { type AgentToolResult, formatSize, type Theme } from "@earendil-works/pi-coding-agent";
-import { mimeOf } from "#core/util/http";
-import { expandKey, textOf } from "#tool/utils";
+import { expandKey, textOf } from "#ui/render";
+import { mimeOf } from "./http";
 import type { FetchedDetails, Format } from "./types";
 
 /** The call's arguments as the renderer sees them: any may be missing while the model is still writing the call. */

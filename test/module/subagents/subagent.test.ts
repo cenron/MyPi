@@ -1,7 +1,7 @@
 import { type ExtensionContext, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { answer } from "#core/events";
-import { planRule } from "#module/plan-build/rule";
+import { planRule } from "#core/plan-rule";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { type ChildResult, changedPath, runChild, runUsage } from "#module/subagents/child";
 import { subagentTool } from "#module/subagents/tools/subagent";

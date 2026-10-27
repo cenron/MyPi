@@ -1,5 +1,5 @@
 import type { Theme, ToolRendererResolver } from "@earendil-works/pi-coding-agent";
-import { reuseText } from "#tool/utils";
+import { reuseText } from "#ui/render";
 import type { BackgroundDetails } from "./index";
 
 /** The call's arguments as the renderer sees them: they may be partial while the model is still writing them. */

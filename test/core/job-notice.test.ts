@@ -1,8 +1,8 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { formatNotice, jobNotice, NoticeGroup, noticeOnEnd, takeNotice } from "#core/job-notice";
 import type { JobInfo } from "#core/types";
-import { formatNotice, jobNotice, NoticeGroup, noticeOnEnd, takeNotice } from "#tool/jobs/notice";
-import { fakeSession } from "../../fakes";
+import { fakeSession } from "../fakes";
 
 /** A job that completed after 3 seconds; rows change what they test. */
 const job = (over: Partial<JobInfo> = {}): JobInfo => ({

@@ -97,23 +97,24 @@ a timeout. HTML comes back as raw HTML until slice 2.
 5. **User agent:** `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; MyPi/0.0.1`, shaped like
    OpenCode's but with no URL, since the repo is public.
 6. **Errors are thrown**, and pi turns them into an error result.
-7. **`http.ts` starts in `src/core/util/`**, not in the tool's folder, because web_search's `mcpCall` will use it.
-   So `web_fetch` stays one file, `src/tool/web-fetch.ts`.
+7. **`http.ts` lives in the tool's folder** (`src/tool/web-fetch/http.ts`). It started in `src/core/util/` for a
+   web_search `mcpCall` that never came: web_search goes through pi's MCP client, so `web_fetch` is its only user
+   (moved 2026-10-26).
 
 ### Files
 
 ```
-src/core/util/http.ts           readCapped, timeoutSignal, mimeOf, isTextual, isImage, decode, failWith,
+src/tool/web-fetch/http.ts      readCapped, timeoutSignal, mimeOf, isTextual, isImage, decode, failWith,
                                 describeFetchError
-src/tool/web-fetch.ts           the tool: execute, fetchPage, request, truncate
-test/core/util/http.test.ts
-test/tool/web-fetch.test.ts
+src/tool/web-fetch/index.ts     the tool: execute, fetchPage, request
+test/tool/web-fetch/http.test.ts
+test/tool/web-fetch/index.test.ts
 ```
 
 ### Signatures
 
 ```ts
-// src/core/util/http.ts
+// src/tool/web-fetch/http.ts
 
 /**
  * Reads `response`'s body into one buffer. Throws before reading when `Content-Length` is over `maxBytes`, and
@@ -533,7 +534,7 @@ In pi, in Plan mode: `https://example.com` was read; `http://localhost:3000/` ("
 - `truncate.ts`: `truncate(text, extension)`, moved out of `index.ts`, now async; it returns `fullTextPath` when it
   saved one.
 - `render.ts`: `formatCall(args, theme)` and `formatResult(result, expanded, isError, theme)`, plain string builders.
-  `expandKey()` from `src/tool/utils.ts` names the key: `keyText("app.tools.expand")`, which is empty outside the TUI,
+  `expandKey()` from `src/ui/render.ts` names the key: `keyText("app.tools.expand")`, which is empty outside the TUI,
   so `ctrl+o` stands in. pi's `keyHint` throws until pi's theme is set up, so it isn't used.
 - `index.ts`: `renderCall` and `renderResult` fill one reused `Text` each, as pi's own tools do; `extensionFor(mime,
   converted)`; `details.fullTextPath`; and the description says a cut text is saved to a file the model can read.

@@ -1,8 +1,8 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { answeredItems, ask } from "#core/events";
+import { planRule } from "#core/plan-rule";
 import type { Session } from "#core/session";
 import { ToolGuard, type ToolRule } from "#core/tool-guard";
-import { planRule } from "#module/plan-build/rule";
 import { registerRules, updatePromptPaths } from "#rule/index";
 import type { AgentDefinition } from "./agents";
 

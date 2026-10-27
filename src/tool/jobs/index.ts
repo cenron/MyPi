@@ -1,10 +1,10 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { releaseNotice, reserveNotice, takeNotice } from "#core/job-notice";
 import type { Session } from "#core/session";
 import type { Job } from "#core/types";
 import { jobDuration, jobEnding } from "#core/util/jobs";
 import type { Tool } from "#tool/types";
-import { releaseNotice, reserveNotice, takeNotice } from "./notice";
 
 /** `job_list`: every background job of this session, running or ended, oldest first, with its log file. */
 export function jobListTool(session: Session): Tool {

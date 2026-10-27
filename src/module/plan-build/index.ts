@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AgentSettledEvent, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { planRule } from "#core/plan-rule";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { isThinkingLevel, type ThinkingLevel } from "#core/util/thinking";
 import { FooterColor, type FooterItem } from "#ui/footer";
@@ -9,7 +10,6 @@ import { planCmd } from "./commands/plan";
 import { offerPlan } from "./dialog";
 import { PLANS_DIR } from "./plan-file";
 import { buildPrompt, PLAN_PROMPT } from "./prompts";
-import { planRule } from "./rule";
 import { ASK_USER, askUserTool } from "./tools/ask-user";
 import { SUBMIT_PLAN, submitPlanTool } from "./tools/submit-plan";
 import { isMode, Mode, type PlanActions, type SubmittedPlan } from "./types";

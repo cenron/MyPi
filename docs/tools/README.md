@@ -74,7 +74,8 @@ Built (2026-10-21), the same way as `src/command/`:
   `init()`, since a module's `init()` may turn its tools on and pi ignores names that aren't registered yet.
 - Imported as `#tool/<file>`; tests in `test/tool/`, mirroring `src/tool/`.
 - Helpers more than one tool uses go in `src/tool/utils.ts` (`#tool/utils`), not new files: `callMcpTool` calls one of
-  MyPi's MCP servers through `ctx.executeTool` and returns the whole MCP result, `textOf` joins a result's text parts,
-  and, for renderers, `expandKey` names the expand key and `siteOf` gives a URL's site.
+  MyPi's MCP servers through `ctx.executeTool` and returns the whole MCP result, and `siteOf` gives a URL's site.
+  Render helpers that modules' tools use too live in `src/ui/render.ts` (`#ui/render`): `textOf` joins a result's
+  text parts, `expandKey` names the expand key, and `reuseText` reuses a renderer's `Text`.
 
 See [Tools](../architecture.md#tools) in the architecture doc for why each tool is wrapped in `defineTool`.

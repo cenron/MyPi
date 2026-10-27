@@ -1,6 +1,6 @@
 import type { ToolAnnotations } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { planRule } from "#module/plan-build/rule";
+import { planRule } from "#core/plan-rule";
 
 const env = {
   cwd: "/project",

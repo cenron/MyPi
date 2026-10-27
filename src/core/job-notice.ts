@@ -1,17 +1,26 @@
 import { stripVTControlCharacters } from "node:util";
 import type { MessageRenderer, Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import type { Session } from "#core/session";
-import type { Job, JobInfo } from "#core/types";
-import { errorMessage } from "#core/util/errors";
-import { jobDuration, jobEnding } from "#core/util/jobs";
-import { expandKey } from "#tool/utils";
+import { expandKey } from "#ui/render";
+import type { Session } from "./session";
+import type { Job, JobInfo } from "./types";
+import { errorMessage } from "./util/errors";
+import { jobDuration, jobEnding } from "./util/jobs";
 
 /** The custom message type of a job's exit notice. */
 export const JOB_NOTICE = "mypi-job";
 
 /** How many of a job's last lines a notice carries. */
 export const NOTICE_LINES = 20;
+
+/** Most characters of output a notice carries, so one huge line can't flood the context. */
+const NOTICE_CHARS = 2000;
+
+/** What a notice carries for its renderer: the job as it ended, and its last lines with escape codes stripped. */
+export type NoticeDetails = { job: JobInfo; tail: string };
+
+/** A job notice: the model's text and what its renderer draws. */
+export type JobNotice = { content: string; details: NoticeDetails };
 
 /** A notice builder and whether its text has already been returned to the model. */
 type NoticeEntry = { build: (ended: JobInfo) => JobNotice; taken: boolean };
@@ -64,7 +73,7 @@ export class NoticeGroup {
 export function noticeOnEnd(
   session: Session,
   job: Job,
-  notice: (ended: JobInfo) => JobNotice = (ended) => jobNotice(ended, job.tail(NOTICE_LINES)),
+  notice: (ended: JobInfo) => JobNotice = lastLinesNotice(job),
   group?: NoticeGroup,
   sendWhenStopped: () => boolean = () => false,
 ): void {
@@ -103,17 +112,8 @@ export function takeNotice(job: Job): JobNotice {
   const ended = job.info;
   const entry = notices.get(job);
   if (entry) entry.taken = true;
-  return (entry?.build ?? ((info) => jobNotice(info, job.tail(NOTICE_LINES))))(ended);
+  return (entry?.build ?? lastLinesNotice(job))(ended);
 }
-
-/** Most characters of output a notice carries, so one huge line can't flood the context. */
-const NOTICE_CHARS = 2000;
-
-/** What a notice carries for its renderer: the job as it ended, and its last lines with escape codes stripped. */
-export type NoticeDetails = { job: JobInfo; tail: string };
-
-/** A job notice: the model's text and what its renderer draws. */
-export type JobNotice = { content: string; details: NoticeDetails };
 
 /**
  * The exit notice for a job that ended: the model's text (how it ended, how long it ran, the command, its last
@@ -147,4 +147,9 @@ export function formatNotice({ job, tail }: NoticeDetails, expanded: boolean, th
   if (!tail) return head;
   if (!expanded) return `${head} ${theme.fg("dim", `(${expandKey()} to expand)`)}`;
   return [head, ...tail.split("\n").map((line) => theme.fg("toolOutput", line))].join("\n");
+}
+
+/** The default notice: how the job ended, with its last `NOTICE_LINES` lines. */
+function lastLinesNotice(job: Job): (ended: JobInfo) => JobNotice {
+  return (ended) => jobNotice(ended, job.tail(NOTICE_LINES));
 }

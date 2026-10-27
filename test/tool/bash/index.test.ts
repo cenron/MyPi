@@ -2,8 +2,8 @@ import { readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
+import { JOB_NOTICE, renderNotice } from "#core/job-notice";
 import { bashTool } from "#tool/bash/index";
-import { JOB_NOTICE, renderNotice } from "#tool/jobs/notice";
 import { fakeSession } from "../../fakes";
 
 // Real processes, through pi's own shell.

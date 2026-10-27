@@ -162,7 +162,7 @@ comes back to yours"), and naming what to do yourself.
 - **Grouped completions:** runs that succeed within 3 seconds of each other arrive as one message, so the main
   agent doesn't act on the first of three reviews before the other two land (pi-subagents' `completionBatch`). Each
   success restarts the wait; a failed run is reported at once and doesn't flush the others. A `NoticeGroup` in
-  `src/tool/jobs/notice.ts`; shell jobs aren't grouped. Live: of three reviewers started together, the two that
+  `src/core/job-notice.ts`; shell jobs aren't grouped. Live: of three reviewers started together, the two that
   ended 0.8 seconds apart came as one message and the one that ended 12 seconds later came alone.
 - **Waiting on purpose:** `job_wait` in core, for any job (pi-subagents' `bg_wait`). See
   [background process](../tools/background-process.md#job_wait).
@@ -188,7 +188,7 @@ MyPi's own rules (`registerRules`, as the parent does), fills their prompt paths
 guard turns any ask into a block with the reason ("Refused: this call needs the user's approval, and no one can give
 it here (no UI). Tell the user what you needed and why: …").
 
-- **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with plan-build's `planRule` on the child's guard: the
+- **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with the Plan rule (`planRule`, `src/core/plan-rule.ts`) on the child's guard: the
   same check as Plan, so `git log` runs and `touch` is refused. One exception: the project's check commands the user
   already approved for the done check (`.pi/done-check.json`) run exactly as written, so a `reviewer` can run the
   tests. Before a read-only run, `subagent` asks the done check for them on the event bus (`checkCommands`); it

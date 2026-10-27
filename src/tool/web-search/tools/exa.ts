@@ -1,4 +1,5 @@
-import { callMcpTool, textOf } from "#tool/utils";
+import { callMcpTool } from "#tool/utils";
+import { textOf } from "#ui/render";
 import type { SearchBackend, SearchResult } from "../types";
 
 /** Pi's name for Exa's search tool: `mcp__<server>__<tool>`, from `exaServer` in `src/mcp/exa.ts`. */

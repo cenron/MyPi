@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { decode, describeFetchError, isImage, isTextual, mimeOf, readCapped, timeoutSignal } from "#core/util/http";
+import {
+  decode,
+  describeFetchError,
+  isImage,
+  isTextual,
+  mimeOf,
+  readCapped,
+  timeoutSignal,
+} from "#tool/web-fetch/http";
 
 const bytes = (size: number) => new Uint8Array(size).fill(97);
 

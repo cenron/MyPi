@@ -1,9 +1,9 @@
 import { rm } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { noticeOnEnd } from "#core/job-notice";
 import type { Session } from "#core/session";
 import type { JobSpec } from "#core/types";
 import { jobListTool, jobStopTool, jobWaitTool } from "#tool/jobs/index";
-import { noticeOnEnd } from "#tool/jobs/notice";
 import { fakeSession } from "../../fakes";
 
 /** A job that runs until it's stopped, rejecting then as pi's `exec` does. */
