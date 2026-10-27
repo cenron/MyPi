@@ -152,6 +152,16 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
       failed: false,
     },
   ],
+  [
+    "a bash result ending in pi's non-zero status is an exit without a failure line",
+    result(true, "ls: /no/such/folder: missing\n\nCommand exited with code 2"),
+    { callId: "call-1", failed: true, exited: true },
+  ],
+  [
+    "a bash result with an earlier exit status remains a failure with its first line",
+    result(true, "Command exited with code 2\nmore output"),
+    { callId: "call-1", failed: true, failureLine: "Command exited with code 2" },
+  ],
 ];
 
 describe("parseEntry", () => {

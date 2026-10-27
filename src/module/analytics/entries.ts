@@ -3,6 +3,8 @@ import { isRecord } from "#core/util/guards";
 import { tokenize } from "#core/util/shell";
 
 const MAX_FAILURE_LINE = 120;
+// pi appends this status in dist/core/tools/bash.js when bash exits non-zero.
+const BASH_EXIT_STATUS = /^Command exited with code \d+$/;
 
 /** One model-attributed usage event from the transcript, with no conversation content. */
 export type UsageRow = {
@@ -37,7 +39,7 @@ export type ToolCallRow = {
 };
 
 /** A tool result's outcome, linked to its call by id. */
-export type ToolResultRow = { callId: string; failed: boolean; failureLine?: string };
+export type ToolResultRow = { callId: string; failed: boolean; exited?: boolean; failureLine?: string };
 
 /** The analytics rows one complete JSONL line holds. */
 export type FeatureRow = {
@@ -216,14 +218,27 @@ function startsAtLineOne(offset: unknown): boolean {
 function toolResultRow(message: Record<string, unknown>, homeDir: string): ToolResultRow | undefined {
   if (typeof message.toolCallId !== "string" || typeof message.isError !== "boolean") return undefined;
   if (!message.isError) return { callId: message.toolCallId, failed: false };
+  if (message.toolName === "bash" && exitedWithNonZeroStatus(message.content)) {
+    return { callId: message.toolCallId, failed: true, exited: true };
+  }
   return { callId: message.toolCallId, failed: true, failureLine: failureLine(message.content, homeDir) };
 }
 
+function exitedWithNonZeroStatus(content: unknown): boolean {
+  const lastLine = toolResultText(content)?.split("\n").at(-1);
+  return lastLine !== undefined && BASH_EXIT_STATUS.test(lastLine);
+}
+
 function failureLine(content: unknown, homeDir: string): string | undefined {
+  const text = toolResultText(content);
+  if (text === undefined) return undefined;
+
+  const line = text.split("\n")[0]?.replaceAll(homeDir, "~").trim() ?? "";
+  return line === "" ? undefined : line.slice(0, MAX_FAILURE_LINE);
+}
+
+function toolResultText(content: unknown): string | undefined {
   if (!Array.isArray(content)) return undefined;
   const text = content.find((block) => isRecord(block) && block.type === "text" && typeof block.text === "string");
-  if (!isRecord(text) || typeof text.text !== "string") return undefined;
-
-  const line = text.text.split("\n")[0]?.replaceAll(homeDir, "~").trim() ?? "";
-  return line === "" ? undefined : line.slice(0, MAX_FAILURE_LINE);
+  return isRecord(text) && typeof text.text === "string" ? text.text : undefined;
 }

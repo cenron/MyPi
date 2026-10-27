@@ -64,9 +64,9 @@ describe("renderAnalyticsReport", () => {
     const text = renderAnalyticsReport(
       report({
         tools: [
-          { tool: "read", calls: 1, failures: 0 },
-          { tool: "bash", calls: 4, failures: 1 },
-          { tool: "subagent_apply", calls: 2, failures: 0 },
+          { tool: "read", calls: 1, failures: 0, exits: 0 },
+          { tool: "bash", calls: 4, failures: 1, exits: 0 },
+          { tool: "subagent_apply", calls: 2, failures: 0, exits: 0 },
         ],
         failures: [
           { line: "boom", count: 2 },
@@ -114,6 +114,21 @@ describe("renderAnalyticsReport", () => {
       "openai/gpt-6.1-sol · medium   0 lsp · 0 code searches · 2 reads from line 1 · lsp share 0%",
     );
     expect(text).not.toContain("gpt-5");
+  });
+
+  it("shows non-zero exits beside failures only when present", () => {
+    const text = renderAnalyticsReport(
+      report({
+        tools: [
+          { tool: "bash", calls: 120, failures: 5, exits: 18 },
+          { tool: "read", calls: 1, failures: 0, exits: 0 },
+        ],
+      }),
+      "all history",
+    );
+    expect(text).toContain("bash 120 calls · 4% failed · 15% exited non-zero");
+    expect(text).toContain("read 1 call · 0% failed");
+    expect(text).not.toContain("read 1 call · 0% failed · 0% exited non-zero");
   });
 
   it("keeps only the five most frequent failure lines", () => {

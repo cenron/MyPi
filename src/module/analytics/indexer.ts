@@ -100,7 +100,10 @@ async function indexFile(file: string, store: AnalyticsStore, homeDir: string, m
       return;
     }
 
-    const indexedFile = { path: file, header, size, offset: offset + completeBytes };
+    // Only subagent runs (the subagents root) are children: a `/plan implement` session links to its parent too, and
+    // would be counted as a run of the last agent that parent called.
+    const indexedHeader = mypiOnly ? header : { ...header, parentSession: undefined };
+    const indexedFile = { path: file, header: indexedHeader, size, offset: offset + completeBytes };
     if (reset) store.replaceFile(indexedFile, rows);
     else store.appendFile(indexedFile, rows);
   } finally {

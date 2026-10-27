@@ -14,8 +14,8 @@ export type UsageTotals = {
   cost: number;
 };
 
-/** Calls and failures for one tool. */
-export type ToolTotals = { tool: string; calls: number; failures: number };
+/** Calls, failures, and non-zero exits for one tool. */
+export type ToolTotals = { tool: string; calls: number; failures: number; exits: number };
 
 /** One failure text and how often it happened. */
 export type FailureTotals = { line: string; count: number };
@@ -75,7 +75,9 @@ export function usageTotals(store: AnalyticsStore, since: number | undefined): U
 export function toolTotals(store: AnalyticsStore, since: number | undefined): ToolTotals[] {
   return store.database
     .prepare(
-      `SELECT tool, COUNT(*) AS calls, COALESCE(SUM(failed), 0) AS failures
+      `SELECT tool, COUNT(*) AS calls,
+        COALESCE(SUM(CASE WHEN failed = 1 AND exited = 0 THEN 1 ELSE 0 END), 0) AS failures,
+        COALESCE(SUM(exited), 0) AS exits
        FROM tool_calls ${sinceClause(since)}
        GROUP BY tool ORDER BY calls DESC, tool`,
     )
@@ -84,7 +86,10 @@ export function toolTotals(store: AnalyticsStore, since: number | undefined): To
 
 /** The most frequent failure texts since a timestamp. */
 export function failureTotals(store: AnalyticsStore, since: number | undefined): FailureTotals[] {
-  const where = since === undefined ? "failure_line IS NOT NULL" : "failure_line IS NOT NULL AND timestamp >= ?";
+  const where =
+    since === undefined
+      ? "failed = 1 AND exited = 0 AND failure_line IS NOT NULL"
+      : "failed = 1 AND exited = 0 AND failure_line IS NOT NULL AND timestamp >= ?";
   return store.database
     .prepare(
       `SELECT failure_line AS line, COUNT(*) AS count

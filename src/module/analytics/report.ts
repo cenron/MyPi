@@ -70,9 +70,9 @@ function toolLines(rows: readonly ToolTotals[]): string {
   const width = Math.max(...rows.map((row) => row.tool.length));
   const lines = ["Tools"];
   for (const row of rows) {
-    lines.push(
-      `${row.tool.padEnd(width)} ${formatCount(row.calls, "call")} · ${formatShare(row.failures, row.calls)} failed`,
-    );
+    const failures = `${formatShare(row.failures, row.calls)} failed`;
+    const exits = row.exits > 0 ? ` · ${formatShare(row.exits, row.calls)} exited non-zero` : "";
+    lines.push(`${row.tool.padEnd(width)} ${formatCount(row.calls, "call")} · ${failures}${exits}`);
   }
   return lines.join("\n");
 }

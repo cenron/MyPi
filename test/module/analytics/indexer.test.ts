@@ -87,7 +87,7 @@ describe("indexSessions", () => {
       `${JSON.stringify(JSON.parse(header.split("\n")[0] ?? ""))}\n${call("legacy-lsp", "lsp", {})}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(toolTotals(store, undefined)).toEqual([{ tool: "lsp", calls: 1, failures: 0 }]);
+    expect(toolTotals(store, undefined)).toEqual([{ tool: "lsp", calls: 1, failures: 0, exits: 0 }]);
     expect(store.skippedCount()).toBe(0);
     store.close();
   });
@@ -157,7 +157,7 @@ describe("indexSessions", () => {
       `${header}\n${first}${call("call-1", "bash", { command: "rg needle" })}\n${result("call-1", false, "ok")}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(toolTotals(store, undefined)).toEqual([{ tool: "bash", calls: 1, failures: 0 }]);
+    expect(toolTotals(store, undefined)).toEqual([{ tool: "bash", calls: 1, failures: 0, exits: 0 }]);
 
     await writeFile(source, `${header}\n${first}`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
@@ -175,8 +175,8 @@ describe("indexSessions", () => {
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
     expect(toolTotals(store, undefined)).toEqual([
-      { tool: "bash", calls: 1, failures: 0 },
-      { tool: "read", calls: 1, failures: 0 },
+      { tool: "bash", calls: 1, failures: 0, exits: 0 },
+      { tool: "read", calls: 1, failures: 0, exits: 0 },
     ]);
     expect(shellTotals(store, undefined)).toEqual([{ name: "rg", calls: 1 }]);
     expect(navigationTotals(store, undefined)).toEqual([
@@ -186,12 +186,15 @@ describe("indexSessions", () => {
     await writeFile(
       source,
       `${header}\n${call("call-1", "bash", { command: "rg -n needle src" })}\n` +
-        `${call("call-2", "read", { path: "a.ts" })}\n${result("call-1", true, "rg: no such file")}\n`,
+        `${call("call-2", "read", { path: "a.ts" })}\n` +
+        `${call("call-3", "bash", { command: "ls /no/such/folder" })}\n` +
+        `${result("call-1", true, "rg: no such file")}\n` +
+        `${result("call-3", true, "ls: /no/such/folder: missing\n\nCommand exited with code 2")}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
     expect(toolTotals(store, undefined)).toEqual([
-      { tool: "bash", calls: 1, failures: 1 },
-      { tool: "read", calls: 1, failures: 0 },
+      { tool: "bash", calls: 2, failures: 1, exits: 1 },
+      { tool: "read", calls: 1, failures: 0, exits: 0 },
     ]);
     expect(failureTotals(store, undefined)).toEqual([{ line: "rg: no such file", count: 1 }]);
     store.close();

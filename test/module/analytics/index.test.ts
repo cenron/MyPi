@@ -221,6 +221,23 @@ describe("AnalyticsModule", () => {
       .join("\n")}\n`;
     await writeFile(parentPath, parent);
     await writeFile(
+      join(mainRoot, "build.jsonl"),
+      `${[
+        { type: "session", version: 3, id: "build", timestamp, cwd: "/project", parentSession: parentPath },
+        { type: "custom", id: "build-marker", customType: MYPI_SESSION_MARKER_TYPE, data: {} },
+        {
+          type: "usage",
+          id: "build-usage",
+          timestamp,
+          provider: "openai",
+          model: "gpt-6-luna",
+          usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, cost: { total: 9.99 } },
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n")}\n`,
+    );
+    await writeFile(
       join(childRoot, "child.jsonl"),
       `${[
         { type: "session", version: 3, id: "child", timestamp, cwd: "/project", parentSession: parentPath },
@@ -251,6 +268,8 @@ describe("AnalyticsModule", () => {
     expect(report).toContain("openai/gpt-6-luna · unknown   1 done-check report · 1 pass");
     expect(report).not.toContain("gpt-5 · unknown   1 done-check report");
     expect(report).toContain("reviewer · openai/gpt-6-luna · high   1 run · $0.42 child cost");
+    // The build session links to the same parent, after its subagent call, but isn't a subagent run.
+    expect(report?.match(/child cost/g)).toHaveLength(1);
   });
 
   it("attributes a same-timestamp notice only to usage earlier in the transcript", async () => {

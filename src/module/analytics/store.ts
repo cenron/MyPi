@@ -4,7 +4,7 @@ import type { Approval } from "#core/channels";
 import type { FeatureRow, SessionHeader, ToolCallRow, ToolResultRow, UsageRow } from "./entries";
 import { ensureSchemaVersion, openSQLite, withTransaction } from "./sqlite";
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 /** A transcript's indexed position and its session metadata. */
 export type AnalyticsFile = {
@@ -46,8 +46,8 @@ export class AnalyticsStore {
         CREATE TABLE tool_calls (
           file_path TEXT NOT NULL, session_id TEXT NOT NULL, cwd TEXT NOT NULL, call_id TEXT NOT NULL,
           timestamp INTEGER NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, thinking TEXT NOT NULL,
-          tool TEXT NOT NULL, code_search INTEGER NOT NULL, from_line_one INTEGER NOT NULL, agent_name TEXT, failed INTEGER,
-          failure_line TEXT,
+          tool TEXT NOT NULL, code_search INTEGER NOT NULL, from_line_one INTEGER NOT NULL, agent_name TEXT,
+          failed INTEGER, exited INTEGER, failure_line TEXT,
           PRIMARY KEY(file_path, call_id)
         );
         CREATE TABLE shell_commands (
@@ -222,10 +222,16 @@ export class AnalyticsStore {
     }
 
     const settleCall = this.database.prepare(
-      "UPDATE tool_calls SET failed = ?, failure_line = ? WHERE file_path = ? AND call_id = ?",
+      "UPDATE tool_calls SET failed = ?, exited = ?, failure_line = ? WHERE file_path = ? AND call_id = ?",
     );
     for (const result of rows.results) {
-      settleCall.run(result.failed ? 1 : 0, result.failureLine ?? null, file.path, result.callId);
+      settleCall.run(
+        result.failed ? 1 : 0,
+        result.exited ? 1 : 0,
+        result.failureLine ?? null,
+        file.path,
+        result.callId,
+      );
     }
   }
 

@@ -53,7 +53,7 @@ Two kinds of measure, kept apart:
 | Tokens and cost | Which model and effort level is worth it for which work? | `usage` on each assistant message: input, output, cache read and write, cost | counted | Defaults per task kind; whether high thinking pays |
 | Cache | Does a prompt or module break caching? | Cache-read share of input over time | counted | Which prompt changes to undo |
 | Context | Do sessions run out of room, and does clearing old results help? | Peak context per session, compactions, turns after the first one, re-reads of a file an earlier result held, share of context in old tool results | counted | Compaction and [context](context.md) thresholds |
-| Tool calls | Which tools fail, and how? | Calls and `isError` per tool, failure text grouped; blocked calls (guard, Plan) apart | counted | Which tool to fix first |
+| Tool calls | Which tools fail, and how? | Calls, failures other than a `bash` non-zero exit, non-zero exits per tool, and failure text grouped; blocked calls (guard, Plan) apart | counted | Which tool to fix first |
 | Shell without a tool | What does the agent keep doing in `bash`? | Command names from `tokenize` (each part of a pipeline, when it can parse the line) | counted | Candidates for a built-in tool |
 | Code navigation | Does the agent find code by symbol or by text? | `lsp` calls; `rg`/`grep` searches outside `node_modules` (a flag; arguments aren't kept); `read` from line 1 vs a later part; the `lsp` share (`lsp / (lsp + code searches)`) | counted | Whether the [LSP nudge](lsp.md#slices) stays, and whether a third one is needed |
 | Done check | Does it catch anything, and does the next round fix it? | Reports sent back (errors, failed commands, open tasks), pass lines, rounds, whether the next report was smaller | counted | Whether the check pays; its round limit |
@@ -208,10 +208,10 @@ Checked against the installed pi 1.2.0 (2026-10-22):
   `subagents/sessions/` (only MyPi writes there); a session with the `mypi-session` marker (`Session.markAsMyPi`,
   once per session) or a MyPi entry or tool in its first 16 lines; and a session from before the marker
   (2026-10-27), read in full once and kept if it shows a MyPi tool or notice anywhere. Other pi sessions are
-  remembered by path only and never indexed. Subagent
-  headers retain their `parentSession` link; the parent subagent call's agent name is kept to group child cost. The
-  session files are the source of truth, and indexed and skipped paths are removed when their transcript files
-  disappear.
+  remembered by path only and never indexed. Only headers in `subagents/sessions/` retain their `parentSession` link
+  (a `/plan implement` session has one too, and isn't a subagent run); the parent subagent call's agent name is kept
+  to group child cost. The session files are the source of truth, and indexed and skipped paths are removed when their
+  transcript files disappear.
 - Built with Node's `node:sqlite` `DatabaseSync`, WAL mode, and a 5-second busy timeout. A file's rows and progress
   are written in one transaction. The `schema_version` is rebuilt from session files when it changes.
 - Indexing is incremental: it resumes at the byte offset after the last complete line. Shrunk files and files whose
@@ -225,10 +225,12 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 - Record command names, never full command lines or arguments: they can hold paths, secrets, or private data.
 - Only MyPi sessions are indexed. Other pi sessions contribute only their file path to the local skip list; `/analytics`
   reports the number skipped without showing paths. No file contents, prompts, or replies. Usage rows keep provider,
-  model, thinking level, usage counts, cost, stop reason, timestamp, session id, and project folder. Tool-call rows keep the same session and model columns plus the
-  tool name, the failure flag, whether a `bash` call is a code search, shell command names (with the home folder
-  written `~`), the read starting line, and a failure's first line cut to 120 characters, home shortened to `~`. A
-  failure's first line can quote the path or input it failed on; it stays short and local for that reason. Feature rows
+  model, thinking level, usage counts, cost, stop reason, timestamp, session id, and project folder. Tool-call rows
+  keep the same session and model columns plus the tool name, failure and non-zero-exit flags, whether a `bash` call
+  is a code search, shell command names (with the home folder written `~`), the read starting line, and a failure's
+  first line cut to 120 characters, home shortened to `~` (none for a non-zero exit, whose first line is the
+  command's own output). A failure's first line can quote the path or input it failed on; it stays short and local
+  for that reason. Feature rows
   store only done-check report/pass and job-notice kinds and timestamps. Task tool calls are already counted by tool
   name; subagent calls keep only the agent name, not their task argument. Child sessions keep the parent session path.
 - A permission dialog keeps only its rules, its choice, the model, and the time: never the question, which quotes the
@@ -246,7 +248,8 @@ Checked against the installed pi 1.2.0 (2026-10-22):
   - **Model usage:** one compact line per provider, model, and thinking level with replies, input, output, cache-read
     share, and cost. Usage entries contribute tokens and cost but not reply counts; token counts use the footer's
     compact units.
-  - **Tools:** calls and the failure share per tool, then the five most frequent failure lines.
+  - **Tools:** calls, the failure share (excluding `bash` calls that only exited non-zero), and the non-zero-exit
+    share per tool when nonzero; then the five most frequent failure lines, excluding non-zero exits.
   - **Shell commands with no tool:** the most-run command names (up to eight), leaving out `grep`, `find`, `ls`, and
     `cat`, which pi has tools for. Names come from `tokenize`, so a command with a file redirect, heredoc, or variable
     gives none.

@@ -42,7 +42,7 @@ describe("AnalyticsStore", () => {
     const version = store.database.prepare("SELECT version FROM schema_version").get() as { version: number };
     const columns = store.database.prepare("PRAGMA table_info(usage)").all() as { name: string }[];
 
-    expect(version.version).toBe(10);
+    expect(version.version).toBe(11);
     expect(columns.map(({ name }) => name)).toContain("entry_id");
     expect(usageTotals(store, undefined)).toEqual([]);
     expect(store.skippedCount()).toBe(0);
