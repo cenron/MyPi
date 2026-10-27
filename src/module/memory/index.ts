@@ -1,15 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  type ExtensionContext,
-  isEditToolResult,
-  isWriteToolResult,
-  type ToolResultEvent,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
-import { isInside, resolveToolPath } from "#core/util/paths";
+import { changedFile, isInside } from "#core/util/paths";
 import { BaseModule } from "../base";
 import { memoryCheckCmd } from "./commands/memory-check";
 import { onboardCmd } from "./commands/onboard";
@@ -19,7 +14,7 @@ import type { MemoryScope } from "./types";
 
 export class MemoryModule extends BaseModule {
   // Pi builds a new session and new modules on every session_start, so the cwd can't change under these.
-  private readonly projectDir = join(this.session.project?.main ?? this.session.ctx.cwd, PROJECT_MEMORY_DIR);
+  private readonly projectDir = join(this.session.projectRoot, PROJECT_MEMORY_DIR);
   private readonly globalDir = globalMemoryDir();
 
   // Built once: `info` lists their infos, and `info` is read on every footer, prompt, and state call.
@@ -61,12 +56,9 @@ export class MemoryModule extends BaseModule {
    * bash and edits by hand show after /reload.
    */
   private async onToolResult(ev: ToolResultEvent, ctx: ExtensionContext) {
-    if (ev.isError || !(isWriteToolResult(ev) || isEditToolResult(ev))) return;
+    const file = changedFile(ev, ctx.cwd, homedir());
+    if (file === undefined) return;
 
-    const path = ev.input.path;
-    if (typeof path !== "string") return;
-
-    const file = resolveToolPath(path, ctx.cwd, homedir());
     const isProjectMemory = isInside(this.projectDir, file);
 
     if (isProjectMemory) await this.keepProjectOutOfGit();

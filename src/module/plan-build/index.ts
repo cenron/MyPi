@@ -25,7 +25,7 @@ const FOOTER_ITEMS: Record<Mode, FooterItem> = {
 
 /** The prompt section for each mode. */
 export class PlanBuildModule extends BaseModule<{ mode: Mode; plan?: string; thinking?: ThinkingLevel }> {
-  private readonly plansDir = join(this.session.project?.main ?? this.session.ctx.cwd, PLANS_DIR);
+  private readonly plansDir = join(this.session.projectRoot, PLANS_DIR);
   private mode: Mode = Mode.PLAN;
   /** The plan file a Build session is implementing: named in its prompt section, saved with the mode, dropped on Plan. */
   private plan: string | undefined;

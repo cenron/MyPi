@@ -4,6 +4,7 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { OpenTask } from "#core/channels";
+import { answeredItems } from "#core/events";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { errorMessage } from "#core/util/errors";
 import { isPlanMode } from "#core/util/mode";
@@ -152,11 +153,9 @@ export class DoneCheckModule extends BaseModule {
   private async duplicatesIn(files: string[], ctx: ExtensionContext) {
     if (this.session.project === undefined) return [];
     const answers = await this.ask("duplicates", { files, signal: ctx.signal });
-    for (const answer of answers) {
-      if (answer.kind === "failed")
-        this.session.logWarning(`Done check: ${answer.from} couldn't check duplicates: ${answer.error}`);
-    }
-    const duplicates = answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
+    const duplicates = answeredItems(answers, (from, error) =>
+      this.session.logWarning(`Done check: ${from} couldn't check duplicates: ${error}`),
+    );
     const result = reportedDuplicates(duplicates, this.reported);
     this.reported = result.reported;
     return result.duplicates;
@@ -165,7 +164,9 @@ export class DoneCheckModule extends BaseModule {
   /** The tasks still open according to todo, or none when that module is turned off. */
   private async openTasks(): Promise<OpenTask[]> {
     const answers = await this.ask("openTasks", undefined);
-    return answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
+    return answeredItems(answers, (from, error) =>
+      this.session.logWarning(`Done check: ${from} couldn't list open tasks: ${error}`),
+    );
   }
 
   /** Sends one report back, unless it repeats the last one or the round limit is reached. */
@@ -183,12 +184,10 @@ export class DoneCheckModule extends BaseModule {
   /** Every source's problems in `files`. A source that fails is told to the user, who can fix it; the agent can't. */
   private async problemsIn(files: string[], ctx: ExtensionContext) {
     const answers = await this.ask("diagnostics", { files, signal: ctx.signal });
-    for (const answer of answers) {
-      if (answer.kind === "failed")
-        this.session.logWarning(`Done check: ${answer.from} couldn't check: ${answer.error}`);
-    }
     return {
-      problems: answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : [])),
+      problems: answeredItems(answers, (from, error) =>
+        this.session.logWarning(`Done check: ${from} couldn't check: ${error}`),
+      ),
       sources: answers.filter((answer) => answer.kind === "answer").map((answer) => answer.from),
     };
   }

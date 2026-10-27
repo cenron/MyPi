@@ -80,7 +80,7 @@ export type JobInfo = {
   logPath: string;
 };
 
-/** What to run. `kind` is `shell` today, and `subagent` later. */
+/** What to run. `kind` is `shell` or `subagent`. */
 export type JobSpec = {
   kind: string;
   /** What the job is, for lists and notices, such as the command. */

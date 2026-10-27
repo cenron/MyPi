@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isEditToolResult, isWriteToolResult, type ToolResultEvent } from "@earendil-works/pi-coding-agent";
 import { type Segment, tokenize } from "./shell";
 
 const UNICODE_SPACES = /[  -   　]/g;
@@ -42,6 +43,14 @@ export function resolveToolPath(path: string, cwd: string, home: string): string
   else if (resolved.startsWith("file://")) resolved = fileURLToPath(resolved);
 
   return isAbsolute(resolved) ? resolve(resolved) : resolve(cwd, resolved);
+}
+
+/** The file a successful `write` or `edit` changed, resolved as pi resolved it; undefined for any other result. */
+export function changedFile(ev: ToolResultEvent, cwd: string, home: string): string | undefined {
+  if (ev.isError || !(isWriteToolResult(ev) || isEditToolResult(ev))) return undefined;
+
+  const path = ev.input.path;
+  return typeof path === "string" ? resolveToolPath(path, cwd, home) : undefined;
 }
 
 /**

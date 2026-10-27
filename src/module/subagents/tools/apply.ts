@@ -66,7 +66,7 @@ export function subagentApplyTool(session: Session) {
 }
 
 async function readPatch(session: Session, name: string): Promise<SavedPatch> {
-  const patches = join(session.project?.main ?? session.ctx.cwd, PATCHES_DIR);
+  const patches = join(session.projectRoot, PATCHES_DIR);
   const patchPath = join(patches, `${name}.patch`);
   const handoffPath = join(patches, `${name}.md`);
   let handoff: string;
@@ -134,7 +134,7 @@ async function checkPatch(cwd: string, patchPath: string): Promise<{ failed: boo
 }
 
 async function unknownPatch(session: Session, name: string): Promise<string> {
-  const patches = join(session.project?.main ?? session.ctx.cwd, PATCHES_DIR);
+  const patches = join(session.projectRoot, PATCHES_DIR);
   const names = (await readdir(patches).catch(() => []))
     .filter((file) => file.endsWith(".patch"))
     .map((file) => file.slice(0, -6));

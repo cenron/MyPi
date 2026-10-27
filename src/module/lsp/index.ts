@@ -1,13 +1,12 @@
 import { homedir } from "node:os";
 import {
   type ExtensionContext,
-  isEditToolResult,
   isWriteToolResult,
   type ToolDefinition,
   type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 import { type Command, type ModuleInfo, ModuleLoadMode } from "#core/types";
-import { resolveToolPath } from "#core/util/paths";
+import { changedFile } from "#core/util/paths";
 import { BaseModule } from "../base";
 import { availableLanguages } from "./available";
 import { lspCmd } from "./commands/lsp";
@@ -86,11 +85,9 @@ export class LspModule extends BaseModule<LspState> {
    * created the file, so it's reported as created, which servers also take as "read it again".
    */
   private async onToolResult(ev: ToolResultEvent, ctx: ExtensionContext) {
-    if (ev.isError || !(isEditToolResult(ev) || isWriteToolResult(ev))) return;
-
-    const path = ev.input.path;
-    if (typeof path !== "string") return;
-    await this.servers.fileChanged(resolveToolPath(path, ctx.cwd, homedir()), isWriteToolResult(ev));
+    const file = changedFile(ev, ctx.cwd, homedir());
+    if (file === undefined) return;
+    await this.servers.fileChanged(file, isWriteToolResult(ev));
   }
 
   /** New declarations already found elsewhere by the servers, for the done check. */

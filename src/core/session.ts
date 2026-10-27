@@ -26,6 +26,8 @@ export class Session {
   readonly jobs: JobManager;
   /** Lazy Git worktree operations rooted in this session's cwd; never switch the session. */
   readonly worktrees: Worktrees;
+  /** Where MyPi keeps a project's `.pi/` state: the main checkout in git, else the session's folder. */
+  readonly projectRoot: string;
   private readonly notifier: Notifier;
   private jobsInterval: ReturnType<typeof setInterval> | undefined;
 
@@ -35,6 +37,7 @@ export class Session {
     /** Resolved before construction; undefined outside Git or when discovery failed. */
     readonly project: Project | undefined,
   ) {
+    this.projectRoot = project?.main ?? ctx.cwd;
     this.notifier = new Notifier(ctx);
     this.moduleManager = new ModuleManager(this);
     this.footer = new Footer(ctx);
@@ -45,30 +48,6 @@ export class Session {
     this.worktrees = new Worktrees(ctx.cwd);
     subscribe(pi.events, "jobs", (running) => this.updateJobsWidget(running));
     pi.on("session_shutdown", () => this.clearJobsWidget());
-  }
-
-  private updateJobsWidget(running: number) {
-    if (!this.ctx.hasUI) return;
-
-    if (!running) {
-      this.clearJobsWidget();
-      return;
-    }
-
-    const draw = () => {
-      const jobs = this.jobs.list().filter((job) => job.status === "running");
-      this.ctx.ui.setWidget("mypi-jobs", jobsLine(jobs, this.ctx.ui.theme), { placement: "belowEditor" });
-      if (!jobs.length) this.clearJobsWidget();
-    };
-
-    draw();
-    this.jobsInterval ??= setInterval(draw, 1000);
-  }
-
-  private clearJobsWidget() {
-    if (this.jobsInterval) clearInterval(this.jobsInterval);
-    this.jobsInterval = undefined;
-    if (this.ctx.hasUI) this.ctx.ui.setWidget("mypi-jobs", undefined, { placement: "belowEditor" });
   }
 
   /** Saves `data` in the session as a `mypi-<name>` entry; not sent to the model. Modules use `BaseModule.saveState`. */
@@ -103,5 +82,29 @@ export class Session {
 
   logError(msg: string) {
     this.notifier.error(msg);
+  }
+
+  private updateJobsWidget(running: number) {
+    if (!this.ctx.hasUI) return;
+
+    if (!running) {
+      this.clearJobsWidget();
+      return;
+    }
+
+    const draw = () => {
+      const jobs = this.jobs.list().filter((job) => job.status === "running");
+      this.ctx.ui.setWidget("mypi-jobs", jobsLine(jobs, this.ctx.ui.theme), { placement: "belowEditor" });
+      if (!jobs.length) this.clearJobsWidget();
+    };
+
+    draw();
+    this.jobsInterval ??= setInterval(draw, 1000);
+  }
+
+  private clearJobsWidget() {
+    if (this.jobsInterval) clearInterval(this.jobsInterval);
+    this.jobsInterval = undefined;
+    if (this.ctx.hasUI) this.ctx.ui.setWidget("mypi-jobs", undefined, { placement: "belowEditor" });
   }
 }

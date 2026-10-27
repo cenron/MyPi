@@ -55,6 +55,20 @@ export async function ask<K extends keyof MyPiQuestions>(
   );
 }
 
+/**
+ * Every answer's items, in order. Each listener that failed goes to `onFailure`, so the asker can tell the user; a
+ * failed answer never just disappears.
+ */
+export function answeredItems<T>(
+  answers: readonly Answer<readonly T[]>[],
+  onFailure: (from: string, error: string) => void,
+): T[] {
+  for (const answer of answers) {
+    if (answer.kind === "failed") onFailure(answer.from, answer.error);
+  }
+  return answers.flatMap((answer) => (answer.kind === "answer" ? [...answer.value] : []));
+}
+
 /** Answers every question on `channel` as module `from`. Returns a function that stops it; pi also stops it on `/reload`. */
 export function answer<K extends keyof MyPiQuestions>(
   events: EventBus,

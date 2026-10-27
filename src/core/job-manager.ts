@@ -12,8 +12,8 @@ const TAIL_CHARS = DEFAULT_MAX_BYTES;
 type Entry = Job & { controller: AbortController };
 
 /**
- * The session's jobs: long-running work that goes on after the tool call that started it. Shell commands are the
- * first kind; subagents can be another. One per `Session`; `stopAll()` runs on `session_shutdown`. Publishes how many
+ * The session's jobs: long-running work that goes on after the tool call that started it. Shell commands and
+ * subagents are the kinds. One per `Session`; `stopAll()` runs on `session_shutdown`. Publishes how many
  * are running on the `jobs` channel whenever one starts or ends.
  */
 export class JobManager {

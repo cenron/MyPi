@@ -1,5 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import { ask } from "#core/events";
+import { answeredItems, ask } from "#core/events";
 import type { Session } from "#core/session";
 import { ToolGuard, type ToolRule } from "#core/tool-guard";
 import { planRule } from "#module/plan-build/rule";
@@ -41,10 +41,7 @@ export function checksPrompt(checks: readonly string[]): string {
  */
 export async function approvedChecks(session: Session): Promise<string[]> {
   const answers = await ask(session.pi.events, "checkCommands", undefined);
-  for (const answer of answers) {
-    if (answer.kind === "failed") {
-      session.logWarning(`Subagents: ${answer.from} couldn't list the project's checks: ${answer.error}`);
-    }
-  }
-  return answers.flatMap((answer) => (answer.kind === "answer" ? answer.value : []));
+  return answeredItems(answers, (from, error) =>
+    session.logWarning(`Subagents: ${from} couldn't list the project's checks: ${error}`),
+  );
 }
