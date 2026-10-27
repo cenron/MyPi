@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { usageTotals } from "#module/analytics/queries";
 import { AnalyticsStore } from "#module/analytics/store";
 
 const folders: string[] = [];
@@ -20,16 +21,18 @@ describe("AnalyticsStore", () => {
     old.exec(`CREATE TABLE schema_version (version INTEGER NOT NULL);
       INSERT INTO schema_version(version) VALUES (0);
       CREATE TABLE files (old_layout TEXT);
-      CREATE TABLE usage (old_layout TEXT);`);
+      CREATE TABLE usage (old_layout TEXT);
+      CREATE TABLE tool_calls (old_layout TEXT);
+      CREATE TABLE shell_commands (old_layout TEXT);`);
     old.close();
 
     const store = new AnalyticsStore(path);
     const version = store.database.prepare("SELECT version FROM schema_version").get() as { version: number };
     const columns = store.database.prepare("PRAGMA table_info(usage)").all() as { name: string }[];
 
-    expect(version.version).toBe(2);
+    expect(version.version).toBe(5);
     expect(columns.map(({ name }) => name)).toContain("entry_id");
-    expect(store.totals(undefined)).toEqual([]);
+    expect(usageTotals(store, undefined)).toEqual([]);
     store.close();
   });
 });

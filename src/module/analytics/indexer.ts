@@ -2,19 +2,19 @@ import type { Dirent } from "node:fs";
 import { type FileHandle, open, readdir, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { isNodeError } from "#core/util/errors";
-import { parseEntry, type UsageRow } from "./entries";
-import type { AnalyticsStore } from "./store";
+import { type ParsedEntry, parseEntry } from "./entries";
+import type { AnalyticsStore, FileRows } from "./store";
 
 const READ_CHUNK_SIZE = 64 * 1024;
 const HEADER_CHUNK_SIZE = 1024;
 
 /** Indexes every session JSONL under the supplied main and subagent roots. */
-export async function indexSessions(roots: readonly string[], store: AnalyticsStore): Promise<void> {
+export async function indexSessions(roots: readonly string[], store: AnalyticsStore, homeDir: string): Promise<void> {
   const currentFiles = new Set<string>();
   for (const root of roots) {
     for (const file of await sessionFiles(root)) {
       currentFiles.add(file);
-      await indexFile(file, store);
+      await indexFile(file, store, homeDir);
     }
   }
 
@@ -31,12 +31,12 @@ export async function indexSessions(roots: readonly string[], store: AnalyticsSt
   store.removeFiles(missingFiles);
 }
 
-async function indexFile(file: string, store: AnalyticsStore): Promise<void> {
+async function indexFile(file: string, store: AnalyticsStore, homeDir: string): Promise<void> {
   const handle = await open(file, "r");
   try {
     const size = (await handle.stat()).size;
     const { line, end } = await firstLine(handle);
-    const header = parseEntry(line)?.header;
+    const header = parseEntry(line, homeDir)?.header;
     if (!header) return;
 
     const progress = store.fileProgress(file);
@@ -45,18 +45,23 @@ async function indexFile(file: string, store: AnalyticsStore): Promise<void> {
     const bytes = await readFrom(handle, offset, size);
     const lastNewline = bytes.lastIndexOf(10);
     const completeBytes = lastNewline < 0 ? 0 : lastNewline + 1;
-    const rows: UsageRow[] = [];
+    const rows: FileRows = { usage: [], calls: [], results: [] };
     for (const text of bytes.subarray(0, completeBytes).toString("utf8").split("\n")) {
       if (!text) continue;
-      const parsed = parseEntry(text);
-      if (parsed?.usage) rows.push(parsed.usage);
+      collectRows(parseEntry(text, homeDir), rows);
     }
     const indexedFile = { path: file, header, size, offset: offset + completeBytes };
     if (reset) store.replaceFile(indexedFile, rows);
-    else store.appendRows(indexedFile, rows);
+    else store.appendFile(indexedFile, rows);
   } finally {
     await handle.close();
   }
+}
+
+function collectRows(entry: ParsedEntry | undefined, rows: FileRows): void {
+  if (entry?.usage) rows.usage.push(entry.usage);
+  if (entry?.calls) rows.calls.push(...entry.calls);
+  if (entry?.results) rows.results.push(...entry.results);
 }
 
 async function firstLine(handle: FileHandle): Promise<{ line: string; end: number }> {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseEntry } from "#module/analytics/entries";
+import { parseEntry, type ToolCallRow, type ToolResultRow } from "#module/analytics/entries";
 
+const HOME = "/home/user";
 const usage = {
   input: 100,
   output: 20,
@@ -29,7 +30,7 @@ const assistant = {
   },
 };
 
-const lines: [string, string, string | undefined, string, string][] = [
+const usageLines: [string, string, string | undefined, string, string][] = [
   [
     "assistant reply stores counts and metadata without its content",
     JSON.stringify(assistant),
@@ -54,9 +55,107 @@ const lines: [string, string, string | undefined, string, string][] = [
   ["malformed lines are ignored", "{broken", undefined, "unknown", "unknown"],
 ] as const;
 
+function call(name: string, args: Record<string, unknown>) {
+  return JSON.stringify({
+    ...assistant,
+    message: { ...assistant.message, content: [{ type: "toolCall", id: "call-1", name, arguments: args }] },
+  });
+}
+
+function result(isError: boolean, text: string) {
+  return JSON.stringify({
+    type: "message",
+    id: "result-id",
+    timestamp: "2026-10-26T10:01:01.000Z",
+    message: {
+      role: "toolResult",
+      toolCallId: "call-1",
+      toolName: "bash",
+      isError,
+      content: [{ type: "text", text }],
+    },
+  });
+}
+
+const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
+  [
+    "a bash call keeps each segment's command name",
+    call("bash", { command: "cd src && rg -n needle" }),
+    {
+      tool: "bash",
+      commandNames: ["cd", "rg"],
+      codeSearch: true,
+      fromLineOne: false,
+    },
+  ],
+  [
+    "a search over node_modules is not a code search",
+    call("bash", { command: "grep -rn needle node_modules/pkg" }),
+    {
+      tool: "bash",
+      commandNames: ["grep"],
+      codeSearch: false,
+      fromLineOne: false,
+    },
+  ],
+  [
+    "a command that names node_modules anywhere is not a code search",
+    call("bash", { command: "rg needle src && ls node_modules" }),
+    {
+      tool: "bash",
+      commandNames: ["rg", "ls"],
+      codeSearch: false,
+      fromLineOne: false,
+    },
+  ],
+  [
+    "a command under the home folder is shortened",
+    call("bash", { command: "/home/user/bin/thing --flag" }),
+    {
+      tool: "bash",
+      commandNames: ["~/bin/thing"],
+      codeSearch: false,
+      fromLineOne: false,
+    },
+  ],
+  [
+    "a read without an offset starts at line one",
+    call("read", { path: "src/a.ts" }),
+    {
+      tool: "read",
+      fromLineOne: true,
+    },
+  ],
+  [
+    "a read with an offset starts later",
+    call("read", { path: "src/a.ts", offset: 40 }),
+    {
+      tool: "read",
+      fromLineOne: false,
+    },
+  ],
+  [
+    "a failed result keeps a shortened first line",
+    result(true, "Error: /home/user/src/a.ts missing\nstack"),
+    {
+      callId: "call-1",
+      failed: true,
+      failureLine: "Error: ~/src/a.ts missing",
+    },
+  ],
+  [
+    "a successful result has no failure line",
+    result(false, "all good"),
+    {
+      callId: "call-1",
+      failed: false,
+    },
+  ],
+];
+
 describe("parseEntry", () => {
-  it.each(lines)("%s", (_name, line, id, thinking = "high", stopReason = "stop") => {
-    const entry = parseEntry(line);
+  it.each(usageLines)("%s", (_name, line, id, thinking = "high", stopReason = "stop") => {
+    const entry = parseEntry(line, HOME);
     if (id === undefined) {
       expect(entry?.usage).toBeUndefined();
       return;
@@ -77,10 +176,40 @@ describe("parseEntry", () => {
   });
 
   it.each([1, 2, 3])("recognizes session headers from version %i", (version) => {
-    expect(parseEntry(JSON.stringify({ ...header, version }))?.header).toEqual({
+    expect(parseEntry(JSON.stringify({ ...header, version }), HOME)?.header).toEqual({
       id: "session-id",
       cwd: "/project",
       version,
     });
+  });
+
+  it.each(toolLines)("%s", (_name, line, expected) => {
+    const entry = parseEntry(line, HOME);
+    if (!("tool" in expected)) {
+      expect(entry?.results).toEqual([expected]);
+      return;
+    }
+    expect(entry?.calls?.[0]).toMatchObject({
+      callId: "call-1",
+      provider: "openai",
+      model: "gpt-6-luna",
+      thinking: "high",
+      ...expected,
+    });
+  });
+
+  it("cuts a failure line to 120 characters", () => {
+    const entry = parseEntry(result(true, "x".repeat(200)), HOME);
+    expect(entry?.results?.[0]?.failureLine).toHaveLength(120);
+  });
+
+  it("ignores a result that names no call", () => {
+    const line = JSON.stringify({ type: "message", message: { role: "toolResult", isError: true } });
+    expect(parseEntry(line, HOME)?.results).toBeUndefined();
+  });
+
+  it("keeps no command names when tokenize gives up", () => {
+    const entry = parseEntry(call("bash", { command: "npm test > /tmp/out" }), HOME);
+    expect(entry?.calls?.[0]?.commandNames).toEqual([]);
   });
 });

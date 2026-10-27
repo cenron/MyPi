@@ -1,8 +1,8 @@
 # Analytics
 
-**Status:** slice 1 built 2026-10-26: a local index of reply usage from pi's session files and `/analytics`. Tool calls,
-code navigation, MyPi features, permission dialogs, and benchmarks remain planned; measured by hand during MyPi's
-self-builds (see [Findings](#findings)).
+**Status:** slice 2 built 2026-10-27: a local index of reply usage and tool calls from pi's session files, and
+`/analytics` with model, tool, shell-command, and code-navigation sections. MyPi features, permission dialogs, and
+benchmarks remain planned.
 
 ## Goal
 
@@ -38,10 +38,9 @@ Two kinds of measure, kept apart:
 
 ## Where the data comes from
 
-- **By hand:** pi's session files, the source of truth for what happened: main sessions in
-  `~/.pi/agent/sessions/<folder>/`, subagent runs in `~/.pi/agent/subagents/sessions/`. The git-ignored
-  `.pi/plans/measure-tool-use.py` counts code navigation per session; the footer gives each session's cost and context
-  share. Each self-build plan's Observations log carries reviewed measures per checkpoint.
+- **pi's session files:** the source of truth for what happened: main sessions in
+  `~/.pi/agent/sessions/<folder>/`, subagent runs in `~/.pi/agent/subagents/sessions/`. The footer gives each
+  session's cost and context share; each self-build plan's Observations log carries reviewed measures per checkpoint.
 - **The module:** reads both session-file folders into one local database shared across pi windows and projects. It
   indexes existing history and appended complete JSONL lines; no transcript content is retained.
 
@@ -53,8 +52,8 @@ Two kinds of measure, kept apart:
 | Cache | Does a prompt or module break caching? | Cache-read share of input over time | counted | Which prompt changes to undo |
 | Context | Do sessions run out of room, and does clearing old results help? | Peak context per session, compactions, turns after the first one, re-reads of a file an earlier result held, share of context in old tool results | counted | Compaction and [context](context.md) thresholds |
 | Tool calls | Which tools fail, and how? | Calls and `isError` per tool, failure text grouped; blocked calls (guard, Plan) apart | counted | Which tool to fix first |
-| Shell without a tool | What does the agent keep doing in `bash`? | Command names from `tokenize` (each part of a pipeline) | counted | Candidates for a built-in tool |
-| Code navigation | Does the agent find code by symbol or by text? | `lsp` calls by action; `rg`/`grep` searches outside `node_modules`; `read` from line 1 vs a later part; the `lsp` share (`lsp / (lsp + code searches)`) | counted | Whether the [LSP nudge](lsp.md#slices) stays, and whether a third one is needed |
+| Shell without a tool | What does the agent keep doing in `bash`? | Command names from `tokenize` (each part of a pipeline, when it can parse the line) | counted | Candidates for a built-in tool |
+| Code navigation | Does the agent find code by symbol or by text? | `lsp` calls; `rg`/`grep` searches outside `node_modules` (a flag; arguments aren't kept); `read` from line 1 vs a later part; the `lsp` share (`lsp / (lsp + code searches)`) | counted | Whether the [LSP nudge](lsp.md#slices) stays, and whether a third one is needed |
 | Done check | Does it catch anything, and does the next round fix it? | Reports sent back (errors, failed commands, open tasks), pass lines, rounds, whether the next report was smaller | counted | Whether the check pays; its round limit |
 | Todo | Is the list used, at the right size, and finished? | Task tool calls per run; tasks per plan step (one per box, or one per checkpoint); tasks left open at the end; reminders sent and whether a task tool call followed within a few requests; open-task reports from the done check | counted | Seeding wording; the reminder interval; whether the open-task report earns its place |
 | Subagents | Which agents are used, what they cost, what they catch | Runs per agent, model, effort; tokens, cost, time, outcome, refusals; summed under the prompt that started them (from the child's own session) | counted, plus reviewed for "caught a real bug" | Which model for reviews; whether a builtin is worth keeping |
@@ -138,6 +137,11 @@ Dated, with the window and model; newest last. Each says what was decided.
   without braces. Removing one copy exposed another (the dialog list, hidden behind the theme). pi made 0 `lsp` and
   0 `ripwire` calls in both checkpoints, with 10 code searches: refactoring known files didn't need lookups. pi's
   reviewer subagent can't run the tests (read-only, no one to approve). Decided: small checkpoints are the default.
+- **2026-10-27, the measuring script retires.** On the same 14 MyPi sessions, `/analytics` counted the same 9 `lsp`
+  calls, 38 `rg`/`grep` calls, and 67 reads from line 1 as the deleted script. A code-search flag (no arguments kept)
+  reproduces the script's 25 searches outside `node_modules`: the 13 finished sessions matched one by one, and the
+  running session had grown since the script read it. Tool calls differed by 7 for the same reason. Decided: the script
+  is gone; `/analytics` is the count.
 
 ## What pi offers
 
@@ -159,38 +163,49 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 ## Storage
 
 - One SQLite database at `join(getAgentDir(), "analytics", "analytics.sqlite")`, outside the repo, shared by every pi
-  window. It stores per-file indexing progress and one row per assistant reply or `usage` entry; the session files are
-  the source of truth, and rows are removed when their transcript files disappear.
-- Built with Node's `node:sqlite` `DatabaseSync`, WAL mode, and a 5-second busy timeout. A file's usage rows and
-  progress are written in one transaction. The `schema_version` is rebuilt from session files when it changes.
+  window. It stores per-file indexing progress, one row per assistant reply or `usage` entry, one row per tool call
+  (settled by its result, including a code-search flag), and one row per shell command name in a `bash` call. The
+  session files are the source of truth, and rows are removed when their transcript files disappear.
+- Built with Node's `node:sqlite` `DatabaseSync`, WAL mode, and a 5-second busy timeout. A file's rows and progress
+  are written in one transaction. The `schema_version` is rebuilt from session files when it changes.
 - Indexing is incremental: it resumes at the byte offset after the last complete line. Shrunk files and files whose
   header session id changed are reindexed. Every branch entry counts; the tree is not filtered to its current leaf.
 
 ## Privacy
 
 - Record command names, never full command lines or arguments: they can hold paths, secrets, or private data.
-- No file contents, prompts, or replies; slice 1 retains only provider, model, thinking level, usage counts, cost,
-  stop reason, timestamp, session id, and project folder. Later tool-call measures may retain only the tool name,
-  failure flag, shell command names, read starting line, and a short failure line.
+- No file contents, prompts, or replies. Usage rows keep provider, model, thinking level, usage counts, cost, stop
+  reason, timestamp, session id, and project folder. Tool-call rows keep the same session and model columns plus the
+  tool name, the failure flag, whether a `bash` call is a code search, shell command names (with the home folder
+  written `~`), the read starting line, and a failure's first line cut to 120 characters, home shortened to `~`. A
+  failure's first line can quote the path or input it failed on; it stays short and local for that reason.
 - Local only: nothing leaves the machine.
-- **By hand, too:** the measuring script reads arguments locally to classify calls but prints only counts and each
-  session's first-prompt snippet; only aggregates go into tracked docs (this file, module docs), never raw session
-  data, session paths, or anything from a user's own files. Per-checkpoint detail stays in git-ignored plans.
+- **In the reports, too:** only counts and short failure lines go into tracked docs; never raw session data, session
+  paths, or anything from a user's own files. Per-checkpoint detail stays in git-ignored plans.
 
 ## Behavior
 
 - When loaded, it indexes session files in the background and indexes again before reporting. No pi hot-path events
-  are used in slice 1.
-- `/analytics` shows one compact assistant-reply line per provider, model, and thinking level for the last 7 days;
-  `/analytics all` shows all indexed history. Usage entries contribute tokens and cost but not reply counts. Token
-  counts use the footer's compact units; the line reports input, output, cache-read share, and cost to two decimals.
+  are used in slices 1 and 2.
+- `/analytics` shows the last 7 days; `/analytics all` shows all indexed history. Sections:
+  - **Model usage:** one compact line per provider, model, and thinking level with replies, input, output, cache-read
+    share, and cost. Usage entries contribute tokens and cost but not reply counts; token counts use the footer's
+    compact units.
+  - **Tools:** calls and the failure share per tool, then the five most frequent failure lines.
+  - **Shell commands with no tool:** the most-run command names (up to eight), leaving out `grep`, `find`, `ls`, and
+    `cat`, which pi has tools for. Names come from `tokenize`, so a command with a file redirect, heredoc, or variable
+    gives none.
+  - **Code navigation:** per model, `lsp` calls, code searches (`rg`/`grep` in `bash` with no `node_modules` in the
+    command, plus the `grep` and `find` tools), reads from line 1, and the `lsp` share.
 - Can be turned off with `/modules`, and the database deleted to start over.
 
 ## Slices
 
 1. **Built 2026-10-26:** SQLite store, incremental session-file indexer, assistant and `usage` rows, and the first
-   `/analytics` summary. This is the baseline; later slices add tool calls, MyPi feature counts, and permission dialogs.
-2. Tool calls and code navigation; retire the handwritten measuring script.
+   `/analytics` summary. This is the baseline.
+2. **Built 2026-10-27:** tool-call rows with failure status, a code-search flag, shell command names, and read
+   starting lines; the tools, failure, shell-command, and code-navigation sections; the handwritten measuring script
+   retired.
 3. Done-check, todo, and subagent measures.
 4. Permission-dialog friction from a live notice.
 
