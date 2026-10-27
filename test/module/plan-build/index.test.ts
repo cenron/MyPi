@@ -53,6 +53,7 @@ describe("PlanBuildModule", () => {
     expect(setStatus).toHaveBeenCalledWith("mypi-plan-build", "<dim>BUILD");
     expect(promptSection(session)).toBe(buildPrompt());
     expect(promptSection(session)).toContain("before-done checklist");
+    expect(promptSection(session)).toContain("if it has one");
   });
 
   it("restores the implementing plan path from saved state", () => {
