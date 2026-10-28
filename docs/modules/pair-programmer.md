@@ -16,6 +16,16 @@ Notes from pairing while building MyPi, to feed the design:
 - It asks when a choice is mine, and offers a recommendation with the options.
 - Living docs (architecture, principles, module ideas) carry the shared context between sessions.
 
+## Inspiration
+
+[pairing-buddy](../inspiration/pairing-buddy.md) (read 2026-10-27) is the closest design so far, built on the same pi
+packages and at home in herdr. The ideas worth designing here: roles as modes with each role's tools enforced by a
+rule (Navigator: no edits; Scout: read-only commands and approved checks; Driver: edits only on hand-over); speaking
+rarely, scored first and held until the user pauses; triggers read from the user's herdr panes (a failed command in
+another pane, the same error twice, editing a file the red test doesn't name); a written, tested tone; the session's
+goal from the branch and a note at its end. What doesn't carry over is its Neovim plugin: MyPi can't draw under the
+user's cursor.
+
 ## Open questions
 
 - How is the mode switched on and off: a command, a flag, or a session setting?

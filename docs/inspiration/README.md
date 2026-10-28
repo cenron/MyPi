@@ -14,6 +14,7 @@ picked up, its design goes in that module's or tool's doc, not here.
 | [ripwire](ripwire.md) | 2026-10-22 | One binary that maps a repo by ranked call graph before the agent reads, and checks what it wrote | [tools](../tools/README.md), [lsp](../modules/lsp.md), [analytics](../modules/analytics.md), [apply_patch](../tools/apply-patch.md), [done-check](../modules/done-check.md), [roadmap](../roadmap.md) |
 | [pi-cc-tools](pi-cc-tools.md) | 2026-10-26 | A pi package that makes pi look like Claude Code: grouped tool rows, highlighted diffs, a naming spinner, terminal colors | [roadmap](../roadmap.md#nice-to-have) (themes: colors and layouts) |
 | [pi-vs-claude-code](pi-vs-claude-code.md) | 2026-10-26 | A playground of pi extensions: agent chains and teams, agent-to-agent messaging, safety rule files, loading Claude Code's agents and skills | [subagents](../modules/subagents.md), [folder-guard](../rules/folder-guard.md), [analytics](../modules/analytics.md) |
+| [pairing-buddy](pairing-buddy.md) | 2026-10-27 | A pair programmer for Neovim that speaks rarely: a fast model scores each moment, three roles with tools enforced in code, triggers from your terminals through herdr | [pair-programmer](../modules/pair-programmer.md), [notifications](../modules/notifications.md), [done-check](../modules/done-check.md), [memory](../modules/memory.md), [analytics](../modules/analytics.md) |
 
 ## Where the ideas went
 
