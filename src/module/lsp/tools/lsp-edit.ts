@@ -2,11 +2,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { defineTool, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { isInside, resolveToolPath } from "#core/util/paths";
+import { displayPath, isInside, resolveToolPath } from "#core/util/paths";
 import type { ServerManager } from "../manager";
 import { applyTextEdits, fileEdits } from "../util/edits";
 import { pickSymbol } from "./document";
-import { counted, displayPath } from "./format";
+import { counted } from "./format";
 
 const parameters = Type.Object({
   action: Type.Literal("rename", { description: "rename: renames a symbol everywhere it's used, through the server." }),

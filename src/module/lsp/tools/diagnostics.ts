@@ -1,10 +1,11 @@
 import { type Diagnostic, DiagnosticSeverity } from "vscode-languageserver-protocol/node";
 import type { Problem } from "#core/channels";
+import { displayPath } from "#core/util/paths";
 import type { LspClient } from "../client";
 import type { ServerManager } from "../manager";
 import type { ServerSpec } from "../servers";
 import { currentServer, sendFile } from "./document";
-import { capAnswer, counted, displayPath } from "./format";
+import { capAnswer, counted } from "./format";
 
 /** The protocol's severities as MyPi's. A diagnostic without one counts as an error, as most clients show it. */
 const SEVERITIES = new Map<DiagnosticSeverity, Problem["severity"]>([

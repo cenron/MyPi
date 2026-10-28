@@ -1,9 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { displayPath } from "#core/util/paths";
 import type { LspClient } from "../client";
 import type { Lookup, ReadyLookup, ServerManager } from "../manager";
 import { languageIdOf, type ServerSpec } from "../servers";
 import { matchesNamePath, type NamedSymbol, namedSymbols } from "../symbols";
-import { displayPath, lineSpan, symbolLine, unavailable } from "./format";
+import { lineSpan, symbolLine, unavailable } from "./format";
 
 /** How long after a `wait_for_index` server starts an empty answer is asked again: Pyright takes seconds. */
 const WARMUP_MS = 5_000;

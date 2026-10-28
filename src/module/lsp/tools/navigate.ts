@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { Location, Position } from "vscode-languageserver-protocol/node";
-import { isInside } from "#core/util/paths";
+import { displayPath, isInside } from "#core/util/paths";
 import type { ReadyLookup, ServerManager } from "../manager";
 import { languageIdOf } from "../servers";
 import type { NamedSymbol } from "../symbols";
 import { afterIndexing, currentServer, type Document, fileSymbols, type Picked, pickSymbol } from "./document";
 import { body } from "./find";
-import { capAnswer, counted, displayPath, lineSpan, symbolLine } from "./format";
+import { capAnswer, counted, lineSpan, symbolLine } from "./format";
 
 /** One name, as a definition is asked for: letters, digits, `_`, and `$`. */
 const IDENTIFIER = /^[\p{L}\p{N}_$]+$/u;

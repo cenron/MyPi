@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { commandPaths, isInside, resolveToolPath } from "#core/util/paths";
+import { commandPaths, displayPath, isInside, resolveToolPath } from "#core/util/paths";
 // pi doesn't export resolveToCwd, so the parity test reaches into its dist. A pi upgrade that changes it fails here.
 import { resolveToCwd } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/tools/path-utils.js";
 
@@ -120,5 +120,14 @@ describe("commandPaths", () => {
     ["symbols alone in a heredoc's code", "python3 - <<'EOF'\nprint(a / b)\nx = '/**'\nEOF"],
   ])("names nothing for %s", (_case, command) => {
     expect(commandPaths(command, commandCwd, commandHome)).toEqual([]);
+  });
+});
+
+describe("displayPath", () => {
+  it.each([
+    ["relative inside the folder", "/project/src/a.ts", "src/a.ts"],
+    ["absolute outside it", "/elsewhere/a.ts", "/elsewhere/a.ts"],
+  ])("is %s", (_case, file, shown) => {
+    expect(displayPath(file, "/project")).toBe(shown);
   });
 });

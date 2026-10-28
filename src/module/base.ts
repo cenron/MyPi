@@ -1,4 +1,4 @@
-import type { SessionManager, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { SessionManager, ToolDefinition, ToolRendererResolver } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
 import type { MyPiNotices, MyPiQuestions } from "#core/channels";
 import * as bus from "#core/events";
@@ -59,6 +59,11 @@ export abstract class BaseModule<State = never> implements Module {
   /** Sets this module's rule on every tool call; a block from any module wins. */
   protected onToolCall(rule: ToolRule) {
     this.session.toolGuard.set(this.info.name, rule);
+  }
+
+  /** Sets how this module draws tool calls: `resolver` wraps the renderers of the modules set after it, then pi's. */
+  protected onToolRender(resolver: ToolRendererResolver) {
+    this.session.renderers.set(this.info.name, resolver);
   }
 
   /** What a read-only mode (Plan) still lets this module write. Rules read it on each call, so init order is free. */

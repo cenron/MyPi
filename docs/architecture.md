@@ -60,7 +60,7 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`Session`** wraps the `ExtensionContext` from `session_start` and the `ExtensionAPI`. It's the handle passed to
   commands and modules. It logs through `log`, `logWarning`, and `logError`, keeps state in the session through `save`
   and `load`, and owns the session's `ModuleManager` as `moduleManager`, plus the shared `footer`, `editor`, and
-  `promptManager`, and `toolGuard`. `worktrees` is the git worktree service (`/worktree` and subagent writer worktrees;
+  `promptManager`, `toolGuard`, and `renderers` (the modules' tool renderer chain). `worktrees` is the git worktree service (`/worktree` and subagent writer worktrees;
   see [worktree](tools/worktree.md#the-service) and [subagents](modules/subagents.md)). `project` is the repository's
   main checkout and git common folder, or
   undefined outside git or when git fails: `MyPi` resolves it once before modules load and passes it in, so module
@@ -84,6 +84,11 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
   `test/fakes.ts`. See [Module loading](#module-loading).
 - **`Session.notify`** (private) sends those messages to `ctx.ui.notify` and skips them when `ctx.hasUI` is false (print and JSON
   modes).
+- **`RendererChain`** (`tool-renderers.ts`) holds one tool renderer resolver per module, keyed by `info.name`, and is
+  `session.renderers`. Modules set theirs with `BaseModule.onToolRender(resolver)`. pi can't unregister a resolver, so
+  `MyPi` registers one, once per extension load, that asks the current session's chain: resolvers in the order set,
+  each wrapping the ones after it, then pi's own. Quiet is the first user; a layout theme (the roadmap's Theme picker)
+  is the next.
 - **`PromptManager`** (`prompt-manager.ts`) holds one system prompt section per module, keyed by `info.name`, and is
   `session.promptManager`. Modules set theirs with `BaseModule.setPrompt(text)`; `undefined` clears it. Core sets one
   of its own, `identity` ([identity](core/identity.md)), from `MyPi` on every run. `apply(sections)`
@@ -330,9 +335,9 @@ export interface Module {
   store it as `mypi-module-<info.name>`, typed by `State`, so saving the wrong shape doesn't compile. The `module-`
   prefix keeps modules apart from core's own entries, even for a module named `modules`. `saveStateTo(sessionManager,
   state)` saves it into another session (plan-build starts `/plan implement`'s new session in Build this way).
-  `loadState` trusts the file, so check any field you rely on. The helpers `setFooter(item)`, `onKey(key, handler)`, `setPrompt(text)`, and
-  `onToolCall(rule)` each give the module one slot keyed by `info.name`: a footer item, a key handler, a prompt section,
-  and a `ToolGuard` rule. A module returns its tools from `tools()`, wrapping each in `defineTool` (see [Tools](#tools));
+  `loadState` trusts the file, so check any field you rely on. The helpers `setFooter(item)`, `onKey(key, handler)`, `setPrompt(text)`,
+  `onToolCall(rule)`, and `onToolRender(resolver)` each give the module one slot keyed by `info.name`: a footer item, a
+  key handler, a prompt section, a `ToolGuard` rule, and a tool renderer resolver. A module returns its tools from `tools()`, wrapping each in `defineTool` (see [Tools](#tools));
   `tools()` runs before `init()`, so a tool reads module state in `execute`, not when it's built. `setToolActive(name, active)` adds
   one tool to pi's active tools or removes it, leaving the rest alone (and doing nothing when it's already in that
   state), since pi restores the active tools from the transcript. Add helpers here when a module first needs them (event handlers, tools), so the SDK only

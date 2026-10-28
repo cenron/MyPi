@@ -1,15 +1,8 @@
-import { relative } from "node:path";
-import { isInside } from "#core/util/paths";
 import type { Lookup } from "../manager";
 import { kindName, type NamedSymbol } from "../symbols";
 
 /** Most characters an answer holds; past it, whole symbols are left out with a note on how to narrow the call. */
 export const MAX_ANSWER_CHARS = 20_000;
-
-/** `file` relative to `cwd` when it's inside, so lines stay short; absolute otherwise. */
-export function displayPath(file: string, cwd: string): string {
-  return isInside(cwd, file) ? relative(cwd, file) || file : file;
-}
 
 /** `1 symbol`, `3 symbols`: every count says what it counts. */
 export function counted(count: number, noun: string): string {

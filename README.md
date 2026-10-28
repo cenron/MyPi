@@ -258,12 +258,12 @@ the next `/reload`.
 | [plan-build](docs/modules/plan-build.md) | always | Plan and Build modes, `ask_user`, `submit_plan`, the implement dialog |
 | [subagents](docs/modules/subagents.md) | always | Built-in and your own agents, worktree writers, `/agents` |
 | [memory](docs/modules/memory.md) | always | Project and global memories, `/onboard`, `/memory-check` |
+| [quiet](docs/modules/quiet.md) | always | `/quiet`: one line per tool call, `QUIET` in the footer |
 | [todo](docs/modules/todo.md) | by default | Task tools and the checklist |
 | [done-check](docs/modules/done-check.md) | by default | Checks changed files and runs approved commands when the agent stops |
 | [lsp](docs/modules/lsp.md) | by default | Language servers, `lsp`, `lsp_edit`, `/lsp` |
 | [context](docs/modules/context.md) | by default | Compaction summaries and clearing old tool results |
 | [analytics](docs/modules/analytics.md) | by default | The local index, `/analytics`, and the `analytics` tool |
-| [quiet](docs/modules/quiet.md) | by default | `/quiet`: one line per tool call, `QUIET` in the footer |
 
 *Always* modules are part of how MyPi works and can't be switched off; the others load by default and can be.
 

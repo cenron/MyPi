@@ -8,6 +8,7 @@ import { ModuleManager } from "./module-manager";
 import { PromptManager } from "./prompt-manager";
 import { MYPI_SESSION_MARKER_NAME } from "./session-marker";
 import { ToolGuard } from "./tool-guard";
+import { RendererChain } from "./tool-renderers";
 import { type Project, Worktrees } from "./worktree";
 
 /** Per-session handle passed to commands and modules: pi's context and API, logging, saved state, and the modules. */
@@ -22,6 +23,8 @@ export class Session {
   readonly promptManager: PromptManager;
   /** Rules that allow, ask about, or block tool calls. Modules add theirs with `BaseModule.onToolCall`. */
   readonly toolGuard: ToolGuard;
+  /** The modules' tool renderers, by module name. Modules set theirs with `BaseModule.onToolRender`. */
+  readonly renderers: RendererChain;
   /** The session's background jobs; every one still running is stopped on `session_shutdown`. */
   readonly jobs: JobManager;
   /** Lazy Git worktree operations rooted in this session's cwd; never switch the session. */
@@ -42,6 +45,7 @@ export class Session {
     this.editor = new Editor(ctx);
     this.promptManager = new PromptManager();
     this.toolGuard = new ToolGuard(pi);
+    this.renderers = new RendererChain();
     this.jobs = new JobManager(pi.events);
     this.worktrees = new Worktrees(ctx.cwd);
     subscribe(pi.events, "jobs", (running) => this.updateJobsWidget(running));

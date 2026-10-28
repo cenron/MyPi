@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Lookup } from "#module/lsp/manager";
-import { capAnswer, displayPath, MAX_ANSWER_CHARS, unavailable } from "#module/lsp/tools/format";
+import { capAnswer, MAX_ANSWER_CHARS, unavailable } from "#module/lsp/tools/format";
 import { fakeSpec } from "../fakes";
 
 describe("capAnswer", () => {
@@ -13,15 +13,6 @@ describe("capAnswer", () => {
     const text = capAnswer("5 symbols:", [block, block, block, block, block], "symbol", "Narrow it.");
     expect(text.length).toBeLessThan(MAX_ANSWER_CHARS + 200);
     expect(text).toMatch(/\n\nCut at 20000 characters: 2 of 5 symbols not shown\. Narrow it\.$/);
-  });
-});
-
-describe("displayPath", () => {
-  it.each([
-    ["relative inside the folder", "/project/src/a.ts", "src/a.ts"],
-    ["absolute outside it", "/elsewhere/a.ts", "/elsewhere/a.ts"],
-  ])("is %s", (_case, file, shown) => {
-    expect(displayPath(file, "/project")).toBe(shown);
   });
 });
 

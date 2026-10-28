@@ -17,15 +17,12 @@ const theme = {
 
 function setup() {
   const fake = fakeSession();
-  const registerToolRenderer = vi.fn<(resolver: ToolRendererResolver) => void>();
   const getToolsExpanded = vi.fn(() => false);
   const setToolsExpanded = vi.fn();
-  Object.assign(fake.session.pi, { registerToolRenderer });
   Object.assign(fake.session.ctx.ui, { getToolsExpanded, setToolsExpanded });
   const module = new QuietModule(fake.session);
   module.init();
-  const resolver = registerToolRenderer.mock.calls[0]?.[0];
-  if (!resolver) throw new Error("Quiet didn't register a renderer");
+  const resolver: ToolRendererResolver = (toolName, next) => fake.session.renderers.resolve(toolName, next);
   const quiet = module.commands()[0];
   if (!quiet) throw new Error("Quiet didn't register its command");
   const run = (...args: string[]) => quiet.execute({} as never, args);

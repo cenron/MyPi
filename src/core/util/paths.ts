@@ -68,6 +68,11 @@ export function isInside(dir: string, path: string): boolean {
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
+/** `file` relative to `cwd` when it's inside, so lines stay short; as given otherwise. */
+export function displayPath(file: string, cwd: string): string {
+  return isInside(cwd, file) ? relative(cwd, file) || file : file;
+}
+
 /**
  * A new, unused file path in the OS temp directory: `<prefix>-<16 random hex><extension>`. Random, so two pi windows
  * never collide; create the file with `flag: "wx"` so it never follows a link someone else put there.

@@ -1,12 +1,12 @@
 import { fileURLToPath } from "node:url";
 import { isNodeError } from "#core/util/errors";
-import { isInside } from "#core/util/paths";
+import { displayPath, isInside } from "#core/util/paths";
 import { findSourceFile } from "#core/util/walk";
 import type { ReadyLookup, ServerManager } from "../manager";
 import { languageIdOf } from "../servers";
 import { lastName, matchesNamePath, type NamedSymbol, plainName } from "../symbols";
 import { afterIndexing, fileSymbols, ready } from "./document";
-import { capAnswer, counted, displayPath, lineSpan, symbolLine, unavailable } from "./format";
+import { capAnswer, counted, lineSpan, symbolLine, unavailable } from "./format";
 
 /** Most files a project search opens to check full name paths; the answer says when there were more. */
 const MAX_SEARCH_FILES = 20;
