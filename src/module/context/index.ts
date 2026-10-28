@@ -2,9 +2,13 @@ import type { ContextEvent, ExtensionContext, SessionBeforeCompactEvent } from "
 import { type ModuleInfo, ModuleLoadMode } from "#core/types";
 import { BaseModule } from "../base";
 import { steerCompaction } from "./compaction";
+import { withMidRunNotes } from "./mid-run";
 import { oldResultsToClear, withResultsCleared } from "./tool-results";
 
-/** What goes to the model as a session grows: summaries that keep what MyPi needs, and old tool results cleared. */
+/**
+ * What goes to the model as a session grows: summaries that keep what MyPi needs, old tool results cleared, and messages
+ * the user sent mid-run marked so the model acknowledges them.
+ */
 export class ContextModule extends BaseModule {
   /** Tool calls whose results are cleared. Once cleared, always cleared, so the start of the conversation stays put. */
   private readonly cleared = new Set<string>();
@@ -12,7 +16,7 @@ export class ContextModule extends BaseModule {
   get info(): ModuleInfo {
     return {
       name: "context",
-      description: "Steers compaction summaries and clears old tool results to save context.",
+      description: "Steers compaction summaries, clears old tool results, and marks messages sent mid-run.",
       commands: [],
       loadType: ModuleLoadMode.ON_LOAD,
     };
@@ -27,7 +31,7 @@ export class ContextModule extends BaseModule {
     for (const id of oldResultsToClear(ev.messages, this.cleared)) {
       this.cleared.add(id);
     }
-    return { messages: withResultsCleared(ev.messages, this.cleared) };
+    return { messages: withMidRunNotes(withResultsCleared(ev.messages, this.cleared)) };
   }
 
   private onBeforeCompact(ev: SessionBeforeCompactEvent, ctx: ExtensionContext) {

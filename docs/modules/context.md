@@ -2,8 +2,8 @@
 
 **Status:** building (A–E done 2026-10-25)
 
-**Load type:** `ON_LOAD`. The `context` module (`src/module/context/`) holds C (`compaction.ts`) and, once built, E
-(`tool-results.ts`); turning it off in `/modules` turns both off. A is a pi setting, and B and D live in
+**Load type:** `ON_LOAD`. The `context` module (`src/module/context/`) holds C (`compaction.ts`), E
+(`tool-results.ts`), and F (`mid-run.ts`); turning it off in `/modules` turns them all off. A is a pi setting, and B and D live in
 [plan-build](plan-build.md), since they're about Plan and Build. Decided 2026-10-25: a module, not core, since only
 it uses this code.
 
@@ -122,6 +122,18 @@ right. Analytics' context-use numbers will show how often that happens over real
 [Subagents](subagents.md) are now a foundational module (decided 2026-10-25), partly for this: research
 and checks run in a subagent's own context and only a summary comes back, the way Claude Code starts small
 background agents for them. That keeps big reads out of the main session, which B–E only trim after the fact.
+
+### F: messages sent mid-run are acknowledged
+
+**Done 2026-10-28** (the user's ask). pi already shows a message sent while the agent works dimmed above the editor
+(`Steering: …`) and puts it in the transcript where it's delivered, between two tool calls, but the model received it
+as a plain user message and folded it in without a word, so the user couldn't tell it was read. Claude Code tells its
+model such a message arrived mid-task. `withMidRunNotes` (`mid-run.ts`), on the same `context` event as E, puts
+`MID_RUN_NOTE` ("The user sent this while you were working. Acknowledge it in one short line, say what changes because
+of it, then continue:") before each user message that comes right after a tool result, in the model's copy only; the
+transcript keeps what the user typed. A follow-up (`Alt+Enter`) arrives after the run ends, after the agent's reply, so
+it's left alone. Tried live (gpt-6-luna): "also print the date at the end", sent during three `sleep 6` calls, got "Got
+it—… I'll print the date afterward." before the next call; without F, the same run said nothing.
 
 ## Not taking
 
