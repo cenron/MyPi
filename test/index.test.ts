@@ -206,7 +206,7 @@ describe("mypi extension", () => {
 
     const identity = (event.systemPromptOptions.sections as Record<string, string>)["mypi-identity"];
     expect(identity).toContain("You are MyPi");
-    expect(identity).toContain("Model: openai/gpt-6.1-sol. Modules running: plan-build, analytics, memory");
+    expect(identity).toContain("Model: openai/gpt-6.1-sol. Modules running: plan-build, quiet, analytics, memory");
   });
 
   // The folder rule is core: it guards every session, and allows what the prompt points the agent at.
@@ -227,12 +227,11 @@ describe("mypi extension", () => {
     await expect(handlers.get("tool_call")?.(read, ctx)).resolves.toBeUndefined();
   });
 
-  // pi keeps resolvers in a list, so one added on every session_start would stack.
-  it("registers the background bash renderer once, when loaded", async () => {
+  it("registers each renderer once across sessions", async () => {
     const { handlers, toolRenderers } = loadExtension();
     await startSession(handlers);
     await startSession(handlers);
-    expect(toolRenderers).toEqual([backgroundRenderer]);
+    expect(toolRenderers).toEqual([backgroundRenderer, expect.any(Function)]);
   });
 
   it("registers MyPi's MCP servers when a session starts", async () => {

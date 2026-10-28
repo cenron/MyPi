@@ -7,11 +7,13 @@ import { DoneCheckModule } from "./done-check";
 import { LspModule } from "./lsp";
 import { MemoryModule } from "./memory";
 import { PlanBuildModule } from "./plan-build";
+import { QuietModule } from "./quiet";
 import { SubagentsModule } from "./subagents";
 import { TodoModule } from "./todo";
 
 const modules: ModuleClass[] = [
   PlanBuildModule,
+  QuietModule,
   AnalyticsModule,
   MemoryModule,
   LspModule,

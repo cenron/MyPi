@@ -5,12 +5,21 @@ import {
   type McpServerConfig,
   type Theme,
   type ToolDefinition,
+  type ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
+import { type Component, Text } from "@earendil-works/pi-tui";
 import { type Mock, vi } from "vitest";
 import { Session } from "#core/session";
 import type { Module, ModuleLoadMode } from "#core/types";
 import type { Project } from "#core/worktree/index";
+
+/** Pi-like renderer fakes for tests that delegate to the next tool renderer. */
+export function fakeToolRenderers() {
+  return {
+    renderCall: vi.fn(() => new Text("pi call", 0, 0)),
+    renderResult: vi.fn(() => new Text("pi result", 0, 0)),
+  } as unknown as ToolRenderers & { renderCall: ReturnType<typeof vi.fn>; renderResult: ReturnType<typeof vi.fn> };
+}
 
 /** Key codes a test presses in a dialog. */
 export const KEY = { SPACE: " ", ENTER: "\r", ESCAPE: "\x1b", UP: "\x1b[A", DOWN: "\x1b[B" } as const;

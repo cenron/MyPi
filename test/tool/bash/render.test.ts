@@ -1,27 +1,19 @@
-import type { Theme, ToolRenderers } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
-import { describe, expect, it, vi } from "vitest";
+import type { Theme } from "@earendil-works/pi-coding-agent";
+import { describe, expect, it } from "vitest";
 import { backgroundRenderer } from "#tool/bash/render";
+import { fakeToolRenderers } from "../../fakes";
 
 const theme = {
   fg: (color: string, text: string) => `<${color}>${text}</${color}>`,
   bold: (text: string) => `**${text}**`,
 } as unknown as Theme;
 
-/** pi's own renderers, faked: each returns a Text naming itself. */
-function piRenderers() {
-  return {
-    renderCall: vi.fn(() => new Text("pi call", 0, 0)),
-    renderResult: vi.fn(() => new Text("pi result", 0, 0)),
-  } as unknown as ToolRenderers & { renderCall: ReturnType<typeof vi.fn>; renderResult: ReturnType<typeof vi.fn> };
-}
-
 const context = (isError = false) => ({ lastComponent: undefined, isError }) as never;
 const drawn = (component: { render(width: number): string[] } | undefined) => component?.render(200).join("\n").trim();
 
 describe("backgroundRenderer", () => {
   it("draws a background call and its start", () => {
-    const pi = piRenderers();
+    const pi = fakeToolRenderers();
     const renderers = backgroundRenderer("bash", () => pi);
     const call = renderers?.renderCall?.({ command: "npm run dev", background: true }, theme, context());
     expect(drawn(call)).toBe("<toolTitle>**$ npm run dev**</toolTitle><dim> (background)</dim>");
@@ -33,7 +25,7 @@ describe("backgroundRenderer", () => {
   });
 
   it("leaves foreground calls, errors, and other tools to pi's renderers", () => {
-    const pi = piRenderers();
+    const pi = fakeToolRenderers();
     const renderers = backgroundRenderer("bash", () => pi);
     expect(drawn(renderers?.renderCall?.({ command: "ls" }, theme, context()))).toBe("pi call");
     const failed = { content: [], details: { jobId: "1", logPath: "/tmp/pi-job-1.log" } };
@@ -42,7 +34,7 @@ describe("backgroundRenderer", () => {
     expect(drawn(renderers?.renderResult?.({ content: [], details: undefined }, options, theme, context()))).toBe(
       "pi result",
     );
-    const other = piRenderers();
+    const other = fakeToolRenderers();
     expect(backgroundRenderer("read", () => other)).toBe(other);
   });
 });
