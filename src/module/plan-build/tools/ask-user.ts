@@ -40,7 +40,10 @@ export function askUserTool() {
       if (!ctx.hasUI) return result("No UI to ask the user. Decide yourself and state the assumption in the plan.");
 
       // select only takes strings, so a description goes on its option's line, and the answer is mapped back by index.
-      const lines = options.map(({ label, description }) => (description ? `${label} — ${description}` : label));
+      // Numbered, so a typed answer can name them ("1 and 3, and also…").
+      const lines = options.map(
+        ({ label, description }, index) => `${index + 1}. ${description ? `${label} — ${description}` : label}`,
+      );
       const picked =
         lines.length === 0 ? OWN_ANSWER : await ctx.ui.select(question, [...lines, OWN_ANSWER], { signal });
       if (picked === undefined) return result("The user dismissed the question without answering.");
@@ -50,9 +53,11 @@ export function askUserTool() {
         return result(`The user picked: ${answer}`, answer);
       }
 
-      const typed = (await ctx.ui.input(question, undefined, { signal }))?.trim();
+      // The text box replaces the list, so it shows the options again; the model gets them too, to read the numbers.
+      const offered = lines.length === 0 ? "" : `\n\n${lines.join("\n")}`;
+      const typed = (await ctx.ui.input(`${question}${offered}`, undefined, { signal }))?.trim();
       if (!typed) return result("The user dismissed the question without answering.");
-      return result(`The user answered: ${typed}`, typed);
+      return result(`The user answered: ${typed}${offered && `\n\nThe options were:${offered}`}`, typed);
     },
   });
 }

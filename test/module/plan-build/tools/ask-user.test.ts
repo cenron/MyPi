@@ -29,30 +29,35 @@ describe("askUserTool", () => {
     expect(tool.executionMode).toBe("sequential");
   });
 
-  it("lists the answers, descriptions on their line, then the own-answer entry, and passes the signal", async () => {
+  it("lists the answers numbered, descriptions on their line, then the own-answer entry, and passes the signal", async () => {
     const { select, signal } = await ask(options);
-    expect(select).toHaveBeenCalledWith("Which DB?", ["SQLite — one file, no server", "Postgres", OWN_ANSWER], {
+    expect(select).toHaveBeenCalledWith("Which DB?", ["1. SQLite — one file, no server", "2. Postgres", OWN_ANSWER], {
       signal,
     });
   });
 
   it("returns the picked answer's label, without its description", async () => {
-    await expect(ask(options, { pick: "SQLite — one file, no server" })).resolves.toMatchObject({
+    await expect(ask(options, { pick: "1. SQLite — one file, no server" })).resolves.toMatchObject({
       text: "The user picked: SQLite",
       answer: "SQLite",
     });
   });
 
-  it("asks for text when the user picks their own answer", async () => {
-    const { text, answer, input, signal } = await ask(options, { pick: OWN_ANSWER, type: "  DuckDB \n" });
-    expect(input).toHaveBeenCalledWith("Which DB?", undefined, { signal });
-    expect({ text, answer }).toEqual({ text: "The user answered: DuckDB", answer: "DuckDB" });
+  it("asks for text with the numbered answers still shown, and gives the model the numbering", async () => {
+    const { text, answer, input, signal } = await ask(options, { pick: OWN_ANSWER, type: "  1, and DuckDB too \n" });
+    const numbered = "1. SQLite — one file, no server\n2. Postgres";
+    expect(input).toHaveBeenCalledWith(`Which DB?\n\n${numbered}`, undefined, { signal });
+    expect({ text, answer }).toEqual({
+      text: `The user answered: 1, and DuckDB too\n\nThe options were:\n\n${numbered}`,
+      answer: "1, and DuckDB too",
+    });
   });
 
   it("goes straight to text when there are no answers to pick from", async () => {
-    const { select, answer } = await ask([], { type: "Whatever's simplest" });
+    const { select, input, text, answer } = await ask([], { type: "Whatever's simplest" });
     expect(select).not.toHaveBeenCalled();
-    expect(answer).toBe("Whatever's simplest");
+    expect(input.mock.calls[0]?.[0]).toBe("Which DB?");
+    expect({ text, answer }).toEqual({ text: "The user answered: Whatever's simplest", answer: "Whatever's simplest" });
   });
 
   it.each([
