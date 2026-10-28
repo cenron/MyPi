@@ -68,6 +68,12 @@ export function isInside(dir: string, path: string): boolean {
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
+/** Whether an absolute path starts at a folder that exists at `/`; missing roots cannot reach anyone's files. */
+export function hasExistingRoot(path: string, rootEntries: readonly string[]): boolean {
+  const root = path.split(sep).filter(Boolean)[0];
+  return root === undefined || rootEntries.includes(root);
+}
+
 /** `file` relative to `cwd` when it's inside, so lines stay short; as given otherwise. */
 export function displayPath(file: string, cwd: string): string {
   return isInside(cwd, file) ? relative(cwd, file) || file : file;

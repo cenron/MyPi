@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getDocsPath, getExamplesPath, getReadmePath } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import type { ToolEnv } from "#core/tool-guard";
 import { FolderRule } from "#rule/folder";
@@ -42,6 +43,20 @@ describe("FolderRule", () => {
     ["a bash command whose paths are all allowed", "bash", { command: "cat src/a.ts > /dev/null; ls ../AGENTS.md" }],
     ["a read of a module's data folder", "read", { path: "~/.pi/agent/analytics/notes.md" }],
     ["a read-only bash command over a module's data folder", "bash", { command: "ls -la ~/.pi/agent/analytics" }],
+    ["pi's docs", "read", { path: join(getDocsPath(), "extensions.md") }],
+    ["pi's examples", "read", { path: getExamplesPath() }],
+    ["pi's readme", "read", { path: getReadmePath() }],
+    ["plan text with a fake root path", "bash", { command: 'rg -n "^- \\\\[[x ]\\\\] `(/quiet|done)" notes.md' }],
+    [
+      "search regexes in heredoc code",
+      "bash",
+      { command: "node <<'EOF'\nlist.replace(/^data:\\s*/, \"\")\n/search/i.test(item.name)\nEOF" },
+    ],
+    [
+      "regex literals in a heredoc",
+      "bash",
+      { command: "node <<'NODE'\ntext.matchAll(/^export\\s+(?:const|function)\\s+(\\w+)/gm)\nNODE" },
+    ],
   ])("allows %s", (_case, tool, input) => {
     expect(verdict(tool, input)).toEqual({ kind: "allow" });
   });
@@ -71,6 +86,12 @@ describe("FolderRule", () => {
       "bash",
       { command: "rm ~/.pi/agent/analytics/analytics.sqlite" },
       "/home/me/.pi/agent/analytics/analytics.sqlite",
+    ],
+    [
+      "a write to pi's docs",
+      "write",
+      { path: join(getDocsPath(), "extensions.md") },
+      join(getDocsPath(), "extensions.md"),
     ],
   ])("asks for %s, naming the resolved path", (_case, tool, input, path) => {
     expect(verdict(tool, input)).toEqual(asks(path));
@@ -114,14 +135,14 @@ describe("FolderRule", () => {
 
   it("remembers every approved path and asks only about paths outside those trees", () => {
     const fresh = new FolderRule({ paths: [] });
-    const approval = fresh.check({ toolName: "bash", input: { command: "ls /elsewhere/tree /another/tree" } }, env);
+    const approval = fresh.check({ toolName: "bash", input: { command: "ls /etc/tree /var/tree" } }, env);
     if (approval.kind !== "ask") throw new Error("Expected an approval request");
     approval.onAllowSession?.();
 
-    const command = "cat /elsewhere/tree/a /elsewhere/tree/sub/b /another/tree/c";
+    const command = "cat /etc/tree/a /etc/tree/sub/b /var/tree/c";
     expect(fresh.check({ toolName: "bash", input: { command } }, env)).toEqual({ kind: "allow" });
-    expect(fresh.check({ toolName: "bash", input: { command: `${command} /unapproved/file` } }, env)).toEqual(
-      asks("/unapproved/file"),
+    expect(fresh.check({ toolName: "bash", input: { command: `${command} /etc/unapproved/file` } }, env)).toEqual(
+      asks("/etc/unapproved/file"),
     );
   });
 

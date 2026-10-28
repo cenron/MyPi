@@ -184,6 +184,12 @@ finding a `tsconfig.json` above, say) are theirs and unchanged. See [lsp](../mod
      still asks; the same under home and under a folder above home. Removing either half of the change fails them.
    - **Tried live:** pi in `pi-workspace`, Build: `test -d ~` asked "(this path only)"; after "Allow for this session"
      a second `test -d ~` ran unasked; `test -e ~/.zshrc` still asked, "(and anything under it)".
+8. **Done 2026-10-28: no questions about nonexistent top-level folders or pi's own docs.**
+   - **Found:** three false prompts came from regex and plan text whose slash-delimited tokens were interpreted as absolute paths (`/quiet`, `/search/i.test`, `/^export…`, `/gm`). Their first folders do not exist at `/`, so these tokens cannot reach files. Real paths such as `/etc/passwd`, `/etc/shells`, `/Users/x`, and `~/.ssh/id` must remain checked.
+   - **Built:** read `/`'s entries once when the rule loads; filter bash command paths whose first folder is absent. The pure root check receives its entry list. Paths from tool `path` inputs are unchanged (including `/tmpfoo`). Reads may also reach pi's exported docs, examples, and README paths; writes there still ask.
+   - **Tests:** table cases cover the three false command patterns, real path cases, root filtering, pi's docs/examples/README reads, and a docs write. The `/tmpfoo` test remains an `ls` path-input case because this slice only filters bash command paths.
+   - **Tried live 2026-10-28,** fresh pi in a throwaway git repo, Build: `rg` over `notes.md` containing `/quiet`, the Node regex heredoc, and reading the installed extensions docs about `registerToolRenderer` all ran without a folder question. `head -n 1 /etc/shells` asked `Reaches outside …: /etc/shells (and anything under it)`; the dialog was answered Yes.
+
 ## Other harnesses
 
 Checked 2026-10-25, for slice 4.

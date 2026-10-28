@@ -1,7 +1,8 @@
-import { realpathSync } from "node:fs";
+import { readdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { getDocsPath, getExamplesPath, getReadmePath } from "@earendil-works/pi-coding-agent";
 import type { ToolCall, ToolEnv, Verdict } from "#core/tool-guard";
-import { commandPaths, isInside, resolveToolPath } from "#core/util/paths";
+import { commandPaths, hasExistingRoot, isInside, resolveToolPath } from "#core/util/paths";
 import { isReadOnlyCommand } from "#core/util/shell";
 import { BaseRule, type RuleInfo } from "./base";
 
@@ -22,6 +23,12 @@ const SCRATCH_DIRS = ["/tmp", "/private/tmp"];
  * session started in a temp folder runs from the real path, so `..` from it names `/private/var/folders/…/T`.
  */
 const TEMP_DIRS = [tmpdir(), realpathSync(tmpdir())];
+
+/** Root folders present when the guard loads; an absolute command path with another root cannot reach a file. */
+const ROOT_DIRS = readdirSync("/");
+
+/** pi's own docs, examples, and README: pi points the model there for questions about pi, so reading them is safe. */
+const PI_DOCS = [getDocsPath(), getExamplesPath(), getReadmePath()];
 
 /** Tools that only read: they may reach the modules' data folders (`readableDirs`). */
 const READING_TOOLS = new Set(["read", "grep", "find", "ls", "lsp"]);
@@ -57,7 +64,7 @@ export class FolderRule extends BaseRule {
     const allowed = [
       cwd,
       ...writableDirs,
-      ...(onlyReads(toolName, input) ? readableDirs : []),
+      ...(onlyReads(toolName, input) ? [...readableDirs, ...PI_DOCS] : []),
       ...TEMP_DIRS,
       ...SCRATCH_DIRS,
       ...DEVICE_FILES,
@@ -102,7 +109,9 @@ function isHomeOrAbove(path: string, home: string): boolean {
 /** The places a call names, as absolute paths: a `bash` command's, or a `path` input's. MCP tools name none. */
 function pathsOf(toolName: string, input: Record<string, unknown>, cwd: string, home: string): string[] {
   if (toolName.startsWith(MCP_PREFIX)) return [];
-  if (toolName === "bash" && typeof input.command === "string") return commandPaths(input.command, cwd, home);
+  if (toolName === "bash" && typeof input.command === "string") {
+    return commandPaths(input.command, cwd, home).filter((path) => hasExistingRoot(path, ROOT_DIRS));
+  }
   if (typeof input.path === "string") return [resolveToolPath(input.path, cwd, home)];
 
   return [];

@@ -25,21 +25,21 @@ describe("registerRules", () => {
     const select = vi.fn(async () => "Allow for this session");
     const interactive = { ...ctx, hasUI: true, ui: { select } } as unknown as ExtensionContext;
     const bash = (command: string) => ({ ...read(""), toolName: "bash", input: { command } }) as ToolCallEvent;
-    await expect(session.toolGuard.check(bash("ls /elsewhere/tree"), interactive)).resolves.toBeUndefined();
+    await expect(session.toolGuard.check(bash("ls /etc/tree"), interactive)).resolves.toBeUndefined();
     expect(select).toHaveBeenCalledTimes(1);
 
-    await expect(session.toolGuard.check(read("/elsewhere/tree/sub/file.md"), interactive)).resolves.toBeUndefined();
+    await expect(session.toolGuard.check(read("/etc/tree/sub/file.md"), interactive)).resolves.toBeUndefined();
     await expect(
-      session.toolGuard.check(bash("cat /elsewhere/tree/a /elsewhere/tree/sub/b"), interactive),
+      session.toolGuard.check(bash("cat /etc/tree/a /etc/tree/sub/b"), interactive),
     ).resolves.toBeUndefined();
     expect(select).toHaveBeenCalledTimes(1);
 
-    await session.toolGuard.check(read("/elsewhere/other"), interactive);
+    await session.toolGuard.check(read("/etc/other"), interactive);
     expect(select).toHaveBeenCalledTimes(2);
 
     const fresh = fakeSession([], "/project").session;
     registerRules(fresh.toolGuard);
-    await fresh.toolGuard.check(bash("ls /elsewhere/tree"), interactive);
+    await fresh.toolGuard.check(bash("ls /etc/tree"), interactive);
     expect(select).toHaveBeenCalledTimes(3);
   });
 
