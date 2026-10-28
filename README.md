@@ -196,6 +196,13 @@ navigation, the done check and subagent runs, and permission dialogs. `/analytic
 `/analytics all` everything; the agent reads the same report through its `analytics` tool. Nothing leaves your machine,
 and no prompts, replies, or file contents are stored.
 
+### Quiet
+
+`/quiet` draws each tool call as one line: a green `✓` and a short summary when it worked (`✓ read src/app.ts`), a red
+`✗` and the reason when it failed (`✗ bash npm test · exit 1`), with the failure's output still shown underneath. The
+footer shows `QUIET` while it's on. `Ctrl+O` expands every call as usual, `Ctrl+T` collapses thinking, and `/quiet`
+again turns it off. It lasts for the session; only the drawing changes, and the model still sees every result.
+
 ### Worktrees
 
 `/worktree enter <name>` creates a git worktree if it's new and moves the conversation into it; `/worktree exit` comes
@@ -220,6 +227,7 @@ straight to MyPi's roadmap and docs, from any folder.
 | `/onboard` | Learn this project and save memories for future sessions |
 | `/memory-check` | Find broken `[[links]]` and invalid frontmatter in memories |
 | `/analytics [all]` | Usage, tools, failures, and MyPi's features, for 7 days or all history |
+| `/quiet [on\|off]` | One line per tool call, for this session |
 | `/modules [list]` | Choose which modules load |
 
 ## Tools the model gets
@@ -255,6 +263,7 @@ the next `/reload`.
 | [lsp](docs/modules/lsp.md) | by default | Language servers, `lsp`, `lsp_edit`, `/lsp` |
 | [context](docs/modules/context.md) | by default | Compaction summaries and clearing old tool results |
 | [analytics](docs/modules/analytics.md) | by default | The local index, `/analytics`, and the `analytics` tool |
+| [quiet](docs/modules/quiet.md) | by default | `/quiet`: one line per tool call, `QUIET` in the footer |
 
 *Always* modules are part of how MyPi works and can't be switched off; the others load by default and can be.
 
