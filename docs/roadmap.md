@@ -31,6 +31,7 @@ Proposed order, agreed 2026-10-22; subagents moved above analytics and worktree 
 | 19 | [notifications](modules/notifications.md) | module | Small; most useful once runs get longer. | Nothing |
 | 20 | [pair-programmer](modules/pair-programmer.md) | module | The mode MyPi was started for, but it needs memory to remember how I work. | 1 (memory) |
 | 21 | [quiet](modules/quiet.md) | module | **Done 2026-10-27.** Compact tool-call status lines, failures kept open, and a `QUIET` footer label; the first piece of the theme picker. Chose two-line rows because pi 1.4.0 always adds a spacer outside the renderer. | pi 1.4.0 renderer resolver |
+| 22 | Writer worktrees get the active plan | subagents module | Found 2026-10-28 in job-search-hub: Build handed a plan step to `general` writers, but `.pi/plans/` is git-ignored and a writer's worktree starts at committed HEAD, so the plan file named in the task wasn't there. The writer said so and did only part of the job; the patch was declined. Fix: copy the active plan file into the writer's worktree, or put the plan's text in the writer's task, and say which in the task. Small, and every delegated Build step depends on it. | 13 (subagents milestone 2) |
 
 ## Nice to have
 
