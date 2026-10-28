@@ -14,7 +14,7 @@ export const ModuleLoadMode = {
 export type ModuleLoadMode = (typeof ModuleLoadMode)[keyof typeof ModuleLoadMode];
 
 /** A slash command's name (without the `/`) and the description pi shows for it. */
-export type CommandInfo = {
+type CommandInfo = {
   name: string;
   description: string;
 };
@@ -23,7 +23,7 @@ export type CommandInfo = {
  * Runs a command with the pi command context and the whitespace-split arguments. Returns a message to show as an
  * `info` notification, or `undefined` to show nothing.
  */
-export type CommandExec = (ctx: ExtensionCommandContext, args: string[]) => Promise<string | undefined> | string;
+type CommandExec = (ctx: ExtensionCommandContext, args: string[]) => Promise<string | undefined> | string;
 
 /** A slash command: registered by `registerCommands` and run through `runCommand`. */
 export type Command = {
@@ -62,7 +62,7 @@ export interface Module {
 }
 
 /** How a job stands: running, or how it ended. */
-export type JobStatus = "running" | "completed" | "failed" | "stopped";
+type JobStatus = "running" | "completed" | "failed" | "stopped";
 
 /** A job as the registry reports it. */
 export type JobInfo = {

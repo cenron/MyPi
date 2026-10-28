@@ -37,7 +37,7 @@ const MYPI_TOOLS = new Set([
 ]);
 
 /** A folder of session files; in one only MyPi writes (subagent runs), every session is MyPi's. */
-export type SessionRoot = { path: string; mypiOnly: boolean };
+type SessionRoot = { path: string; mypiOnly: boolean };
 
 /** Indexes MyPi's session files under the roots; other sessions are skipped after their first lines. */
 export async function indexSessions(

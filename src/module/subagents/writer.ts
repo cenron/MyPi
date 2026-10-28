@@ -11,7 +11,7 @@ import type { ChildResult, ChildRun } from "./child";
 import { runChild } from "./child";
 
 /** A writer's isolated checkout and the commit its patch must include changes from. */
-export type PreparedWriter = {
+type PreparedWriter = {
   readonly name: string;
   readonly base: string;
   readonly path: string;
@@ -19,7 +19,7 @@ export type PreparedWriter = {
 };
 
 /** Saved patch details for a writer with changes; no-change runs have no handoff files. */
-export type CapturedWork = {
+type CapturedWork = {
   readonly name: string;
   readonly files: string[];
   readonly patchPath?: string;

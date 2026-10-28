@@ -22,7 +22,7 @@ export function childAccess(agent: AgentDefinition, checks: readonly string[] = 
 }
 
 /** Plan's rule, except that approved checks may run as exact segments alongside readers. */
-export function readOnlyRule(checks: readonly string[]): ToolRule {
+function readOnlyRule(checks: readonly string[]): ToolRule {
   return (call, context) => {
     if (
       call.toolName === "bash" &&

@@ -210,9 +210,9 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`MessageType`** is a const object plus a type of the same name: the values are `"info" | "warning" | "error"`,
   derived from the object, and match pi's `notify` signature. It generates no runtime code beyond the object, unlike
   `enum`.
-- **`types.ts`** holds the types shared across folders: `Command`, `CommandInfo`, `ModuleInfo`, `ModuleLoadMode` (a
-  const object plus a type, the same pattern as `MessageType`), the module contract, `Module` and `ModuleClass`, and
-  the job types, `JobStatus`, `JobSpec`, `JobInfo`, and `Job`, and `CommandExec`, a command's `execute`.
+- **`types.ts`** holds the types shared across folders: `Command`, `ModuleInfo`, `ModuleLoadMode` (a const object plus
+  a type, the same pattern as `MessageType`), the module contract, `Module` and `ModuleClass`, and the job types,
+  `JobSpec`, `JobInfo`, and `Job`. Its `CommandInfo`, `CommandExec`, and `JobStatus` types stay local to that file.
 - **`util/errors.ts`** has `errorMessage` (any thrown value to a string) and `isNodeError` (narrows to
   `NodeJS.ErrnoException`).
 - **`util/guards.ts`** has `isRecord` (a plain object, before reading fields off JSON) and `isNonEmptyString`.

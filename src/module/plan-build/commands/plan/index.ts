@@ -6,7 +6,7 @@ import { isMode, type Mode } from "../../types";
 import { type CarriedSettings, findPlan, implementInNewSession } from "./implement";
 
 /** What `/plan` needs from the module: its mode switches, and saving Build into a new session. */
-export type PlanCmdActions = {
+type PlanCmdActions = {
   toggleMode: () => void;
   setMode: (mode: Mode) => void;
   saveBuildTo: (sessionManager: SessionManager, plan: string, carried: CarriedSettings) => void;

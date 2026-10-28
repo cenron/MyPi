@@ -117,7 +117,7 @@ Files: `src/core/job-manager.ts` (new: `JobManager`, and `shellJob`, which slice
 // src/core/types.ts
 
 /** How a job stands: running, or how it ended. */
-export type JobStatus = "running" | "completed" | "failed" | "stopped";
+type JobStatus = "running" | "completed" | "failed" | "stopped";
 
 /** What to run. `kind` is `shell` today, and `subagent` later. */
 export interface JobSpec {
@@ -265,7 +265,7 @@ export const JOB_NOTICE = "mypi-job";
 export const NOTICE_LINES = 20;
 
 /** What a notice carries for its renderer: the job as it ended, and its last lines with escape codes stripped. */
-export type NoticeDetails = { job: JobInfo; tail: string };
+type NoticeDetails = { job: JobInfo; tail: string };
 
 /**
  * The exit notice for a job that ended: the model's text and the details its renderer draws. `tail` is the job's last

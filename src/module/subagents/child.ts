@@ -38,7 +38,7 @@ export type ChildRun = {
 };
 
 /** What a run used over all its model calls: tokens, and cost in dollars. */
-export type RunUsage = { tokens: number; cost: number };
+type RunUsage = { tokens: number; cost: number };
 
 export type ChildResult = {
   answer: string;

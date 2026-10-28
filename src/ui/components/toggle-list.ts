@@ -11,7 +11,7 @@ export type ToggleItem = {
 };
 
 /** Callbacks for a `ToggleList`. Passing `onAccept` adds the Save row. */
-export type ToggleListHandlers = {
+type ToggleListHandlers = {
   onToggle(id: string, on: boolean): void;
   onAccept?(): void;
   onCancel(): void;

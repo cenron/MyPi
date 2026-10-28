@@ -1,47 +1,25 @@
-import { isNonEmptyString, isRecord } from "#core/util/guards";
-import { callMcpTool } from "#tool/utils";
 import type { SearchBackend, SearchResult } from "../types";
+import { jsonResults } from "./json-results";
+import { mcpBackend } from "./mcp-backend";
 
 /** Pi's name for Parallel's search tool, used by the backend and web_search's rule. */
 export const PARALLEL_SEARCH_TOOL = "mcp__parallel__web_search";
 
-/**
- * Parallel's free search, through its MCP server. `sessionId` goes with every search, as Parallel asks, for its
- * free-tier rate limits.
- */
-export function parallelBackend(sessionId: string): SearchBackend {
-  return {
-    id: "parallel_search",
-    name: "Parallel",
-    tool: PARALLEL_SEARCH_TOOL,
-    async search(ctx, query) {
-      const call = await callMcpTool(ctx, PARALLEL_SEARCH_TOOL, {
-        objective: query,
-        search_queries: [query],
-        session_id: sessionId,
-      });
-      return toResults(call.structuredContent);
-    },
-  };
+export function toResults(reply: unknown): SearchResult[] {
+  return jsonResults(reply, "Parallel", "excerpts", "publish_date");
 }
 
-/**
- * The results in Parallel's reply (the MCP result's `structuredContent`). Skips entries without a `url`, and leaves out
- * fields that are null, empty, or not strings. Throws when the reply has no `results` list.
- */
-export function toResults(reply: unknown): SearchResult[] {
-  if (!isRecord(reply) || !Array.isArray(reply.results)) throw new Error("Parallel's reply has no results list.");
+const PARALLEL = {
+  id: "parallel_search",
+  name: "Parallel",
+  tool: PARALLEL_SEARCH_TOOL,
+  parseReply: (reply: Record<string, unknown>) => toResults(reply.structuredContent),
+};
 
-  return reply.results.flatMap((entry): SearchResult[] => {
-    if (!isRecord(entry) || typeof entry.url !== "string") return [];
-
-    const result: SearchResult = { url: entry.url };
-    if (isNonEmptyString(entry.title)) result.title = entry.title;
-
-    const excerpts = Array.isArray(entry.excerpts) ? entry.excerpts.filter(isNonEmptyString) : [];
-
-    if (excerpts.length > 0) result.excerpt = excerpts.join("\n\n");
-    if (isNonEmptyString(entry.publish_date)) result.published = entry.publish_date;
-    return [result];
+/** Parallel sends its session ID on every search, as it asks for free-tier rate limits. */
+export function parallelBackend(sessionId: string): SearchBackend {
+  return mcpBackend({
+    ...PARALLEL,
+    argumentsForQuery: (query) => ({ objective: query, search_queries: [query], session_id: sessionId }),
   });
 }

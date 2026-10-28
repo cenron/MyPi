@@ -1,17 +1,14 @@
-import type { McpServer } from "./types";
+import { searchServer } from "./search-server";
 
-/** Tavily's hosted MCP hit its monthly keyless cap for MyPi, so it registers only with a key. */
-export function tavilyServer(): McpServer | undefined {
-  if (!process.env.TAVILY_API_KEY) return undefined;
+const TAVILY = {
+  name: "tavily",
+  url: "https://mcp.tavily.com/mcp/",
+  description: "Web search through Tavily",
+  key: { variable: "TAVILY_API_KEY", header: "Authorization", prefix: "Bearer " },
+  requiresKey: true as const,
+};
 
-  return {
-    name: "tavily",
-    config: {
-      url: "https://mcp.tavily.com/mcp/",
-      description: "Web search through Tavily",
-      exposure: "deferred",
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: pi resolves ${ENV} in headers when it connects.
-      headers: { Authorization: "Bearer ${TAVILY_API_KEY}" },
-    },
-  };
+/** Tavily's hosted MCP hit its monthly keyless cap, so MyPi registers it only with a key. */
+export function tavilyServer() {
+  return searchServer(TAVILY);
 }

@@ -7,7 +7,7 @@ import { ensureSchemaVersion, openSQLite, withTransaction } from "./sqlite";
 const SCHEMA_VERSION = 11;
 
 /** A transcript's indexed position and its session metadata. */
-export type AnalyticsFile = {
+type AnalyticsFile = {
   path: string;
   header: SessionHeader;
   size: number;

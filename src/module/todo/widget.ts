@@ -10,7 +10,7 @@ const MARKS: Record<TaskStatus, string> = { in_progress: "◼", pending: "◻", 
 const PRIORITY: Record<TaskStatus, number> = { in_progress: 0, pending: 1, completed: 2 };
 
 /** One widget row; the status lets the module apply pi's current theme. */
-export type TodoWidgetLine = { text: string; status?: Task["status"] };
+type TodoWidgetLine = { text: string; status?: Task["status"] };
 
 /**
  * The checklist above the editor: every task in id order when five fit; otherwise four rows picked in progress first,

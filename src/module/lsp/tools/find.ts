@@ -20,7 +20,7 @@ type Match = { file: string; text: string; symbol: NamedSymbol };
 type Found = { matches: Match[]; unchecked: number };
 
 /** A find_symbol request: the name path, and whether to add each match's source. */
-export type Query = { pattern: string; withBody: boolean };
+type Query = { pattern: string; withBody: boolean };
 
 export async function outline(
   servers: ServerManager,

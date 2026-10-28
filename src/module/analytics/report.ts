@@ -15,7 +15,7 @@ const MAX_FAILURE_LINES = 5;
 const MAX_SHELL_COMMANDS = 8;
 const COMMANDS_WITH_TOOLS = new Set(["grep", "find", "ls", "cat"]);
 
-export type ReportPeriod = "last 7 days" | "all history";
+type ReportPeriod = "last 7 days" | "all history";
 
 /** Every counted measure the report shows, read from the store and rendered together. */
 export type AnalyticsReport = {

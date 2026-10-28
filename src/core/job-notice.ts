@@ -20,10 +20,10 @@ export const NOTICE_LINES = 20;
 const NOTICE_CHARS = 2000;
 
 /** What a notice carries for its renderer: the job as it ended, and its last lines with escape codes stripped. */
-export type NoticeDetails = { job: JobInfo; tail: string };
+type NoticeDetails = { job: JobInfo; tail: string };
 
 /** A job notice: the model's text and what its renderer draws. */
-export type JobNotice = { content: string; details: NoticeDetails };
+type JobNotice = { content: string; details: NoticeDetails };
 
 /** A notice builder and whether its text has already been returned to the model. */
 type NoticeEntry = { build: (ended: JobInfo) => JobNotice; taken: boolean };

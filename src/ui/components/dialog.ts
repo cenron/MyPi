@@ -11,10 +11,10 @@ import {
 } from "@earendil-works/pi-tui";
 
 /** Rows a list shows inside a dialog before it scrolls; the overlays (`/jobs`, `/agents`) share it. */
-export const DIALOG_LIST_ROWS = 12;
+const DIALOG_LIST_ROWS = 12;
 
 /** Theme shared by selectable rows in the dialog views. */
-export function selectListTheme(theme: Theme): SelectListTheme {
+function selectListTheme(theme: Theme): SelectListTheme {
   return {
     selectedPrefix: (text) => theme.fg("accent", text),
     selectedText: (text) => theme.fg("accent", text),

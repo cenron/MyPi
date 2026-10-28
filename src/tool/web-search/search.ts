@@ -3,15 +3,15 @@ import { errorMessage } from "#core/util/errors";
 import type { SearchBackend, SearchResult } from "./types";
 
 /** A backend stays out of the search order briefly after a rate limit. */
-export const RATE_LIMIT_REST_MS = 5 * 60 * 1000;
+const RATE_LIMIT_REST_MS = 5 * 60 * 1000;
 /** The longest rest a limit message can ask for, so a garbled number can't park a backend for a day. */
-export const MAX_RATE_LIMIT_REST_MS = 60 * 60 * 1000;
+const MAX_RATE_LIMIT_REST_MS = 60 * 60 * 1000;
 
 /** Milliseconds per unit a limit message may name; a number with no unit is seconds. */
 const UNIT_MS: Record<string, number> = { s: 1000, m: 60 * 1000, h: 60 * 60 * 1000 };
 
 /** What `searchInOrder` keeps between searches, and where this search starts in the list. */
-export type SearchOptions = {
+type SearchOptions = {
   /** When each resting backend may be tried again, by backend id. */
   restingUntil?: Map<string, number>;
   now?: () => number;

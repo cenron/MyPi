@@ -12,7 +12,7 @@ export type Project = { readonly main: string; readonly commonDir: string };
 export type Inspection = { readonly worktree: Worktree; readonly blockers: string[] };
 
 /** What `remove` did. The checkout is gone; its branch only when it was merged. */
-export type Removal = {
+type Removal = {
   readonly path: string;
   readonly branch: string;
   readonly branchDeleted: boolean;

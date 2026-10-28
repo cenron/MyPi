@@ -320,7 +320,7 @@ declare module "turndown-plugin-gfm" {
 // src/tool/web-fetch/markdown.ts
 
 /** A page converted to markdown: its `<title>`, and the body text. */
-export type Converted = { title: string; markdown: string };
+type Converted = { title: string; markdown: string };
 
 /**
  * Converts an HTML page to markdown. Converts only `<main>` when there's exactly one, drops scripts, styles, and site

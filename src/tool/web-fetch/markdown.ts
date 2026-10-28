@@ -3,7 +3,7 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 
 /** A page converted to markdown: its `<title>`, and the body text. */
-export type Converted = { title: string; markdown: string };
+type Converted = { title: string; markdown: string };
 
 /** Elements whose content is never page text. */
 const REMOVED_TAGS = ["script", "style", "noscript", "template", "iframe", "svg", "canvas", "form", "nav", "aside"];

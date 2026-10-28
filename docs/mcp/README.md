@@ -64,7 +64,7 @@ Checked against the installed pi 1.2.0 (`docs/mcp.md`, `docs/extensions.md`, `di
 | Piece | Where | Notes |
 |---|---|---|
 | `McpServer` | `src/mcp/types.ts` | `{ name: string; config: McpServerConfig }` |
-| A server | `src/mcp/<name>.ts`, exporting a function that returns a `McpServer` | A function, so a key header goes in only when its variable is set (see [Keys](#keys)). No `session` parameter until a server needs one. |
+| A server | `src/mcp/<name>.ts`, exporting a function that returns a `McpServer` | Each file is a table of server values passed to `searchServer()` in `src/mcp/search-server.ts`. It adds a key header only when its variable is set (see [Keys](#keys)); Tavily's `requiresKey` keeps it unregistered without its key. |
 | The list | `createMcpServers()` in `src/mcp/index.ts` | Add new servers here. |
 | Registering | `registerMcpServers(pi, session)` in `src/mcp/index.ts`, called last in `MyPi.onSessionStart` | Builds its own list, like `registerTools`. One `pi.registerMcpServer` per server, in a try/catch: a rejected server is logged with `session.logError("MCP server <name>: <message>")`, and the rest still register, as in `shutdownTools`. Nothing is unregistered; `/reload` builds a new runtime. |
 | Names | Plain (`parallel`, not `mypi-parallel`) | So an `mcp.json` entry of the same name overrides it on purpose. |
@@ -84,21 +84,7 @@ A server gets its own doc here only once it needs design of its own.
 
 ### parallel
 
-```ts
-export function parallelServer(): McpServer {
-  return {
-    name: "parallel",
-    config: {
-      url: "https://search.parallel.ai/mcp",
-      description: "Web search through Parallel's free search service",
-      exposure: "deferred",
-      toolExposure: { web_fetch: "hidden" },
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: pi resolves ${ENV} in headers when it connects.
-      ...(process.env.PARALLEL_API_KEY ? { headers: { Authorization: "Bearer ${PARALLEL_API_KEY}" } } : {}),
-    },
-  };
-}
-```
+`parallelServer()` supplies the Parallel endpoint, description, hidden `web_fetch` tool, and optional bearer-key details to the shared `searchServer()` factory. The factory emits the header only when `PARALLEL_API_KEY` is set.
 
 Checked live (2026-10-21): no key and no handshake needed. `web_search` and `web_fetch` both declare
 `readOnlyHint: true` and `openWorldHint: true`. `deferred` turns on `tool_search`, and the model can load
@@ -111,21 +97,7 @@ cut by pi's 20 KB limit for the model.
 
 ### exa
 
-```ts
-export function exaServer(): McpServer {
-  return {
-    name: "exa",
-    config: {
-      url: "https://mcp.exa.ai/mcp",
-      description: "Web search through Exa's free search service",
-      exposure: "deferred",
-      toolExposure: { web_fetch_exa: "hidden" },
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: pi resolves ${ENV} in headers when it connects.
-      ...(process.env.EXA_API_KEY ? { headers: { "x-api-key": "${EXA_API_KEY}" } } : {}),
-    },
-  };
-}
-```
+`exaServer()` supplies Exa's endpoint, description, hidden `web_fetch_exa` tool, and optional `x-api-key` details to `searchServer()`. Pi resolves the variable in the header; it is never embedded in the URL.
 
 Checked live (2026-10-22): no key and no handshake needed. `web_search_exa` and `web_fetch_exa` declare
 `readOnlyHint: true` and `openWorldHint: true`. `web_search_exa` requires `query` and `objective`, and replies in text
