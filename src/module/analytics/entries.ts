@@ -72,44 +72,61 @@ export function parseEntry(line: string, homeDir: string): ParsedEntry | undefin
   }
   if (!isRecord(value)) return undefined;
 
-  if (value.type === "session") {
-    if (typeof value.id !== "string" || typeof value.cwd !== "string") return undefined;
-    return {
-      header: {
-        id: value.id,
-        cwd: value.cwd,
-        version: typeof value.version === "number" ? value.version : 1,
-        ...(typeof value.timestamp === "string" ? { timestamp: Date.parse(value.timestamp) } : {}),
-        ...(typeof value.parentSession === "string" ? { parentSession: value.parentSession } : {}),
-      },
-    };
-  }
-  if (value.type === "usage") {
-    const usage = usageRow(value, value, "usage");
-    return usage === undefined ? undefined : { usage };
-  }
-  if (value.type === "custom_message") {
-    if (typeof value.customType !== "string" || typeof value.timestamp !== "string" || typeof value.id !== "string") {
+  switch (value.type) {
+    case "session":
+      return parseSession(value);
+    case "usage":
+      return parseUsage(value);
+    case "custom_message":
+      return parseCustomMessage(value);
+    case "message":
+      return parseMessage(value, homeDir);
+    default:
       return undefined;
-    }
-    const timestamp = Date.parse(value.timestamp);
-    if (Number.isNaN(timestamp)) return undefined;
-    if (value.customType === DONE_CHECK_NOTICE && typeof value.content === "string") {
-      return {
-        features: [
-          {
-            entryId: value.id,
-            kind: value.content.startsWith("Done check passed:") ? "done-check-pass" : "done-check-report",
-            timestamp,
-          },
-        ],
-      };
-    }
-    if (value.customType === JOB_NOTICE) return { features: [{ entryId: value.id, kind: "job", timestamp }] };
+  }
+}
+
+function parseUsage(value: Record<string, unknown>): ParsedEntry | undefined {
+  const usage = usageRow(value, value, "usage");
+  return usage === undefined ? undefined : { usage };
+}
+
+function parseSession(value: Record<string, unknown>): ParsedEntry | undefined {
+  if (typeof value.id !== "string" || typeof value.cwd !== "string") return undefined;
+  return {
+    header: {
+      id: value.id,
+      cwd: value.cwd,
+      version: typeof value.version === "number" ? value.version : 1,
+      ...(typeof value.timestamp === "string" ? { timestamp: Date.parse(value.timestamp) } : {}),
+      ...(typeof value.parentSession === "string" ? { parentSession: value.parentSession } : {}),
+    },
+  };
+}
+
+function parseCustomMessage(value: Record<string, unknown>): ParsedEntry | undefined {
+  if (typeof value.customType !== "string" || typeof value.timestamp !== "string" || typeof value.id !== "string") {
     return undefined;
   }
-  if (value.type !== "message" || !isRecord(value.message)) return undefined;
+  const timestamp = Date.parse(value.timestamp);
+  if (Number.isNaN(timestamp)) return undefined;
+  if (value.customType === DONE_CHECK_NOTICE && typeof value.content === "string") {
+    return {
+      features: [
+        {
+          entryId: value.id,
+          kind: value.content.startsWith("Done check passed:") ? "done-check-pass" : "done-check-report",
+          timestamp,
+        },
+      ],
+    };
+  }
+  if (value.customType === JOB_NOTICE) return { features: [{ entryId: value.id, kind: "job", timestamp }] };
+  return undefined;
+}
 
+function parseMessage(value: Record<string, unknown>, homeDir: string): ParsedEntry | undefined {
+  if (!isRecord(value.message)) return undefined;
   const message = value.message;
   if (message.role === "toolResult") {
     const result = toolResultRow(message, homeDir);
