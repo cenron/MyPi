@@ -1,6 +1,6 @@
+import { callMcpTool } from "#tool/utils";
 import { textOf } from "#ui/render";
 import type { SearchBackend, SearchResult } from "../types";
-import { mcpBackend } from "./mcp-backend";
 
 /** A header line of an Exa result block, such as `URL: https://…`. */
 const FIELD = /^(Title|URL|Published|Author): (.*)$/;
@@ -8,18 +8,18 @@ const FIELD = /^(Title|URL|Published|Author): (.*)$/;
 /** Pi's name for Exa's search tool, used by the backend and web_search's rule. */
 export const EXA_SEARCH_TOOL = "mcp__exa__web_search_exa";
 
-const EXA = {
-  id: "exa_search",
-  name: "Exa",
-  tool: EXA_SEARCH_TOOL,
-  // Exa requires an objective; 10 results, as many as Parallel returns.
-  argumentsForQuery: (query: string) => ({ query, objective: query, numResults: 10 }),
-  parseReply: (reply: Record<string, unknown>) => parseExa(textOf(reply.content)),
-};
-
 /** Exa's free search, through its MCP server. */
 export function exaBackend(): SearchBackend {
-  return mcpBackend(EXA);
+  return {
+    id: "exa_search",
+    name: "Exa",
+    tool: EXA_SEARCH_TOOL,
+    async search(ctx, query) {
+      // Exa requires an objective; the query is the best one there is. 10 results, as many as Parallel returns.
+      const call = await callMcpTool(ctx, EXA_SEARCH_TOOL, { query, objective: query, numResults: 10 });
+      return parseExa(textOf(call.content));
+    },
+  };
 }
 
 /**
