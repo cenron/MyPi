@@ -288,6 +288,14 @@ built it in a sub-folder.
     meant for DeepSeek opened on GPT. `/plan implement` saves the model (`provider/id`) beside the thinking level;
     the new session switches to it (`ctx.modelRegistry.find`, `pi.setModel`), then sets the level, and its first run
     waits for the switch. A model that can't be used (unknown, or no login) is reported, and the session keeps its own.
+11. **Built 2026-10-27: a change asked for in Plan isn't attempted.** Asked "create this as an idea in the vault"
+    while in Plan (Brainiac, gpt-6-luna), the model wrote the whole 2,055-character note, got the guard's block, then
+    did the right thing: `submit_plan` and "switch to Build". The note was generated twice. `PLAN_PROMPT` said "make no
+    changes" but not what to do when the user asks for one, so the model read the request as overriding it.
+    `PLAN_PROMPT` adds, worded with *when* first as the subagent and todo nudges were: if the user asks for a change
+    while plan mode is on, don't attempt it; say so, then put the change in a plan with `submit_plan` or ask them to
+    switch with `/plan build`. Measure: blocked `write`/`edit` calls in Plan sessions (2 of 17 writes on 2026-10-27,
+    one a live-check artifact) should stay at zero. The guard's block remains the backstop.
 
 ## Open questions
 

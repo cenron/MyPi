@@ -37,6 +37,7 @@ describe("PlanBuildModule", () => {
     expect(PLAN_PROMPT).toContain("fold every decision and correction from the conversation into the plan");
     expect(PLAN_PROMPT).toContain("name the existing pi or MyPi API you checked and why it falls short");
     expect(PLAN_PROMPT).toContain("Read files with the read tool");
+    expect(PLAN_PROMPT).toContain("If the user asks for a change while plan mode is on, don't attempt it");
   });
 
   it("starts in Plan when nothing is saved, with Plan's footer and prompt", () => {
