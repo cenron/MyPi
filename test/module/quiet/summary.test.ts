@@ -24,9 +24,14 @@ describe("summarize", () => {
     expect(summarize(toolName, args, "/project")).toBe(expected);
   });
 
-  it("cuts bash commands to SUMMARY_MAX characters", () => {
-    expect(summarize("bash", { command: "x".repeat(SUMMARY_MAX + 10) }, "/project")).toBe(
-      `${"x".repeat(SUMMARY_MAX - 1)}…`,
-    );
+  it.each([
+    ["bash", { command: "x".repeat(SUMMARY_MAX + 10) }],
+    ["grep", { pattern: "x".repeat(SUMMARY_MAX + 10), path: "src" }],
+    ["read", { path: `/elsewhere/${"x".repeat(SUMMARY_MAX + 10)}.ts` }],
+    ["web_fetch", { url: `https://example.com/${"x".repeat(SUMMARY_MAX + 10)}` }],
+  ])("cuts a long %s summary to SUMMARY_MAX characters", (toolName, args) => {
+    const summary = summarize(toolName, args, "/project");
+    expect(summary).toHaveLength(SUMMARY_MAX);
+    expect(summary.endsWith("…")).toBe(true);
   });
 });

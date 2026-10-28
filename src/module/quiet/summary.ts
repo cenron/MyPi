@@ -5,29 +5,35 @@ import { isRecord } from "#core/util/guards";
 export const SUMMARY_MAX = 80;
 const TASK_WORDS = 6;
 
-/** A short call label, with file paths shown relative to the call's working directory when possible. */
+/**
+ * A short call label, with file paths shown relative to the call's working directory when possible. Every label is cut
+ * to `SUMMARY_MAX`, so a long path, pattern, or URL can't wrap the row onto a second line.
+ */
 export function summarize(toolName: string, args: unknown, cwd: string): string {
-  const values = isRecord(args) ? args : {};
+  return short(label(toolName, isRecord(args) ? args : {}, cwd));
+}
+
+function label(toolName: string, values: Record<string, unknown>, cwd: string): string {
   if (["read", "edit", "write", "lsp_edit"].includes(toolName)) {
     return relativePath(stringValue(values.path ?? values.file_path), cwd);
   }
-  if (toolName === "bash") return short(firstLine(stringValue(values.command)));
+  if (toolName === "bash") return firstLine(stringValue(values.command));
   if (toolName === "grep" || toolName === "find") {
     return [stringValue(values.pattern), stringValue(values.path)].filter(Boolean).join(" in ");
   }
-  if (toolName === "web_search") return short(stringValue(values.query));
+  if (toolName === "web_search") return stringValue(values.query);
   if (toolName === "web_fetch") return fetchPath(stringValue(values.url));
   if (toolName === "subagent") {
     const task = stringValue(values.task).split(/\s+/).slice(0, TASK_WORDS).join(" ");
     return [stringValue(values.agent), task].filter(Boolean).join(" · ");
   }
-  if (toolName === "task_create") return short(stringValue(values.subject));
+  if (toolName === "task_create") return stringValue(values.subject);
   if (toolName === "task_update") {
     const id = stringValue(values.taskId);
     return [stringValue(values.subject) || id, stringValue(values.status)].filter(Boolean).join(" · ");
   }
   const firstArgument = Object.values(values).find((value) => typeof value === "string");
-  return [toolName, short(stringValue(firstArgument))].filter(Boolean).join(" ");
+  return [toolName, stringValue(firstArgument)].filter(Boolean).join(" ");
 }
 
 function stringValue(value: unknown): string {
@@ -54,7 +60,7 @@ function fetchPath(url: string): string {
     const parsed = new URL(url);
     return `${parsed.host}${parsed.pathname}`;
   } catch {
-    return short(url);
+    return url;
   }
 }
 
