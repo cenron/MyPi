@@ -12,21 +12,6 @@ import { trackedStream } from "./fakes";
 
 const bytes = (size: number) => new Uint8Array(size).fill(97);
 
-/** A body that never ends, so only the cap can stop the read. */
-function endlessStream() {
-  const state = { reads: 0, cancelled: false };
-  const stream = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      state.reads++;
-      controller.enqueue(bytes(1024));
-    },
-    cancel() {
-      state.cancelled = true;
-    },
-  });
-  return { stream, state };
-}
-
 describe("readCapped", () => {
   it("returns empty bytes for an empty body, or none at all", async () => {
     expect(await readCapped(new Response(""), 100)).toHaveLength(0);
@@ -63,7 +48,7 @@ describe("readCapped", () => {
   });
 
   it("stops reading an endless body once it passes the cap", async () => {
-    const { stream, state } = endlessStream();
+    const { stream, state } = trackedStream(Array.from({ length: 20 }, () => bytes(1024)));
     await expect(readCapped(new Response(stream), 10 * 1024)).rejects.toThrow();
     expect(state.cancelled).toBe(true);
     // 1 KB chunks against a 10 KB cap: the 11th chunk goes over. A few more pulls are queued ahead of the reader.

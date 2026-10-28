@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DONE_CHECK_NOTICE, JOB_NOTICE } from "#core/job-notice";
 import { parseEntry, type ToolCallRow, type ToolResultRow } from "#module/analytics/entries";
+import { call as callLine, result as resultLine } from "./fakes";
 
 const HOME = "/home/user";
 const usage = {
@@ -56,32 +57,10 @@ const usageLines: [string, string, string | undefined, string, string][] = [
   ["malformed lines are ignored", "{broken", undefined, "unknown", "unknown"],
 ] as const;
 
-function call(name: string, args: Record<string, unknown>) {
-  return JSON.stringify({
-    ...assistant,
-    message: { ...assistant.message, content: [{ type: "toolCall", id: "call-1", name, arguments: args }] },
-  });
-}
-
-function result(isError: boolean, text: string) {
-  return JSON.stringify({
-    type: "message",
-    id: "result-id",
-    timestamp: "2026-10-26T10:01:01.000Z",
-    message: {
-      role: "toolResult",
-      toolCallId: "call-1",
-      toolName: "bash",
-      isError,
-      content: [{ type: "text", text }],
-    },
-  });
-}
-
 const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   [
     "a bash call keeps each segment's command name",
-    call("bash", { command: "cd src && rg -n needle" }),
+    callLine("call-1", "bash", { command: "cd src && rg -n needle" }),
     {
       tool: "bash",
       commandNames: ["cd", "rg"],
@@ -91,7 +70,7 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a search over node_modules is not a code search",
-    call("bash", { command: "grep -rn needle node_modules/pkg" }),
+    callLine("call-1", "bash", { command: "grep -rn needle node_modules/pkg" }),
     {
       tool: "bash",
       commandNames: ["grep"],
@@ -101,7 +80,7 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a command that names node_modules anywhere is not a code search",
-    call("bash", { command: "rg needle src && ls node_modules" }),
+    callLine("call-1", "bash", { command: "rg needle src && ls node_modules" }),
     {
       tool: "bash",
       commandNames: ["rg", "ls"],
@@ -111,7 +90,7 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a command under the home folder is shortened",
-    call("bash", { command: "/home/user/bin/thing --flag" }),
+    callLine("call-1", "bash", { command: "/home/user/bin/thing --flag" }),
     {
       tool: "bash",
       commandNames: ["~/bin/thing"],
@@ -121,7 +100,7 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a read without an offset starts at line one",
-    call("read", { path: "src/a.ts" }),
+    callLine("call-1", "read", { path: "src/a.ts" }),
     {
       tool: "read",
       fromLineOne: true,
@@ -129,7 +108,7 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a read with an offset starts later",
-    call("read", { path: "src/a.ts", offset: 40 }),
+    callLine("call-1", "read", { path: "src/a.ts", offset: 40 }),
     {
       tool: "read",
       fromLineOne: false,
@@ -137,7 +116,7 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a failed result keeps a shortened first line",
-    result(true, "Error: /home/user/src/a.ts missing\nstack"),
+    resultLine("call-1", true, "Error: /home/user/src/a.ts missing\nstack"),
     {
       callId: "call-1",
       failed: true,
@@ -146,7 +125,7 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a successful result has no failure line",
-    result(false, "all good"),
+    resultLine("call-1", false, "all good"),
     {
       callId: "call-1",
       failed: false,
@@ -154,12 +133,12 @@ const toolLines: [string, string, Partial<ToolCallRow> | ToolResultRow][] = [
   ],
   [
     "a bash result ending in pi's non-zero status is an exit without a failure line",
-    result(true, "ls: /no/such/folder: missing\n\nCommand exited with code 2"),
+    resultLine("call-1", true, "ls: /no/such/folder: missing\n\nCommand exited with code 2"),
     { callId: "call-1", failed: true, exited: true },
   ],
   [
     "a bash result with an earlier exit status remains a failure with its first line",
-    result(true, "Command exited with code 2\nmore output"),
+    resultLine("call-1", true, "Command exited with code 2\nmore output"),
     { callId: "call-1", failed: true, failureLine: "Command exited with code 2" },
   ],
 ];
@@ -211,7 +190,7 @@ describe("parseEntry", () => {
   });
 
   it("cuts a failure line to 120 characters", () => {
-    const entry = parseEntry(result(true, "x".repeat(200)), HOME);
+    const entry = parseEntry(resultLine("call-1", true, "x".repeat(200)), HOME);
     expect(entry?.results?.[0]?.failureLine).toHaveLength(120);
   });
 
@@ -255,13 +234,13 @@ describe("parseEntry", () => {
   });
 
   it("keeps the agent name on a subagent tool call", () => {
-    const entry = parseEntry(call("subagent", { agent: "reviewer", task: "secret" }), HOME);
+    const entry = parseEntry(callLine("call-1", "subagent", { agent: "reviewer", task: "secret" }), HOME);
     expect(entry?.calls?.[0]?.agentName).toBe("reviewer");
     expect(entry?.calls?.[0]).not.toHaveProperty("task");
   });
 
   it("keeps no command names when tokenize gives up", () => {
-    const entry = parseEntry(call("bash", { command: "npm test > /tmp/out" }), HOME);
+    const entry = parseEntry(callLine("call-1", "bash", { command: "npm test > /tmp/out" }), HOME);
     expect(entry?.calls?.[0]?.commandNames).toEqual([]);
   });
 });

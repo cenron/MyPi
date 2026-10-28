@@ -3,18 +3,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { modulesCmd } from "#command/modules";
 import type { Session } from "#core/session";
 import { ModuleLoadMode } from "#core/types";
-import { customPressing, fakeSession as fakeFor, fakeModule, KEY } from "../fakes";
+import { customPressing, fakeModule, fakeSessionWithModules, KEY } from "../fakes";
 
 const { SPACE, ENTER, UP, ESCAPE } = KEY;
 
 // Modules a and b; only a is running.
 function fakeSession() {
-  const fake = fakeFor();
-  fake.session.moduleManager.start(
-    [fakeModule("a", ModuleLoadMode.ON_LOAD), fakeModule("b", ModuleLoadMode.ON_DEMAND)],
-    "startup",
-  );
-  return fake;
+  return fakeSessionWithModules([fakeModule("a", ModuleLoadMode.ON_LOAD), fakeModule("b", ModuleLoadMode.ON_DEMAND)]);
 }
 
 function fakeContext(mode: string, keys: string[] = []) {

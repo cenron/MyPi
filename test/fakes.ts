@@ -75,6 +75,12 @@ export function fakeUI() {
  * defaults count as registered). `emit` runs the handlers registered with `pi.on`, with the session's
  * own context unless one is given. `cwd` is the context's working directory.
  */
+export function fakeSessionWithModules(modules: Module[]) {
+  const fake = fakeSession();
+  fake.session.moduleManager.start(modules, "startup");
+  return fake;
+}
+
 export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: Project) {
   const ui = fakeUI();
   const appendEntry = vi.fn((customType: string, data: unknown) => {

@@ -2,22 +2,17 @@ import { type ExtensionContext, initTheme } from "@earendil-works/pi-coding-agen
 import { beforeAll, describe, expect, it } from "vitest";
 import { ModuleLoadMode } from "#core/types";
 import { openModulesModal } from "#ui/modules-modal";
-import { customPressing, fakeSession as fakeFor, fakeModule, KEY } from "../fakes";
+import { customPressing, fakeModule, fakeSessionWithModules, KEY } from "../fakes";
 
 const { SPACE, ENTER, UP } = KEY;
 
 // Modules a, b and c; a and c are running.
 function fakeSession() {
-  const { session } = fakeFor();
-  session.moduleManager.start(
-    [
-      fakeModule("a", ModuleLoadMode.ON_LOAD),
-      fakeModule("b", ModuleLoadMode.ON_DEMAND),
-      fakeModule("c", ModuleLoadMode.ON_LOAD),
-    ],
-    "startup",
-  );
-  return session;
+  return fakeSessionWithModules([
+    fakeModule("a", ModuleLoadMode.ON_LOAD),
+    fakeModule("b", ModuleLoadMode.ON_DEMAND),
+    fakeModule("c", ModuleLoadMode.ON_LOAD),
+  ]).session;
 }
 
 function fakeContext(keys: string[], mode = "tui") {
@@ -53,11 +48,10 @@ describe("openModulesModal", () => {
   });
 
   it("locks ALWAYS modules, so toggling them changes nothing", async () => {
-    const { session } = fakeFor();
-    session.moduleManager.start(
-      [fakeModule("core", ModuleLoadMode.ALWAYS), fakeModule("a", ModuleLoadMode.ON_LOAD)],
-      "startup",
-    );
+    const { session } = fakeSessionWithModules([
+      fakeModule("core", ModuleLoadMode.ALWAYS),
+      fakeModule("a", ModuleLoadMode.ON_LOAD),
+    ]);
     expect(await press([SPACE, UP, ENTER], session)).toEqual(["core", "a"]);
   });
 });
