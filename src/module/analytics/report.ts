@@ -3,6 +3,7 @@ import type {
   DoneCheckTotals,
   FailureTotals,
   NavigationTotals,
+  ProjectTotals,
   RuleTotals,
   ShellTotals,
   SubagentTotals,
@@ -13,9 +14,13 @@ import type {
 
 const MAX_FAILURE_LINES = 5;
 const MAX_SHELL_COMMANDS = 8;
+const MAX_PROJECT_FOLDERS = 3;
 const COMMANDS_WITH_TOOLS = new Set(["grep", "find", "ls", "cat"]);
 
 type ReportPeriod = "last 7 days" | "all history";
+
+/** What a caller asks for: a window, and optionally one project's folder fragment. */
+export type ReportOptions = { all: boolean; project?: string };
 
 /** Every counted measure the report shows, read from the store and rendered together. */
 export type AnalyticsReport = {
@@ -30,6 +35,10 @@ export type AnalyticsReport = {
   approvals: readonly ApprovalTotals[];
   approvalRules: readonly RuleTotals[];
   skippedSessions: number;
+  /** The project the report was narrowed to, and the folders the fragment matched. */
+  project?: { name: string; folders: readonly ProjectTotals[] };
+  /** Dialogs recorded before each one's folder was kept, so a project report can't count them. */
+  dialogsWithoutProject: number;
   /** When the oldest indexed usage happened: how far back "all history" goes. */
   historyStart: number | undefined;
 };
@@ -37,6 +46,8 @@ export type AnalyticsReport = {
 /** Formats the counted measures as a plain-text report, one section per question. */
 export function renderAnalyticsReport(report: AnalyticsReport, period: ReportPeriod): string {
   const sections: string[] = [];
+  const project = projectLines(report.project);
+  if (project !== undefined) sections.push(project);
   if (report.usage.length > 0) sections.push(modelLines(report.usage, period, report.historyStart));
   if (report.tools.length > 0) sections.push(toolLines(report.tools));
   if (report.failures.length > 0) sections.push(failureLines(report.failures));
@@ -48,10 +59,39 @@ export function renderAnalyticsReport(report: AnalyticsReport, period: ReportPer
   if (features !== undefined) sections.push(features);
   const friction = frictionLines(report.approvals, report.approvalRules);
   if (friction !== undefined) sections.push(friction);
+  if (report.project !== undefined && report.dialogsWithoutProject > 0) {
+    const dialogs = report.dialogsWithoutProject;
+    sections.push(
+      `${formatCount(dialogs, "permission dialog")} recorded before projects were kept ` +
+        `${dialogs === 1 ? "isn't" : "aren't"} counted here.`,
+    );
+  }
   if (report.skippedSessions > 0) {
     sections.push(`${formatCount(report.skippedSessions, "other pi session")} skipped`);
   }
-  return sections.length === 0 ? "No usage recorded for this period." : sections.join("\n\n");
+  return sections.length === 0 ? emptyReport(report.project?.name) : sections.join("\n\n");
+}
+
+/** The fragment's match, so an over-matching name shows every folder it pulled in. */
+function projectLines(project: AnalyticsReport["project"]): string | undefined {
+  if (project === undefined || project.folders.length === 0) return undefined;
+  const sessions = project.folders.reduce((sum, folder) => sum + folder.sessions, 0);
+  const lines = [
+    `Project "${project.name}" · ${formatCount(project.folders.length, "folder")}, ` +
+      `${formatCount(sessions, "session")}`,
+  ];
+  for (const folder of project.folders.slice(0, MAX_PROJECT_FOLDERS)) {
+    lines.push(`  ${folder.cwd} (${folder.sessions})`);
+  }
+  const more = project.folders.length - MAX_PROJECT_FOLDERS;
+  if (more > 0) lines.push(`  +${more} more`);
+  return lines.join("\n");
+}
+
+function emptyReport(project: string | undefined): string {
+  return project === undefined
+    ? "No usage recorded for this period."
+    : `No usage recorded for project "${project}" in this period.`;
 }
 
 function modelLines(rows: readonly UsageTotals[], period: ReportPeriod, historyStart: number | undefined): string {

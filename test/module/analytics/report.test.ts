@@ -30,6 +30,7 @@ function report(overrides: Partial<AnalyticsReport>): AnalyticsReport {
     approvals: [],
     approvalRules: [],
     skippedSessions: 0,
+    dialogsWithoutProject: 0,
     historyStart: undefined,
     ...overrides,
   };
@@ -196,5 +197,55 @@ describe("renderAnalyticsReport", () => {
 
   it("reports when nothing was recorded", () => {
     expect(renderAnalyticsReport(report({}), "all history")).toBe("No usage recorded for this period.");
+  });
+
+  it("heads a project report with the folders the fragment matched", () => {
+    const text = renderAnalyticsReport(
+      report({
+        project: {
+          name: "mypi",
+          folders: [
+            { cwd: "~/Documents/agentic_workspace/MyPi", sessions: 12 },
+            { cwd: "/private/var/folders/x/T/mypi-q3-a", sessions: 7 },
+            { cwd: "/private/var/folders/x/T/mypi-q3-b", sessions: 3 },
+            { cwd: "/private/var/folders/x/T/mypi-q3-c", sessions: 2 },
+          ],
+        },
+        usage: [totals(10, 2)],
+      }),
+      "last 7 days",
+    );
+    expect(text).toContain(
+      'Project "mypi" · 4 folders, 24 sessions\n' +
+        "  ~/Documents/agentic_workspace/MyPi (12)\n" +
+        "  /private/var/folders/x/T/mypi-q3-a (7)\n" +
+        "  /private/var/folders/x/T/mypi-q3-b (3)\n" +
+        "  +1 more",
+    );
+  });
+
+  it("writes one folder and one session in the singular", () => {
+    const text = renderAnalyticsReport(
+      report({ project: { name: "mypi-q6", folders: [{ cwd: "/work/mypi-q6", sessions: 1 }] } }),
+      "last 7 days",
+    );
+    expect(text).toContain('Project "mypi-q6" · 1 folder, 1 session\n  /work/mypi-q6 (1)');
+  });
+
+  it("names the project when the filter matched no usage", () => {
+    const text = renderAnalyticsReport(report({ project: { name: "job-search-hub", folders: [] } }), "last 7 days");
+    expect(text).toBe('No usage recorded for project "job-search-hub" in this period.');
+  });
+
+  it("says how many older dialogs a project report can't count", () => {
+    const text = renderAnalyticsReport(
+      report({
+        project: { name: "mypi", folders: [{ cwd: "/work/mypi", sessions: 1 }] },
+        dialogsWithoutProject: 2,
+        usage: [totals(10, 2)],
+      }),
+      "last 7 days",
+    );
+    expect(text).toContain("2 permission dialogs recorded before projects were kept aren't counted here.");
   });
 });

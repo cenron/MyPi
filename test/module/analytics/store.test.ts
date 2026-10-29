@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Approval } from "#core/channels";
-import { approvalTotals, ruleTotals, usageTotals } from "#module/analytics/queries";
+import { approvalTotals, dialogsWithoutProject, ruleTotals, usageTotals } from "#module/analytics/queries";
 import { AnalyticsStore } from "#module/analytics/store";
 
 const folders: string[] = [];
@@ -16,8 +16,13 @@ async function newStore(): Promise<AnalyticsStore> {
   return new AnalyticsStore(join(folder, "analytics.sqlite"));
 }
 
-function approval(rules: readonly string[], choice: Approval["choice"], model = "gpt-6-luna"): Approval {
-  return { rules, choice, provider: "openai", model, thinking: "high" };
+function approval(
+  rules: readonly string[],
+  choice: Approval["choice"],
+  model = "gpt-6-luna",
+  cwd = "/work/project",
+): Approval {
+  return { rules, choice, provider: "openai", model, thinking: "high", cwd };
 }
 
 afterEach(async () => {
@@ -44,7 +49,7 @@ describe("AnalyticsStore", () => {
 
     expect(version.version).toBe(11);
     expect(columns.map(({ name }) => name)).toContain("entry_id");
-    expect(usageTotals(store, undefined)).toEqual([]);
+    expect(usageTotals(store, {})).toEqual([]);
     expect(store.skippedCount()).toBe(0);
     store.close();
   });
@@ -60,8 +65,40 @@ describe("AnalyticsStore", () => {
     first.close();
 
     const rebuilt = new AnalyticsStore(path);
-    expect(ruleTotals(rebuilt, undefined)).toEqual([expect.objectContaining({ rule: "plan-build" })]);
+    expect(ruleTotals(rebuilt, {})).toEqual([expect.objectContaining({ rule: "plan-build" })]);
+    expect(approvalTotals(rebuilt, { project: "work/project" })).toEqual([
+      expect.objectContaining({ model: "gpt-6-luna", dialogs: 1, yes: 1 }),
+    ]);
     rebuilt.close();
+  });
+
+  it("adds a dialog's folder in place to a database that predates it", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "mypi-analytics-store-"));
+    folders.push(folder);
+    const path = join(folder, "analytics.sqlite");
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE schema_version (version INTEGER NOT NULL);
+      INSERT INTO schema_version(version) VALUES (11);
+      CREATE TABLE approvals (
+        dialog_id TEXT NOT NULL, rule TEXT NOT NULL, timestamp INTEGER NOT NULL, provider TEXT NOT NULL,
+        model TEXT NOT NULL, thinking TEXT NOT NULL, choice TEXT NOT NULL,
+        PRIMARY KEY(dialog_id, rule)
+      );
+      INSERT INTO approvals VALUES ('dialog-1', 'plan-build', ${Date.now()}, 'openai', 'gpt-6-luna', 'high', 'yes');`);
+    old.close();
+
+    const store = new AnalyticsStore(path);
+    const columns = store.database.prepare("PRAGMA table_info(approvals)").all() as { name: string }[];
+    const rows = store.database.prepare("SELECT dialog_id, cwd FROM approvals").all() as {
+      dialog_id: string;
+      cwd: string | null;
+    }[];
+
+    expect(columns.map(({ name }) => name)).toContain("cwd");
+    expect(rows).toEqual([{ dialog_id: "dialog-1", cwd: null }]);
+    expect(approvalTotals(store, { project: "work" })).toEqual([]);
+    expect(dialogsWithoutProject(store, {})).toBe(1);
+    store.close();
   });
 
   it("records a permission dialog as one row per rule that asked", async () => {
@@ -70,7 +107,7 @@ describe("AnalyticsStore", () => {
     store.recordApproval(approval(["plan-build"], "no"));
     store.recordApproval(approval(["plan-build"], "session", "gpt-5"));
 
-    expect(approvalTotals(store, undefined)).toEqual([
+    expect(approvalTotals(store, {})).toEqual([
       {
         provider: "openai",
         model: "gpt-5",
@@ -92,9 +129,23 @@ describe("AnalyticsStore", () => {
         noUi: 0,
       },
     ]);
-    expect(ruleTotals(store, undefined)).toEqual([
+    expect(ruleTotals(store, {})).toEqual([
       { rule: "plan-build", dialogs: 3, yes: 1, no: 1, session: 1, noUi: 0 },
       { rule: "folder-guard", dialogs: 1, yes: 1, no: 0, session: 0, noUi: 0 },
+    ]);
+    store.close();
+  });
+
+  it("keeps each dialog's folder and counts it under a project filter", async () => {
+    const store = await newStore();
+    store.recordApproval(approval(["plan-build"], "yes", "gpt-6-luna", "/work/job-search-hub"));
+    store.recordApproval(approval(["folder-guard"], "no", "gpt-5", "/work/other-project"));
+
+    expect(approvalTotals(store, { project: "job-search-hub" })).toEqual([
+      expect.objectContaining({ model: "gpt-6-luna", dialogs: 1, yes: 1 }),
+    ]);
+    expect(ruleTotals(store, { project: "job-search-hub" })).toEqual([
+      { rule: "plan-build", dialogs: 1, yes: 1, no: 0, session: 0, noUi: 0 },
     ]);
     store.close();
   });
@@ -102,14 +153,12 @@ describe("AnalyticsStore", () => {
   it("counts a dialog with no UI as declined, and only dialogs since a timestamp", async () => {
     const store = await newStore();
     store.recordApproval(approval(["subagents"], "no-ui"));
-    expect(ruleTotals(store, undefined)).toEqual([
-      { rule: "subagents", dialogs: 1, yes: 0, no: 0, session: 0, noUi: 1 },
-    ]);
+    expect(ruleTotals(store, {})).toEqual([{ rule: "subagents", dialogs: 1, yes: 0, no: 0, session: 0, noUi: 1 }]);
 
     const later = Date.now() + 1000;
-    expect(approvalTotals(store, later)).toEqual([]);
-    expect(ruleTotals(store, later)).toEqual([]);
-    expect(approvalTotals(store, Date.now() - 1000)).toHaveLength(1);
+    expect(approvalTotals(store, { since: later })).toEqual([]);
+    expect(ruleTotals(store, { since: later })).toEqual([]);
+    expect(approvalTotals(store, { since: Date.now() - 1000 })).toHaveLength(1);
     store.close();
   });
 });

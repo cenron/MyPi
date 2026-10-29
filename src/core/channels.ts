@@ -21,8 +21,9 @@ export type Problem = {
 export type ApprovalChoice = "yes" | "no" | "session" | "no-ui";
 
 /**
- * One permission dialog, after it ended: the rules that asked (a rule that asked twice counts once), the choice, and
- * the model of the call. No question text, which holds commands and paths.
+ * One permission dialog, after it ended: the rules that asked (a rule that asked twice counts once), the choice, the
+ * model of the call, and the session's folder so a project report can filter dialogs. No question text, which holds
+ * commands and paths. Dialogs recorded before the folder was kept have none.
  */
 export type Approval = {
   rules: readonly string[];
@@ -30,6 +31,7 @@ export type Approval = {
   provider: string;
   model: string;
   thinking: string;
+  cwd: string;
 };
 
 /**

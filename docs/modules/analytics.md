@@ -1,6 +1,7 @@
 # Analytics
 
-**Status:** slices 1–5 built 2026-10-27 (slice 5: the `analytics` tool, so the model reads the same report).
+**Status:** slices 1–6 built 2026-10-29 (slice 5: the `analytics` tool, so the model reads the same report; slice 6:
+the project filter, so one project can be read without hand-written queries).
 Permission dialogs are the one measure that doesn't come from the session files: `ToolGuard` publishes each dialog on
 the bus and the module records it as it arrives. Benchmarks remain planned.
 
@@ -246,8 +247,9 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 - Indexing is incremental: it resumes at the byte offset after the last complete line. Shrunk files and files whose
   header session id changed are reindexed. Every branch entry counts; the tree is not filtered to its current leaf.
 - Permission dialogs have no file to index, so they're written as they happen: one row per asking rule, sharing a
-  random dialog id, which lets the report count a dialog once however many rules asked. They stay when a session file
-  is deleted, since none of them belongs to a file.
+  random dialog id, which lets the report count a dialog once however many rules asked. Each row keeps the session's
+  folder, added to an existing database in place, so dialogs recorded before it survive with no project. They stay
+  when a session file is deleted, since none of them belongs to a file. A schema rebuild never drops them.
 
 ## Privacy
 
@@ -262,8 +264,8 @@ Checked against the installed pi 1.2.0 (2026-10-22):
   for that reason. Feature rows
   store only done-check report/pass and job-notice kinds and timestamps. Task tool calls are already counted by tool
   name; subagent calls keep only the agent name, not their task argument. Child sessions keep the parent session path.
-- A permission dialog keeps only its rules, its choice, the model, and the time: never the question, which quotes the
-  command or path it asks about.
+- A permission dialog keeps only its rules, its choice, the model, its session's folder, and the time: never the
+  question, which quotes the command or path it asks about.
 - Local only: nothing leaves the machine.
 - **In the reports, too:** only counts and short failure lines go into tracked docs; never raw session data, session
   paths, or anything from a user's own files. Per-checkpoint detail stays in git-ignored plans.
@@ -273,8 +275,13 @@ Checked against the installed pi 1.2.0 (2026-10-22):
 - When loaded, it indexes eligible MyPi session files in the background and indexes again before reporting. A pi
   session started after the marker is checked only through its first 16 lines; an excluded path is remembered and
   never read again, even if it grows. `/analytics` reports the count of skipped sessions. No pi hot-path events are used for analytics data.
-- `/analytics` and the read-only `analytics` tool return the same report text. `/analytics` and the tool's default
-  show the last 7 days; `/analytics all` and `period: "all"` show all indexed history. Sections:
+- `/analytics [all] [project]` and the read-only `analytics` tool return the same report text. The default shows the
+  last 7 days; `all` anywhere in the command (or `period: "all"`) shows all indexed history. Every other word, joined
+  with spaces, is a project: a fragment matched case-insensitively inside each session's folder path, so a MyPi
+  worktree under the project matches and a folder renamed on disk counts as a separate folder. The report then starts
+  with a header naming the fragment, how many folders matched and how many sessions ran in them, and up to three
+  folders by session count (then `+N more`), so an over-matching fragment is visible. With no match it says no usage
+  was recorded for that project. The tool's `project` parameter does the same. Sections:
   - **Model usage:** one compact line per provider, model, and thinking level with replies, input, output, cache-read
     share, and cost, under a header naming the period and the day the indexed history starts (`history from
     2026-10-27`), so "all history" after a fresh start isn't read as months. Usage entries contribute tokens and cost
@@ -291,7 +298,8 @@ Checked against the installed pi 1.2.0 (2026-10-22):
     model, and thinking level. Child cost is included from the child's indexed usage rows and linked through
     `parentSession`.
   - **Permission dialogs:** per model and per rule, how many dialogs ended in each choice (yes, no, allow for this
-    session, no UI).
+    session, no UI). A project filter counts only dialogs with that project's folder; a line after the section says
+    how many older dialogs have no project recorded.
 - Can be turned off with `/modules`, and the database deleted to start over.
 
 ## Slices
@@ -311,6 +319,13 @@ Checked against the installed pi 1.2.0 (2026-10-22):
    the report gains the `Permission dialogs` section.
 5. **Built 2026-10-27:** the read-only `analytics` tool returns the exact report text shown by `/analytics`, with a
    `period` parameter for all history.
+6. **Built 2026-10-29:** project filtering. `/analytics [all] [project]` and the `analytics` tool's `project`
+   parameter narrow every section to sessions whose folder path contains the fragment (case-insensitive, with `%`,
+   `_`, and `\` escaped), with a header naming the matched folders and sessions so over-matching is visible.
+   Permission dialogs keep their session's folder; an existing database gains the column in place, and older dialogs
+   are reported as uncounted. Live 2026-10-29 in a temp repo: the unfiltered report had no project block;
+   `mypi-q6-` showed one folder and this session's model; a user-style prompt made the model pass `project` and quote
+   the filtered numbers; `mypi` listed 30 folders and `+27 more`.
 
 ## Lessons from other projects
 

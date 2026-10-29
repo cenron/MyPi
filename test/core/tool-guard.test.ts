@@ -376,7 +376,7 @@ describe("ToolGuard", () => {
       const approvals = collecting(guard);
       await guard.check(event(), fakeContext(options).ctx);
       expect(approvals).toEqual([
-        { rules: ["plan-build"], choice, provider: "openai", model: "gpt-6-luna", thinking: "high" },
+        { rules: ["plan-build"], choice, provider: "openai", model: "gpt-6-luna", thinking: "high", cwd: "/project" },
       ]);
     });
 
@@ -402,7 +402,14 @@ describe("ToolGuard", () => {
       const approvals = collecting(guard);
       await guard.check(event(), fakeContext().ctx);
       expect(approvals).toEqual([
-        { rules: ["one", "two"], choice: "yes", provider: "openai", model: "gpt-6-luna", thinking: "high" },
+        {
+          rules: ["one", "two"],
+          choice: "yes",
+          provider: "openai",
+          model: "gpt-6-luna",
+          thinking: "high",
+          cwd: "/project",
+        },
       ]);
     });
 
@@ -436,7 +443,7 @@ describe("ToolGuard", () => {
       const { ctx } = fakeContext();
       await guard.check(event(), { ...ctx, model: undefined, thinkingLevel: undefined } as ExtensionContext);
       expect(approvals).toEqual([
-        { rules: ["one"], choice: "yes", provider: "unknown", model: "unknown", thinking: "unknown" },
+        { rules: ["one"], choice: "yes", provider: "unknown", model: "unknown", thinking: "unknown", cwd: "/project" },
       ]);
     });
   });

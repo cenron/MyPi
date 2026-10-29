@@ -9,10 +9,13 @@ import { BaseModule } from "../base";
 import { indexSessions } from "./indexer";
 import {
   approvalTotals,
+  dialogsWithoutProject,
   doneCheckTotals,
+  type Filter,
   failureTotals,
   historyStart,
   navigationTotals,
+  projectTotals,
   ruleTotals,
   shellTotals,
   subagentTotals,
@@ -20,7 +23,7 @@ import {
   toolTotals,
   usageTotals,
 } from "./queries";
-import type { AnalyticsReport } from "./report";
+import type { AnalyticsReport, ReportOptions } from "./report";
 import { renderAnalyticsReport } from "./report";
 import { AnalyticsStore } from "./store";
 import { analyticsTool } from "./tools/analytics";
@@ -32,7 +35,7 @@ export class AnalyticsModule extends BaseModule {
   private store: AnalyticsStore | undefined;
   private indexing: Promise<void> = Promise.resolve();
   private readonly approvalWrites = new Set<Promise<void>>();
-  private readonly analyticsCommand = analyticsCmd((all) => this.report(all));
+  private readonly analyticsCommand = analyticsCmd((options) => this.report(options));
 
   get info(): ModuleInfo {
     return {
@@ -63,28 +66,42 @@ export class AnalyticsModule extends BaseModule {
   }
 
   tools(): ToolDefinition[] {
-    return [analyticsTool((all) => this.report(all))];
+    return [analyticsTool((options) => this.report(options))];
   }
 
   /** Refreshes the index and renders the report shared by `/analytics` and the analytics tool. */
-  async report(all: boolean): Promise<string> {
+  async report(options: ReportOptions): Promise<string> {
     const store = await this.refresh();
-    const since = all ? undefined : Date.now() - SEVEN_DAYS_MS;
-    const report: AnalyticsReport = {
-      usage: usageTotals(store, since),
-      tools: toolTotals(store, since),
-      failures: failureTotals(store, since),
-      shell: shellTotals(store, since),
-      navigation: navigationTotals(store, since),
-      doneChecks: doneCheckTotals(store, since),
-      tasks: taskTotals(store, since),
-      subagents: subagentTotals(store, since),
-      approvals: approvalTotals(store, since),
-      approvalRules: ruleTotals(store, since),
-      skippedSessions: store.skippedCount(),
-      historyStart: historyStart(store),
+    const filter: Filter = {
+      since: options.all ? undefined : Date.now() - SEVEN_DAYS_MS,
+      project: options.project || undefined,
     };
-    return renderAnalyticsReport(report, all ? "all history" : "last 7 days");
+    const report: AnalyticsReport = {
+      usage: usageTotals(store, filter),
+      tools: toolTotals(store, filter),
+      failures: failureTotals(store, filter),
+      shell: shellTotals(store, filter),
+      navigation: navigationTotals(store, filter),
+      doneChecks: doneCheckTotals(store, filter),
+      tasks: taskTotals(store, filter),
+      subagents: subagentTotals(store, filter),
+      approvals: approvalTotals(store, filter),
+      approvalRules: ruleTotals(store, filter),
+      skippedSessions: store.skippedCount(),
+      project:
+        filter.project === undefined
+          ? undefined
+          : {
+              name: filter.project,
+              folders: projectTotals(store, filter).map((folder) => ({
+                ...folder,
+                cwd: folder.cwd.replace(homedir(), "~"),
+              })),
+            },
+      dialogsWithoutProject: dialogsWithoutProject(store, filter),
+      historyStart: historyStart(store, filter),
+    };
+    return renderAnalyticsReport(report, options.all ? "all history" : "last 7 days");
   }
 
   /** Records the live notice and tracks it so shutdown can't close SQLite before the write finishes. */
@@ -128,15 +145,23 @@ export class AnalyticsModule extends BaseModule {
   }
 }
 
-function analyticsCmd(run: (all: boolean) => Promise<string>): Command {
+function analyticsCmd(run: (options: ReportOptions) => Promise<string>): Command {
   return {
     info: {
       name: "analytics",
-      description: "Show usage, tools, and code navigation for the last 7 days or all history",
+      description: "Show usage, tools, and code navigation for the last 7 days or all history, for one project or all",
     },
     execute: async (_ctx, args) => {
+      const options: ReportOptions = {
+        all: args.includes("all"),
+        project:
+          args
+            .filter((word) => word !== "all")
+            .join(" ")
+            .trim() || undefined,
+      };
       try {
-        return await run(args[0] === "all");
+        return await run(options);
       } catch (error) {
         return `Analytics indexing failed: ${errorMessage(error)}.`;
       }

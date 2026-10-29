@@ -17,13 +17,13 @@ afterEach(async () => {
   for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
 });
 
-function sessionFile(id: string, timestamp: string, model: string, input: number) {
+function sessionFile(id: string, timestamp: string, model: string, input: number, cwd = "/project") {
   const header = {
     type: "session",
     version: 3,
     id: `session-${id}`,
     timestamp,
-    cwd: "/project",
+    cwd,
   };
   const reply = {
     type: "message",
@@ -330,8 +330,51 @@ describe("AnalyticsModule", () => {
     await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
 
     const store = new AnalyticsStore(join(agentDir, "analytics", "analytics.sqlite"));
-    expect(usageTotals(store, undefined)).toHaveLength(2);
+    expect(usageTotals(store, {})).toHaveLength(2);
     store.close();
+  });
+
+  it("narrows every section to sessions whose folder contains the project fragment", async () => {
+    const agentDir = await mkdtemp(join(tmpdir(), "mypi-analytics-project-"));
+    folders.push(agentDir);
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+    const sessions = join(agentDir, "sessions", "project");
+    await mkdir(sessions, { recursive: true });
+    const timestamp = new Date().toISOString();
+    await writeFile(
+      join(sessions, "hub.jsonl"),
+      sessionFile("hub", timestamp, "gpt-6-luna", 100, "/work/job-search-hub"),
+    );
+    await writeFile(
+      join(sessions, "worktree.jsonl"),
+      sessionFile("worktree", timestamp, "gpt-5", 200, "/work/job-search-hub/.pi/worktrees/fix"),
+    );
+    await writeFile(join(sessions, "other.jsonl"), sessionFile("other", timestamp, "qwen", 300, "/work/other-project"));
+    await writeFile(
+      join(sessions, "workspace.jsonl"),
+      sessionFile("workspace", timestamp, "deepseek", 400, "/work/agentic-workspace"),
+    );
+
+    const fake = fakeSession();
+    const module = new AnalyticsModule(fake.session);
+    module.init();
+    const command = module.commands()[0];
+    const tool = module.tools()[0];
+    const report = await command?.execute({} as never, ["job-search-hub"]);
+    const allHistory = await command?.execute({} as never, ["all", "job-search-hub"]);
+    const toolReport = await tool?.execute("call", { project: "job-search-hub" }, undefined, undefined, {} as never);
+    const underscore = await command?.execute({} as never, ["agentic_workspace"]);
+    await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
+
+    expect(report).toContain('Project "job-search-hub" · 2 folders, 2 sessions');
+    expect(report).toContain("openai/gpt-6-luna");
+    expect(report).toContain("openai/gpt-5");
+    expect(report).not.toContain("qwen");
+    expect(report).not.toContain("deepseek");
+    expect(allHistory).toContain("Model usage · all history");
+    expect(toolReport).toEqual({ content: [{ type: "text", text: report }], details: undefined });
+    expect(underscore).not.toContain("deepseek");
+    expect(underscore).toContain('No usage recorded for project "agentic_workspace"');
   });
 
   it("records a permission dialog published while it runs", async () => {
@@ -348,6 +391,7 @@ describe("AnalyticsModule", () => {
       provider: "openai",
       model: "gpt-6-luna",
       thinking: "high",
+      cwd: "/project",
     });
     const command = module.commands()[0];
     await vi.waitFor(async () => {
@@ -374,11 +418,12 @@ describe("AnalyticsModule", () => {
       provider: "openai",
       model: "gpt-6-luna",
       thinking: "high",
+      cwd: "/project",
     });
     await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
 
     const store = new AnalyticsStore(join(agentDir, "analytics", "analytics.sqlite"));
-    expect(approvalTotals(store, undefined)).toMatchObject([{ model: "gpt-6-luna", dialogs: 1, yes: 1 }]);
+    expect(approvalTotals(store, {})).toMatchObject([{ model: "gpt-6-luna", dialogs: 1, yes: 1 }]);
     store.close();
   });
 
@@ -402,6 +447,7 @@ describe("AnalyticsModule", () => {
       provider: "openai",
       model: "gpt-6-luna",
       thinking: "high",
+      cwd: "/project",
     });
     await vi.waitFor(() =>
       expect(fake.notify).toHaveBeenCalledWith(

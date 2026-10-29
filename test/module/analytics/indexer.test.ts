@@ -62,7 +62,7 @@ describe("indexSessions", () => {
       `${JSON.stringify(JSON.parse(header.split("\n")[0] ?? ""))}\n${call("legacy-lsp", "lsp", {})}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(toolTotals(store, undefined)).toEqual([{ tool: "lsp", calls: 1, failures: 0, exits: 0 }]);
+    expect(toolTotals(store, {})).toEqual([{ tool: "lsp", calls: 1, failures: 0, exits: 0 }]);
     expect(store.skippedCount()).toBe(0);
     store.close();
   });
@@ -83,7 +83,7 @@ describe("indexSessions", () => {
     await writeFile(source, `${foreignLines.join("\n")}\n${hiddenMyPiCall}\n`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
     expect(store.skippedCount()).toBe(1);
-    expect(toolTotals(store, undefined)).toEqual([]);
+    expect(toolTotals(store, {})).toEqual([]);
 
     await writeFile(
       source,
@@ -91,8 +91,8 @@ describe("indexSessions", () => {
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
     expect(store.skippedCount()).toBe(1);
-    expect(toolTotals(store, undefined)).toEqual([]);
-    expect(usageTotals(store, undefined)).toEqual([]);
+    expect(toolTotals(store, {})).toEqual([]);
+    expect(usageTotals(store, {})).toEqual([]);
     store.close();
   });
 
@@ -110,11 +110,11 @@ describe("indexSessions", () => {
     await writeFile(source, `${header}\n${first}`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)[0]?.replies).toBe(1);
+    expect(usageTotals(store, {})[0]?.replies).toBe(1);
 
     await writeFile(source, `${header}\n${first}${reply("two", "2026-10-26T10:02:00.000Z")}\n`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)[0]?.replies).toBe(2);
+    expect(usageTotals(store, {})[0]?.replies).toBe(2);
 
     const migratedHeader = header.replace("session-id", "session-new");
     await writeFile(source, `${migratedHeader}\n${first}${reply("two", "2026-10-26T10:02:00.000Z")}\n`);
@@ -125,20 +125,20 @@ describe("indexSessions", () => {
 
     await writeFile(source, `${header}\n${first}`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)[0]?.replies).toBe(1);
+    expect(usageTotals(store, {})[0]?.replies).toBe(1);
 
     await writeFile(
       source,
       `${header}\n${first}${call("call-1", "bash", { command: "rg needle" })}\n${result("call-1", false, "ok")}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(toolTotals(store, undefined)).toEqual([{ tool: "bash", calls: 1, failures: 0, exits: 0 }]);
+    expect(toolTotals(store, {})).toEqual([{ tool: "bash", calls: 1, failures: 0, exits: 0 }]);
 
     await writeFile(source, `${header}\n${first}`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)[0]?.replies).toBe(1);
-    expect(toolTotals(store, undefined)).toEqual([]);
-    expect(shellTotals(store, undefined)).toEqual([]);
+    expect(usageTotals(store, {})[0]?.replies).toBe(1);
+    expect(toolTotals(store, {})).toEqual([]);
+    expect(shellTotals(store, {})).toEqual([]);
     store.close();
   });
 
@@ -149,12 +149,12 @@ describe("indexSessions", () => {
       `${header}\n${call("call-1", "bash", { command: "rg -n needle src" })}\n${call("call-2", "read", { path: "a.ts" })}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(toolTotals(store, undefined)).toEqual([
+    expect(toolTotals(store, {})).toEqual([
       { tool: "bash", calls: 1, failures: 0, exits: 0 },
       { tool: "read", calls: 1, failures: 0, exits: 0 },
     ]);
-    expect(shellTotals(store, undefined)).toEqual([{ name: "rg", calls: 1 }]);
-    expect(navigationTotals(store, undefined)).toEqual([
+    expect(shellTotals(store, {})).toEqual([{ name: "rg", calls: 1 }]);
+    expect(navigationTotals(store, {})).toEqual([
       { provider: "openai", model: "gpt-6-luna", thinking: "high", lsp: 0, searches: 1, fromLineOne: 1 },
     ]);
 
@@ -167,11 +167,11 @@ describe("indexSessions", () => {
         `${result("call-3", true, "ls: /no/such/folder: missing\n\nCommand exited with code 2")}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(toolTotals(store, undefined)).toEqual([
+    expect(toolTotals(store, {})).toEqual([
       { tool: "bash", calls: 2, failures: 1, exits: 1 },
       { tool: "read", calls: 1, failures: 0, exits: 0 },
     ]);
-    expect(failureTotals(store, undefined)).toEqual([{ line: "rg: no such file", count: 1 }]);
+    expect(failureTotals(store, {})).toEqual([{ line: "rg: no such file", count: 1 }]);
     store.close();
   });
 
@@ -187,7 +187,7 @@ describe("indexSessions", () => {
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
 
-    expect(navigationTotals(store, undefined)).toEqual([
+    expect(navigationTotals(store, {})).toEqual([
       { provider: "openai", model: "gpt-6-luna", thinking: "high", lsp: 1, searches: 3, fromLineOne: 0 },
     ]);
     store.close();
@@ -201,14 +201,14 @@ describe("indexSessions", () => {
         `${call("call-1", "bash", { command: "rg needle" })}\n${result("call-1", false, "ok")}\n`,
     );
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)[0]?.replies).toBe(1);
-    expect(toolTotals(store, undefined)).toHaveLength(1);
+    expect(usageTotals(store, {})[0]?.replies).toBe(1);
+    expect(toolTotals(store, {})).toHaveLength(1);
 
     await rm(source);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)).toEqual([]);
-    expect(toolTotals(store, undefined)).toEqual([]);
-    expect(shellTotals(store, undefined)).toEqual([]);
+    expect(usageTotals(store, {})).toEqual([]);
+    expect(toolTotals(store, {})).toEqual([]);
+    expect(shellTotals(store, {})).toEqual([]);
     store.close();
   });
 
@@ -221,7 +221,7 @@ describe("indexSessions", () => {
       indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME),
       indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], otherWindow, HOME),
     ]);
-    expect(usageTotals(store, undefined)[0]?.replies).toBe(1);
+    expect(usageTotals(store, {})[0]?.replies).toBe(1);
     store.close();
     otherWindow.close();
   });
@@ -231,11 +231,11 @@ describe("indexSessions", () => {
     const pending = reply("one", "2026-10-26T10:01:00.000Z");
     await writeFile(source, `${header}\n${pending}`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)).toEqual([]);
+    expect(usageTotals(store, {})).toEqual([]);
 
     await writeFile(source, `${header}\n${pending}\n`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
-    expect(usageTotals(store, undefined)[0]?.replies).toBe(1);
+    expect(usageTotals(store, {})[0]?.replies).toBe(1);
     store.close();
   });
 
@@ -248,7 +248,7 @@ describe("indexSessions", () => {
       await writeFile(source, `${[legacyHeader, ...filler, call("late", "lsp", { action: "outline" })].join("\n")}\n`);
       await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
       expect(store.skippedCount()).toBe(0);
-      expect(toolTotals(store, undefined)).toEqual([expect.objectContaining({ tool: "lsp" })]);
+      expect(toolTotals(store, {})).toEqual([expect.objectContaining({ tool: "lsp" })]);
       store.close();
     });
 
@@ -261,7 +261,7 @@ describe("indexSessions", () => {
       await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
       expect(store.skippedCount()).toBe(0);
       expect(
-        toolTotals(store, undefined)
+        toolTotals(store, {})
           .map(({ tool }) => tool)
           .sort(),
       ).toEqual(["bash", "lsp"]);
@@ -273,7 +273,7 @@ describe("indexSessions", () => {
       await writeFile(source, `${[legacyHeader, ...filler, call("late", "bash", { command: "ls" })].join("\n")}\n`);
       await indexSessions([{ path: join(folder, "sessions"), mypiOnly: false }], store, HOME);
       expect(store.skippedCount()).toBe(1);
-      expect(toolTotals(store, undefined)).toEqual([]);
+      expect(toolTotals(store, {})).toEqual([]);
       store.close();
     });
   });
@@ -288,7 +288,7 @@ describe("indexSessions", () => {
     await writeFile(source, `${later}\n${call("c1", "read", { path: "a.ts" })}\n`);
     await indexSessions([{ path: join(folder, "sessions"), mypiOnly: true }], store, HOME);
     expect(store.skippedCount()).toBe(0);
-    expect(toolTotals(store, undefined)).toEqual([expect.objectContaining({ tool: "read" })]);
+    expect(toolTotals(store, {})).toEqual([expect.objectContaining({ tool: "read" })]);
     store.close();
   });
 });

@@ -64,9 +64,14 @@ export class AnalyticsStore {
     // Outside the rebuild: the other tables come back from the session files, but a dialog is recorded only once.
     this.database.exec(`CREATE TABLE IF NOT EXISTS approvals (
       dialog_id TEXT NOT NULL, rule TEXT NOT NULL, timestamp INTEGER NOT NULL, provider TEXT NOT NULL,
-      model TEXT NOT NULL, thinking TEXT NOT NULL, choice TEXT NOT NULL,
+      model TEXT NOT NULL, thinking TEXT NOT NULL, choice TEXT NOT NULL, cwd TEXT,
       PRIMARY KEY(dialog_id, rule)
     );`);
+    // Older databases get the folder in place, so the dialogs they already hold survive with a NULL project.
+    const approvalsColumns = this.database.prepare("PRAGMA table_info(approvals)").all() as { name: string }[];
+    if (!approvalsColumns.some(({ name }) => name === "cwd")) {
+      this.database.exec("ALTER TABLE approvals ADD COLUMN cwd TEXT");
+    }
   }
 
   /** Replaces a transcript's rows and progress after a reset or reindex. */
@@ -146,11 +151,20 @@ export class AnalyticsStore {
     const timestamp = Date.now();
     withTransaction(this.database, () => {
       const insert = this.database.prepare(
-        `INSERT OR IGNORE INTO approvals(dialog_id, rule, timestamp, provider, model, thinking, choice)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR IGNORE INTO approvals(dialog_id, rule, timestamp, provider, model, thinking, choice, cwd)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const rule of approval.rules) {
-        insert.run(dialogId, rule, timestamp, approval.provider, approval.model, approval.thinking, approval.choice);
+        insert.run(
+          dialogId,
+          rule,
+          timestamp,
+          approval.provider,
+          approval.model,
+          approval.thinking,
+          approval.choice,
+          approval.cwd,
+        );
       }
     });
   }

@@ -1,6 +1,7 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { errorMessage } from "#core/util/errors";
+import type { ReportOptions } from "../report";
 
 const parameters = Type.Object({
   period: Type.Optional(
@@ -8,12 +9,18 @@ const parameters = Type.Object({
       description: 'Report period: "7d" (default) or "all" history.',
     }),
   ),
+  project: Type.Optional(
+    Type.String({
+      description:
+        "Only sessions whose folder path contains this text, such as a project folder name; leave it out for all projects.",
+    }),
+  ),
 });
 
 type AnalyticsArgs = Static<typeof parameters>;
 
-/** Returns the local analytics report for the period requested by the model. */
-export function analyticsTool(report: (all: boolean) => Promise<string>) {
+/** Returns the local analytics report for the period and project requested by the model. */
+export function analyticsTool(report: (options: ReportOptions) => Promise<string>) {
   return defineTool({
     name: "analytics",
     label: "Analytics",
@@ -26,14 +33,19 @@ export function analyticsTool(report: (all: boolean) => Promise<string>) {
       "what to investigate next. Treat a feature missing from the report as unknown, not unused. Use numbers only from " +
       "the report, never present a Findings number as current. It returns the same local report as " +
       "`/analytics`: model usage and cost, tool calls and failures, shell commands, code navigation, MyPi features, and " +
-      "permission dialogs, for the last 7 days or all history. The Findings in `docs/modules/analytics.md` are dated " +
-      "decisions from past windows, not current numbers; use this report for “what does it say now?”.",
-    promptSnippet: "Read the current local analytics report, for the last 7 days or all history",
+      "permission dialogs, for the last 7 days or all history, for one project or all. The Findings in " +
+      "`docs/modules/analytics.md` are dated decisions from past windows, not current numbers; use this report for " +
+      "“what does it say now?”.",
+    promptSnippet:
+      "Read the current local analytics report, for the last 7 days or all history, for one project or all",
     parameters,
     annotations: { readOnlyHint: true },
     async execute(_id, args: AnalyticsArgs) {
       try {
-        return { content: [{ type: "text", text: await report(args.period === "all") }], details: undefined };
+        return {
+          content: [{ type: "text", text: await report({ all: args.period === "all", project: args.project }) }],
+          details: undefined,
+        };
       } catch (error) {
         return {
           content: [{ type: "text", text: `Analytics indexing failed: ${errorMessage(error)}.` }],

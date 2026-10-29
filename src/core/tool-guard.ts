@@ -209,7 +209,7 @@ export class ToolGuard {
   }
 }
 
-/** What the approval notice carries: who asked, the choice, and the call's model. No question text. */
+/** What the approval notice carries: who asked, the choice, the call's model, and the session's folder. */
 function approval(ctx: ExtensionContext, pending: readonly ToolApprovalRequest[], choice: ApprovalChoice): Approval {
   return {
     rules: [...new Set(pending.map(({ name }) => name))],
@@ -217,6 +217,7 @@ function approval(ctx: ExtensionContext, pending: readonly ToolApprovalRequest[]
     provider: ctx.model?.provider ?? "unknown",
     model: ctx.model?.id ?? "unknown",
     thinking: ctx.thinkingLevel ?? "unknown",
+    cwd: ctx.cwd,
   };
 }
 
