@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isReadOnlyCommand, tokenize } from "#core/util/shell";
+import { isReadOnlyCommand, isReadOnlyCommandWithChecks, tokenize } from "#core/util/shell";
 
 describe("tokenize", () => {
   it.each([
@@ -121,6 +121,12 @@ describe("isReadOnlyCommand", () => {
     "sed -n '1,20p' a.txt",
     "sed -n '$p' a.txt",
     "sed -n 5p",
+    "sed -n '15,45p;100,130p' a.txt",
+    "sed -n '/a/,/b/p' a.txt",
+    "sed -n '/a/,/b/p;1,3p' a.txt",
+    "cat a | sed -n '/a/,/b/p'",
+    "rg -n foo || true",
+    "rg -n foo src || :",
     "git status && git log --oneline -5",
     "git --no-pager diff HEAD~1",
     "git -C frontend status --short --branch",
@@ -193,6 +199,12 @@ describe("isReadOnlyCommand", () => {
     ["uniq from stdin to a file", "uniq - out.txt"],
     ["sed without -n", "sed '1p' a"],
     ["sed with a write command", "sed -n '1p;w out' a"],
+    ["sed with a range write", "sed -n '/a/,/b/w out' a"],
+    ["sed with an execute command", "sed -n '/a/e date' a"],
+    ["sed mixing print and write", "sed -n '1,5p;s/a/b/w x' a"],
+    ["sed with a step address", "sed -n '1~2p' a"],
+    ["sed with a relative address", "sed -n '1,+5p' a"],
+    ["a bare true", "true"],
     ["sed -i after operands", "sed -n 1p a -i"],
     ["sed -e", "sed -n -e 1p a"],
     ["git with -c", "git -c core.pager=./x log"],
@@ -229,5 +241,44 @@ describe("isReadOnlyCommand", () => {
     ["npm with a global flag first", "npm --prefix x ls"],
   ])("asks on %s", (_, command) => {
     expect(isReadOnlyCommand(command)).toBe(false);
+  });
+});
+
+describe("isReadOnlyCommandWithChecks", () => {
+  const checks = ["npm run lint", "npm test -- --run", "npm run build"];
+  const allows = (command: string) => isReadOnlyCommandWithChecks(command, checks, "/project");
+
+  it.each([
+    "npm run lint",
+    "npm run lint && npm test -- --run && npm run build",
+    "git status && npm run lint",
+    "cd frontend && npm run lint",
+    "cd frontend && cd src && npm run lint",
+    "cd /project/sub && npm run lint",
+    "npm test -- --run src/a.test.ts",
+    "TZ=UTC npm test -- --run",
+    "cd frontend && TZ=UTC npm test -- --run a.test.ts",
+  ])("allows %j", (command) => {
+    expect(allows(command)).toBe(true);
+  });
+
+  it.each([
+    ["cd ..", "cd .. && npm run lint"],
+    ["cd /tmp", "cd /tmp && npm run lint"],
+    ["cd /project-other", "cd /project-other && npm run lint"],
+    ["cd /project/..", "cd /project/../x && npm run lint"],
+    ["cd /project/sub/../..", "cd /project/sub/../../x && npm run lint"],
+    ["cd -", "cd - && npm run lint"],
+    ["cd ~", "cd ~ && npm run lint"],
+    ["another flag on a check", "npm test -- --run --reporter=dot"],
+    ["--fix on a check", "npm run lint -- --fix"],
+    ["a glob on a check", "npm test -- --run src/*.test.ts"],
+    ["an output redirect", "npm run lint > out.txt"],
+    ["words a check doesn't start with", "npx vitest run src/a.test.ts"],
+    ["a check the user didn't approve", "npm test"],
+    ["a noop after a check", "npm run lint || true"],
+    ["a writer after a check", "npm run lint && npm install"],
+  ])("refuses %s", (_, command) => {
+    expect(allows(command)).toBe(false);
   });
 });

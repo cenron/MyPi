@@ -8,8 +8,15 @@ import { registerRules, updatePromptPaths } from "#rule/index";
 import type { AgentDefinition } from "./agents";
 
 /**
+ * What a read-only child's prompt adds: read with tools for the open-ended shapes its shell guard refuses, rather than
+ * writing a loop or a pipeline it can't run.
+ */
+export const READ_ONLY_PROMPT =
+  "\n\nRead with the `read`, `grep`, `find`, and `ls` tools, one call at a time: bash refuses `for …; do …; done`, `xargs`, and `$(…)`. Do those as separate calls, and report anything you couldn't run.";
+
+/**
  * Installs MyPi's access rules in a child, where its normal extension is not loaded. A read-only child gets Plan's
- * rule, plus `checks`: the project's check commands the user approved, run exactly as written.
+ * rule, plus `checks`: the project's check commands the user approved.
  */
 export function childAccess(agent: AgentDefinition, checks: readonly string[] = []): ExtensionFactory {
   return (pi) => {
@@ -21,13 +28,13 @@ export function childAccess(agent: AgentDefinition, checks: readonly string[] = 
   };
 }
 
-/** Plan's rule, except that approved checks may run as exact segments alongside readers. */
+/** Plan's rule, except that approved checks may run as segments alongside readers. */
 function readOnlyRule(checks: readonly string[]): ToolRule {
   return (call, context) => {
     if (
       call.toolName === "bash" &&
       typeof call.input.command === "string" &&
-      isReadOnlyCommandWithChecks(call.input.command, checks)
+      isReadOnlyCommandWithChecks(call.input.command, checks, context.cwd)
     ) {
       return { kind: "allow" };
     }
@@ -39,7 +46,7 @@ function readOnlyRule(checks: readonly string[]): ToolRule {
 export function checksPrompt(checks: readonly string[]): string {
   if (checks.length === 0) return "";
   const list = checks.map((command) => `\`${command}\``).join(", ");
-  return `\n\nYou may run the project's checks with bash, each exactly as written, alone or chained with read-only commands (no extra arguments or output redirects): ${list}.`;
+  return `\n\nYou may run the project's checks with bash, each as written, alone or after a \`cd\` inside the project and chained with read-only commands; a check may take extra file names (no other flags) and a leading \`TZ=\`; no output redirects: ${list}.`;
 }
 
 /**

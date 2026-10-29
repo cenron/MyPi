@@ -193,11 +193,16 @@ it here (no UI). Tell the user what you needed and why: …").
 
 - **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with the Plan rule (`planRule`, `src/core/plan-rule.ts`) on the child's guard: the
   same check as Plan, so `git log` runs and `touch` is refused. One exception: the project's check commands the user
-  already approved for the done check (`.pi/done-check.json`) may run exactly as written, alone or chained with
-  read-only commands; no extra arguments or output redirects. Before a read-only run, `subagent` asks the done check
-  for them on the event bus (`checkCommands`); it answers only with a list the user approved on this machine, and
-  never asks. A check after `cd` is refused because it would run in another folder. The child's prompt names the
-  approved commands. With the done check off, nobody answers and a child runs no checks.
+  already approved for the done check (`.pi/done-check.json`) may run as written, alone or chained with read-only
+  commands, and may add a `cd` inside the project, a leading `TZ=`, and extra file names (no other flags, no globs,
+  no output redirects): `cd sub && TZ=UTC npm test -- a.test.js` runs. The check takes the child's folder
+  (`ToolEnv.cwd`) to keep that `cd` inside the project. Before a read-only run, `subagent` asks the done check for
+  them on the event bus (`checkCommands`); it answers only with a list the user approved on this machine, and never
+  asks. The shared shell check also allows a `sed -n` print script (`sed -n '15,45p;100,130p' a.ts`) and a `|| true`
+  or `|| :` right after a read-only segment (`rg x || true`), but not after an approved check. The child's prompt
+  names the approved commands, and tells it to read with `read`, `grep`, `find`, and `ls` one call at a time, since
+  bash refuses `for …; do …; done`, `xargs`, and `$(…)`. With the done check off, nobody answers and a child runs no
+  checks.
 - **`write`:** pi's normal tools.
 - **Clearer refusals:** when there's no UI, `ToolGuard` says the call needs the user's approval and no one can give
   it here, then includes what needed confirming. When a child reports a refused call, the prompt tells the parent to
@@ -388,6 +393,21 @@ A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscrip
 
 11. Fork context, a child asking the parent, steering a running child.
 12. External agents in herdr panes.
+13. **Built 2026-10-29** (fixes queue Q3, [roadmap](../roadmap.md) row 28): read-only children run the checks they
+    need, and stop looking for `AGENTS.md`. In the job-search-hub run, 57 of the 59 real `bash` failures were the
+    "no one can give it here" refusal inside `reviewer` and `explore` runs. Three causes: (a) an approved check was
+    refused after a `cd`, so `isReadOnlyCommandWithChecks` now takes the child's `cwd` (`ToolEnv.cwd`) and allows a
+    `cd` inside the project, chains of approved checks, a leading `TZ=`, and extra file names, while still refusing
+    other flags, globs, and output redirects; (b) `general` and `developer` named `AGENTS.md`, which is something to
+    fetch, so they say "project instructions in your context" like Build's section; (c) the shell refused
+    `sed -n '15,45p'` and `rg x || true`, so the `sed` print script is allowed, a `|| true`/`|| :` counts right after
+    a read-only segment, and `READ_ONLY_PROMPT` tells a read-only child to read with `read`, `grep`, `find`, and `ls`
+    one call at a time instead of `for …; do …; done`, `xargs`, and `$(…)`. Tests: the check tables in
+    `test/core/util/shell.test.ts`, the wiring in `test/module/subagents/access.test.ts`, and no builtin prompt naming
+    `AGENTS.md` in `test/module/subagents/agents.test.ts`. Live 2026-10-29: a reviewer ran
+    `cd sub && TZ=UTC npm test a.test.js` unrefused, while `node --test` from the same folder was refused as
+    unapproved; an `explore` told to use one bash loop had it refused and reported it; and a developer in a repo
+    without `AGENTS.md` made no `find ..` or `AGENTS.md` search.
 
 ## Open questions
 

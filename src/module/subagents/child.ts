@@ -13,7 +13,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { MYPI_SESSION_MARKER_TYPE } from "#core/session-marker";
 import type { ThinkingLevel } from "#core/util/thinking";
-import { checksPrompt, childAccess } from "./access";
+import { checksPrompt, childAccess, READ_ONLY_PROMPT } from "./access";
 import type { AgentDefinition } from "./agents";
 
 /** How long one run may take before it's stopped. */
@@ -164,7 +164,7 @@ async function childResources(
     noExtensions: true,
     noContextFiles: agent.name === "explore",
     extensionFactories: [childAccess(agent, checks)],
-    systemPrompt: agent.access === "read-only" ? agent.prompt + checksPrompt(checks) : agent.prompt,
+    systemPrompt: agent.access === "read-only" ? agent.prompt + READ_ONLY_PROMPT + checksPrompt(checks) : agent.prompt,
   });
   await loader.reload();
   return loader;

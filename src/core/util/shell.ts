@@ -1,3 +1,5 @@
+import { isAbsolute, normalize, sep } from "node:path";
+
 /** One command of a bash line: its words, and the files its `<` redirects read. */
 export type Segment = { words: string[]; inputs: string[] };
 
@@ -170,37 +172,81 @@ export function tokenize(command: string): Segment[] | undefined {
 /**
  * True only for a command that can't write files or run another program, so Plan can run it without asking. Strict on
  * purpose: a false only costs a confirm. Every segment's first word must be a known reader (or `cd`) whose arguments
- * pass its check; anything else, wrappers like `env` and `xargs` included, is false. A segment with an unquoted glob passes
- * only for a plain reader: the glob can expand to a file named like a flag, as `find *` does with a file `-delete`.
+ * pass its check, or a `true`/`:` no-op directly after a read-only one; anything else, wrappers like `env` and `xargs`
+ * included, is false. A segment with an unquoted glob passes only for a plain reader: the glob can expand to a file
+ * named like a flag, as `find *` does with a file `-delete`.
  */
 export function isReadOnlyCommand(command: string): boolean {
   const scanned = scan(command);
-  if (scanned === undefined || scanned.segments.length === 0) return false;
-  return scanned.segments.every((segment, i) => isReadOnlySegment(segment, scanned.globbed[i]));
+  return scanned !== undefined && scanned.segments.length > 0 && everySegmentReads(scanned);
 }
 
 /**
- * `isReadOnlyCommand`, except that a segment that is exactly one of `checks` (the user's approved check commands) also
- * passes, unless a `cd` comes before it: the check would then run in another folder. Redirects need no check of their
- * own, since `scan` refuses every output redirect but `>/dev/null`.
+ * `isReadOnlyCommand`, except that a segment running one of `checks` (the user's approved check commands) also passes,
+ * as does a `cd` that stays inside `root`, so a check may run in a subfolder, in a chain of checks, with a leading
+ * `TZ=`, and with extra file names. A check may carry no other flag, glob, input, or output redirect, since any of
+ * those could make it write.
  */
-export function isReadOnlyCommandWithChecks(command: string, checks: readonly string[]): boolean {
+export function isReadOnlyCommandWithChecks(command: string, checks: readonly string[], root: string): boolean {
   const scanned = scan(command);
   if (scanned === undefined || scanned.segments.length === 0) return false;
+  if (scanned.segments.some(({ words: [name, ...args] }) => name === "cd" && !cdStaysInside(args, root))) return false;
 
-  // Words joined on a character no command holds, so `a b` and `a` `b` never match.
-  const approved = new Set(
-    checks.flatMap((check) => {
-      const [only, ...rest] = tokenize(check) ?? [];
-      return only && rest.length === 0 ? [only.words.join("\0")] : [];
-    }),
-  );
-  let changedFolder = false;
-  return scanned.segments.every((segment, i) => {
-    const isCheck = !changedFolder && segment.inputs.length === 0 && approved.has(segment.words.join("\0"));
-    if (segment.words[0] === "cd") changedFolder = true;
-    return isCheck || isReadOnlySegment(segment, scanned.globbed[i]);
+  const approved = checks.flatMap((check) => {
+    const [only, ...rest] = tokenize(check) ?? [];
+    return only && rest.length === 0 && only.inputs.length === 0 ? [only.words] : [];
   });
+  return everySegmentReads(
+    scanned,
+    (segment, i) => segment.inputs.length === 0 && !scanned.globbed[i] && isApprovedCheck(segment.words, approved),
+  );
+}
+
+/**
+ * The check both matchers share: every segment reads. `allows` may pass a segment that isn't read-only, such as an
+ * approved check, but such a segment never counts as read-only for the no-op that may follow it.
+ */
+function everySegmentReads(
+  { segments, globbed }: Scan,
+  allows?: (segment: Segment, index: number) => boolean,
+): boolean {
+  let previousRead = false;
+  return segments.every((segment, i) => {
+    const readOnly = isReadOnlySegment(segment, globbed[i]) || (previousRead && isNoop(segment, globbed[i]));
+    previousRead = readOnly;
+    return readOnly || (allows?.(segment, i) ?? false);
+  });
+}
+
+/** `true` or `:` alone: bash's success no-op, which only counts right after a read-only segment. */
+function isNoop({ words }: Segment, globbed = false): boolean {
+  return !globbed && words.length === 1 && (words[0] === "true" || words[0] === ":");
+}
+
+/** True when `words` run one of `checks`, allowing a leading `TZ=` and extra file names, but no other flag. */
+function isApprovedCheck(words: string[], checks: readonly string[][]): boolean {
+  const own = words[0]?.startsWith("TZ=") ? words.slice(1) : words;
+  return checks.some((check) => check.every((word, i) => own[i] === word) && own.slice(check.length).every(isExtra));
+}
+
+/** A word a check may add after itself: `--`, or a file name. A flag could make the check write. */
+function isExtra(word: string): boolean {
+  return word === "--" || !word.startsWith("-");
+}
+
+/**
+ * True when a `cd` before an approved check can't leave the project: one operand, not `-` (the last folder) or `~`
+ * (home), absolute only inside `root` once normalized (`/project/../x` lands in `/x`), and relative without a `..`
+ * step. Text only, like the folder guard.
+ */
+function cdStaysInside(args: string[], root: string): boolean {
+  const [only, ...rest] = args;
+  if (only === undefined || rest.length > 0 || only.startsWith("-") || only.startsWith("~")) return false;
+  if (isAbsolute(only)) {
+    const target = normalize(only);
+    return target === root || target.startsWith(root + sep);
+  }
+  return !only.split(sep).includes("..");
 }
 
 /** One segment of `isReadOnlyCommand`: a known reader whose arguments pass, and a glob only for a plain reader. */
@@ -438,7 +484,19 @@ function git(words: string[]): boolean {
   return GIT_SUBCOMMANDS.get(sub)?.(args) ?? false;
 }
 
-/** `sed -n 'Np'` or `sed -n 'N,Mp'` (`$` for the last line), then files. Rejects `w`, `-i`, `-e`, …. */
+/** One `sed` address: a line number, `$`, or `/regex/`, where an escaped or non-slash character keeps the regex open. */
+const SED_ADDRESS = String.raw`(?:\d+|\$|\/(?:[^\/\\]|\\.)*\/)`;
+
+/** A `sed` print command: `<address>p` or `<address>,<address>p`. */
+const SED_PRINT = new RegExp(`^${SED_ADDRESS}(?:,${SED_ADDRESS})?p$`);
+
+/** `sed -n` with a print-only script, then files. Writes (`w`, `-i`), `e`, `s`, and `-e` ask. */
 function sed([n, script = "", ...files]: string[]): boolean {
-  return n === "-n" && /^(\d+|\$)(,(\d+|\$))?p$/.test(script) && files.every((f) => !f.startsWith("-"));
+  return n === "-n" && isPrintScript(script) && files.every((f) => !f.startsWith("-"));
+}
+
+/** A script of `;`-separated print commands, none empty: `15,45p;100,130p`, `/a/,/b/p;1,3p`. */
+function isPrintScript(script: string): boolean {
+  const pieces = script.split(";").filter((piece) => piece !== "");
+  return pieces.length > 0 && pieces.every((piece) => SED_PRINT.test(piece));
 }

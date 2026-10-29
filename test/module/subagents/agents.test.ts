@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deleteAgent,
@@ -49,6 +50,25 @@ describe("parseAgentFile", () => {
       tools: ["read", "bash"],
       prompt: "Prompt",
     });
+  });
+});
+
+describe("builtin prompts", () => {
+  const folder = fileURLToPath(new URL("../../../src/module/subagents/builtins/", import.meta.url));
+  const names = ["architect", "developer", "explore", "general", "reviewer"];
+
+  it("never names AGENTS.md, which the model would go looking for", async () => {
+    for (const name of names) {
+      expect(await readFile(join(folder, `${name}.md`), "utf8"), name).not.toContain("AGENTS.md");
+    }
+  });
+
+  it("points general and developer at the project instructions in their context", async () => {
+    for (const name of ["general", "developer"]) {
+      expect(await readFile(join(folder, `${name}.md`), "utf8"), name).toContain(
+        "project instructions in your context",
+      );
+    }
   });
 });
 

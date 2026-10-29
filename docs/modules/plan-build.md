@@ -163,14 +163,19 @@ checks only the first word plus a denylist, so `ls; node …` and the 3a test ca
   with a check below it asks, because bash expands the glob to file names, and a file named like a flag gets past the
   check: `find *` in a directory holding a file `-delete` runs `find -delete …`. A quoted pattern (`-name '*.ts'`) is
   fine.
+- A `true` or `:` alone is read-only too, but only directly after a read-only segment, since neither can write:
+  `rg -n foo || true` and `rg -n foo src || :` run unasked. After a segment that asked (`npm run check || true`) it
+  changes nothing, since the ask covers the whole line.
 - The first word of every segment must be listed below, so wrappers (`env`, `xargs`, `sh`, `sudo`, `timeout`, …),
   `FOO=1 cmd`, and `/bin/cat` ask without a separate list.
 - Plain readers: `cat head tail wc ls pwd stat du df which type whoami id date uname echo printf cut tr nl basename
   dirname realpath readlink cmp comm diff jq grep`.
 - Allowed except: `tree` (`-o`), `file` (`-C`), `find` (`-delete`, `-exec`, `-execdir`, `-ok`, `-okdir`, `-fprint`,
   `-fprint0`, `-fprintf`, `-fls`), `fd` (`-x`, `-X`, `--exec`, `--exec-batch`), `rg` (`--pre`, `--hostname-bin`),
-  `sort` (`-o`, `--output`, `--compress-program`), `uniq` (more than one operand), `sed` (only `sed -n 'Np'` or
-  `'N,Mp'`, `$` for the last line, then files), `git` (below), `npm` (`ls`, `list`, `view`, `info`, `outdated`).
+  `sort` (`-o`, `--output`, `--compress-program`), `uniq` (more than one operand), `sed` (only `sed -n` with a print
+  script: `;`-separated `<address>p` or `<address>,<address>p`, where an address is a line number, `$`, or `/regex/`;
+  then files, so `sed -n '15,45p;100,130p'` and `sed -n '/a/,/b/p'` run and `s`, `w`, `e`, `-e`, `-i` ask), `git`
+  (below), `npm` (`ls`, `list`, `view`, `info`, `outdated`).
 - `git`: `--no-pager`, `-C <dir>` (`-C<dir>`), `--git-dir[=<dir>]` and `--work-tree[=<dir>]` may come before the
   subcommand, in any order; any other global option (`-c`, `-p`, …) asks. Read subcommands: `status
   log show diff blame ls-files ls-tree rev-parse describe shortlog`, and `grep` without `-O`. `--output` asks
@@ -308,6 +313,13 @@ built it in a sub-folder.
     instructions in your context", and, when there are none, "the project has none: nothing above this folder is
     yours to look for". The folder guard still asks about a `find ..`; the prompt is what keeps the model from going
     there. Live 2026-10-29: a fresh Build asked about the project's conventions read only the project's files.
+14. **Built 2026-10-29** (fixes queue Q3, [roadmap](../roadmap.md) row 28): the shell check Plan shares with
+    read-only children accepts two more shapes that couldn't write: a `sed -n` script of `;`-separated `<address>p`
+    or `<address>,<address>p` print commands, with a line number, `$`, or `/regex/` as an address, and a `true` or
+    `:` alone right after a read-only segment. In the job-search-hub run those were two of the refused commands;
+    `sed` was already a reader but only took one `Np` or `N,Mp`. `w`, `W`, `r`, `R`, `e`, `s`, `y`, `-e`, `-i`,
+    step and `+N` addresses, and braces still ask. The no-op never counts after an approved check. See the check
+    tables in `test/core/util/shell.test.ts`.
 
 ## Open questions
 

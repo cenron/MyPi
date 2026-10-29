@@ -1,6 +1,6 @@
 import type { ExtensionContext, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { checksPrompt, childAccess } from "#module/subagents/access";
+import { checksPrompt, childAccess, READ_ONLY_PROMPT } from "#module/subagents/access";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { fakeSession } from "../../fakes";
 
@@ -66,24 +66,15 @@ describe("child access", () => {
 });
 
 describe("a read-only child's checks", () => {
-  const CHECKS = ["npm run check"];
+  const CHECKS = ["npm run lint", "npm test -- --run"];
 
   it.each([
-    ["an approved check, as written", "npm run check", true],
-    ["an approved check with spaces around it", "  npm run check ", true],
-    ["an approved check chained with readers", "git diff --check && npm run check", true],
-    ["an approved check piped to a reader with fd duplication", "npm run check 2>&1 | tail -40", true],
-    ["an approved check with more arguments", "npm run check -- --watch", false],
-    ["an approved check redirected to a file", "npm run check > out.txt", false],
-    ["a reader with output redirected to null, as in Plan", "ls > /dev/null", true],
-    ["an approved check with stderr dropped", "npm run check 2>/dev/null", true],
-    ["an approved check after a reader that drops stderr", "rg foo 2>/dev/null && npm run check", true],
-    ["an approved check after cd", "cd .. && npm run check", false],
-    ["an approved check after a local cd", "cd . && npm run check", false],
-    ["an approved check chained with a writer", "npm run check && npm install", false],
-    ["a command that isn't approved", "npm test", false],
-    ["a read-only command, as before", "ls", true],
-  ])("runs %s: %s", async (_name, command, runs) => {
+    ["an approved check", "npm run lint", true],
+    ["an approved check after a cd inside the project", "cd frontend && npm run lint", true],
+    ["an approved check with a file name", "npm test -- --run a.test.ts", true],
+    ["an approved check after cd ..", "cd .. && npm run lint", false],
+    ["an approved check chained with a writer", "npm run lint && npm install", false],
+  ])("%s: %s", async (_name, command, runs) => {
     const verdict = await call("read-only", "bash", { command }, CHECKS);
     if (runs) {
       expect(verdict).toBeUndefined();
@@ -95,8 +86,14 @@ describe("a read-only child's checks", () => {
   it("names the checks in the prompt, and adds nothing without them", () => {
     expect(checksPrompt([])).toBe("");
     expect(checksPrompt(["npm test", "npm run lint"])).toContain("`npm test`, `npm run lint`");
-    expect(checksPrompt(["npm test"])).toContain(
-      "each exactly as written, alone or chained with read-only commands (no extra arguments or output redirects)",
-    );
+    expect(checksPrompt(["npm test"])).toContain("a `cd` inside the project");
+  });
+});
+
+describe("READ_ONLY_PROMPT", () => {
+  it("names the tools to read with and the shapes bash refuses", () => {
+    for (const tool of ["`read`", "`grep`", "`find`", "`ls`", "xargs"]) {
+      expect(READ_ONLY_PROMPT).toContain(tool);
+    }
   });
 });
