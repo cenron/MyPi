@@ -184,6 +184,32 @@ Dated, with the window and model; newest last. Each says what was decided.
   other failures; then start over from an empty history (the sessions indexed here went to the Trash) and measure the
   next work. Still open: a date or per-milestone window for `/analytics`, and herdr usage errors.
 
+- **2026-10-29, the first project that isn't MyPi** (job-search-hub frontend, 2026-10-28 08:46 to 2026-10-29 04:10,
+  gpt-6-luna, high; subagents high or medium; Claude answered pi's questions and verified each commit): 35 main
+  sessions and 89 subagent runs built a full React frontend (60 commits, about 10k lines of app code plus 4.7k of tests, 146 tests) for $10.36 at list
+  prices; subagents were $0.69 (7%). Cache read was 95%. Findings, with the cwd as the filter (the report has none yet):
+  - **One step per session pays.** 26 compactions; 17 came from the two runs where steps were piled into one session
+    (10 and 7 compactions, $2.34 and $1.68). After the switch to `/new` per step, 6 build sessions had 5 compactions,
+    and only the two largest steps (L, and M's 46 fixes) compacted. Every long session peaked at ~192k, the
+    compaction line.
+  - **What pi's checks missed, a browser found.** pi's own verification (tests, the done check's 22 passes and 3
+    reports, reviewer subagents) passed every step, then a Chrome walkthrough found 46 problems, and the re-check 7 more.
+    One fix (MSW self-heal) passed its tests twice while still broken live. Live checks in a browser stay Claude's job.
+  - **Subagents hit walls.** 57 of the 59 real `bash` failures were "no one can give it here (no UI)" refusals inside
+    read-only subagents. Developer writers stopped at partial scope several times, worked in worktrees without
+    `node_modules` or the git-ignored `.pi/plans/` they were pointed at, and `subagent_apply` refused overlapping
+    patches quietly enough to be read as success.
+  - **`edit` fails 15% of the time** (218 of 1,477), nearly all "could not find the exact text": edits against a stale
+    read of a file pi or a writer had changed. 35 `read` failures were guessed paths that don't exist.
+  - **`lsp` share 31%** (120 `lsp`, 270 code searches) on a TypeScript frontend, against 53–60% on MyPi's self-builds.
+  - **Friction:** 14 folder-guard dialogs (2 declined) and 1 Plan dialog. The false ones: pi's own job and bash logs
+    in the temp folder, `find ..` for `AGENTS.md` at the start of each build, import specifiers in code text, and
+    `git -C <dir>` not read as read-only. `ask_user`'s "Switch to build mode" option didn't switch.
+  - Playwright's `browser_run_code_unsafe` failed 31% (26 of 83).
+
+  To decide: which of the subagent fixes come first (refusals, partial writers, `subagent_apply` merging, worktree
+  setup), the folder-guard false alarms, and a project (cwd) filter for `/analytics`.
+
 ## What pi offers
 
 Checked against the installed pi 1.2.0 (2026-10-22):
