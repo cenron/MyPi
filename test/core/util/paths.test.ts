@@ -88,10 +88,75 @@ describe("commandPaths", () => {
       'cat $(ls /etc) "$HOME/.ssh" ${HOME}',
       ["/etc", "/home/me/.ssh", "/home/me"],
     ],
+    // Found in job-search-hub (2026-10-28): the raw text lost the `cd`, naming a place nothing reaches.
+    [
+      "a cd before a command the parser gives up on",
+      'cd frontend && cat ../shared/x.ts "$X"',
+      ["/home/me/work/app/frontend", "/home/me/work/app/shared/x.ts"],
+    ],
+    [
+      "a cd's folder, then a path above the project",
+      'cd frontend && cat ../../x "$X"',
+      ["/home/me/work/app/frontend", "/home/me/work/x"],
+    ],
+    [
+      "a cd after another command",
+      'npx x && cd frontend && cat ../shared/x.ts "$X"',
+      ["/home/me/work/app/frontend", "/home/me/work/app/shared/x.ts"],
+    ],
+    [
+      "a cd, then a heredoc a program runs",
+      "cd frontend && python3 - <<'PY'\nopen('../shared/x.ts')\nPY",
+      ["/home/me/work/app/frontend", "/home/me/work/app/shared/x.ts"],
+    ],
+    // The raw text can't tell where these go, so they leave the folder alone.
+    [
+      "a cd whose target is a variable (not followed)",
+      'cd "$DIR" && cat ../shared/x.ts',
+      ["/home/me/work/shared/x.ts"],
+    ],
+    ["cd - in the raw text (not followed)", 'cd - && cat ../shared/x.ts "$X"', ["/home/me/work/shared/x.ts"]],
+    // A cd-shaped word later in a command is text, not a `cd`; a bare cd still goes home.
+    [
+      "a cd-shaped word that isn't the command (not followed)",
+      'echo cd frontend && cat ../shared/x.ts "$X"',
+      ["/home/me/work/shared/x.ts"],
+    ],
+    ["a bare cd in the raw text", 'cd && cat ../x "$X"', ["/home/me", "/home/x"]],
     ["the raw text's redirect targets and assignments", "ls > /tmp/out; X=../y cmd", ["/tmp/out", "/home/me/work/y"]],
     ["a raw < target glued to its path", "cat </etc/hosts $(x)", ["/etc/hosts"]],
     ["a quoted path in the raw text, by its value", 'cmd "--file=/etc/x" "$X"', ["/etc/x"]],
     ["a path a heredoc script names", "python3 - <<'PY'\nopen('/etc/passwd')\nPY", ["/etc/passwd"]],
+    // A heredoc that runs is a command, and one bash expands isn't only text yet.
+    ["a specifier in code the heredoc runs", "node <<'EOF'\nrequire('../../libs/x')\nEOF", ["/home/me/libs/x"]],
+    ["a shell heredoc that runs and redirects", "bash <<'EOF' > out.log\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    ["a heredoc expanded before a writer sees it", "cat > src/a.ts <<EOF\n$(cat /etc/passwd)\nEOF", ["/etc/passwd"]],
+    ["a heredoc piped into a shell", "cat <<'EOF' | sh\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    ["a heredoc a program runs", "python3 - > out.ts <<'EOF'\nopen('/etc/passwd')\nEOF", ["/etc/passwd"]],
+    // A script written and run in one call still names the paths it runs against.
+    [
+      "a written script run in the same call",
+      "cat > run.sh <<'EOF'\ncat ~/.ssh/id\nEOF\nbash run.sh",
+      ["/home/me/.ssh/id"],
+    ],
+    [
+      "a written script run from the opener line",
+      "cat > run.sh <<'EOF' && bash run.sh\ncat ~/.ssh/id\nEOF",
+      ["/home/me/.ssh/id"],
+    ],
+    // A program the line names takes the body: another command, or a process substitution on either side.
+    ["a chained command after the writer", "cat a && bash <<'EOF'\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    ["a second command before the writer", "echo hi; python3 - <<'EOF'\nopen('/etc/passwd')\nEOF", ["/etc/passwd"]],
+    ["a process substitution in the writer's command", "tee >(bash) <<'EOF'\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    ["a process substitution as the redirect target", "cat > >(sh) <<'EOF'\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    ["a process substitution after the marker", "cat <<'EOF' > >(sh)\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    // A pipe glued to the redirect hands the body to `sh`, which runs it.
+    ["a pipe glued to the marker's redirect", "cat <<'EOF' >&1|sh\ncat ~/.ssh/id\nEOF", ["/home/me/.ssh/id"]],
+    [
+      "a pipe glued to a redirect target",
+      "cat <<'EOF' >/dev/stdout|sh\ncat ~/.ssh/id\nEOF",
+      ["/dev/stdout", "/home/me/.ssh/id"],
+    ],
     ["sed's file, past -e scripts", "sed -e '/x/d' -e 's/a/b/' /etc/hosts", ["/etc/hosts"]],
     ["sed's file, past a -ne script", "sed -ne 's/a/b/p' /etc/hosts", ["/etc/hosts"]],
     ["sed's file, past its first-operand script", "sed 's/a/b/' /etc/hosts", ["/etc/hosts"]],
@@ -114,6 +179,13 @@ describe("commandPaths", () => {
     ["a quoted pattern that starts with /", "git diff | grep -E '/Users/|/private/'"],
     ["the same pattern when tokenize gives up", "git diff | grep -E '/Users/|/private/' || test \"$?\" -eq 1"],
     ["a tag in a heredoc script's regex", "python3 - <<'PY'\nre.findall(r'<cwd>.*?</cwd>', s)\nPY"],
+    // A heredoc a plain writer takes is the file's content or output, not a command: its code names no place.
+    ["an import in the file a heredoc writes", "cat > src/a.ts <<'EOF'\nimport { x } from '../../libs/x';\nEOF"],
+    [
+      "the same with an unquoted delimiter and nothing to expand",
+      "cat > src/a.ts <<EOF\nimport { x } from '../../libs/x';\nEOF",
+    ],
+    ["a tee'd file", "tee src/a.ts <<'EOF'\nimport { x } from '../../libs/x';\nEOF"],
     ["tags in a heredoc's markup", "cat > page.html <<'EOF'\n<div><b>x</b></div>\nEOF"],
     // Found building analytics with DeepSeek (2026-10-26): each asked about a place nobody reaches.
     ["a sed address range that starts with /", "herdr pane read x | sed -n '/Model usage/,$p' | head -55"],

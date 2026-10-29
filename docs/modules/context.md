@@ -81,9 +81,12 @@ check", "Background job", or "Subagent job" are MyPi's, not the user's, and ever
 
 ### D: re-check the principles before "done"
 
-One line in plan-build's Build section: before saying a slice is done, re-read "Before a slice is done" in
-`docs/principles.md` (or the project's own equivalent named in `AGENTS.md`) and check the diff against it. Prompt
-only. The done check already runs the tests; this covers what tests can't (names, size, defensive code).
+Two lines in plan-build's Build section: before saying a slice is done, re-read "Before a slice is done" in
+`docs/principles.md` (or the project's own equivalent) named in the project instructions in the context, and check the
+diff against it; with no project instructions in the context, the project has none, and nothing above the folder is
+theirs to look for. Prompt only. The done check already runs the tests; this covers what tests can't (names, size,
+defensive code). Until 2026-10-29 the line named the project's `AGENTS.md`, and the model searched above the project
+for it although the line said not to (plan-build [slice 13](plan-build.md#slices)).
 
 ### E: clear old tool results
 

@@ -5,7 +5,7 @@ Once the plan is settled, call submit_plan with a short title and the full plan:
 
 export function buildPrompt(plan?: string): string {
   const handoff = plan ? ` Implementing ${plan}; re-read it when unsure what's left.` : "";
-  return `Build mode is active. Implement the agreed plan, or handle the request normally if there isn't one.${handoff} Before saying the work is done, re-read the principles or before-done checklist the project's AGENTS.md names, if it has one, and check the diff against it. pi puts a project's AGENTS.md in your context when there is one, so don't search for it.`;
+  return `Build mode is active. Implement the agreed plan, or handle the request normally if there isn't one.${handoff} Before saying the work is done, re-read the principles or before-done checklist named in the project instructions in your context, and check the diff against it. If no project instructions are in your context, the project has none: nothing above this folder is yours to look for.`;
 }
 
 /** The first message of a session started by `/plan implement`, taken from Codex's plan hand-off. */

@@ -55,7 +55,7 @@ describe("PlanBuildModule", () => {
     expect(setStatus).toHaveBeenCalledWith("mypi-plan-build", "<dim>BUILD");
     expect(promptSection(session)).toBe(buildPrompt());
     expect(promptSection(session)).toContain("before-done checklist");
-    expect(promptSection(session)).toContain("if it has one");
+    expect(promptSection(session)).toContain("If no project instructions are in your context");
   });
 
   it("restores the implementing plan path from saved state", () => {
@@ -237,6 +237,13 @@ describe("PlanBuildModule", () => {
       await run();
       expect(promptSection(session)).toBe(PLAN_PROMPT);
       expect(promptSection(session)).not.toContain("Implementing");
+    });
+
+    // Found 2026-10-28: naming AGENTS.md as a file to fetch made the model search above the project for it.
+    it("keys on the project instructions in the context, not a file to fetch", () => {
+      expect(buildPrompt()).toContain("project instructions in your context");
+      expect(buildPrompt()).toContain("nothing above this folder is yours to look for");
+      expect(buildPrompt()).not.toContain("AGENTS.md");
     });
   });
 

@@ -36,6 +36,21 @@ const SYMBOLS_ONLY = /^[/*]+$/;
 /** An HTML or XML tag (`<cwd>`, `</cwd>`), which in a heredoc's body is markup, not a redirect. */
 const MARKUP_TAG = /<\/?[A-Za-z][\w:-]*>/g;
 
+/** A heredoc's opener line when a plain writer takes its body, at the start or after `cd <word> &&`. */
+const WRITTEN_HEREDOC = /^\s*(?:cd\s+\S+\s*&&\s*)?(?:cat|tee|printf|echo)\b/;
+
+/** A process substitution or a backtick in the opener's command: bash runs it, and it can take the body. */
+const RUNS_INLINE = /[()`]/;
+
+/** A separator after the writer: another command on the line, which takes the body instead. */
+const CHAINED_COMMAND = /[;&|]/;
+
+/** A heredoc opener: `<<`, an optional `-`, then its delimiter, quoted (`'EOF'`, `"EOF"`) or escaped (`\EOF`). */
+const HEREDOC_OPEN = /<<(-?)\s*(\\?)(['"]?)([A-Za-z_]\w*)\3/;
+
+/** What may follow a heredoc's delimiter on its opener line: redirects to a word, which put the body in a file. */
+const WRITTEN_AFTER_MARKER = /^\s*(?:[0-9&]?>>?\s*[^\s()|;&]+\s*)*$/;
+
 /**
  * Resolves a tool's `path` argument to the file pi's edit and write will touch. Mirrors pi's unexported
  * `resolveToCwd` (`normalizePath`/`resolvePath` in pi's `dist/utils/paths.js`), in the same order, minus its win32
@@ -138,23 +153,118 @@ function segmentPaths(segments: Segment[], cwd: string, home: string): string[] 
 }
 
 /**
- * The path words in text `tokenize` gave up on. A quoted string with no spaces stays whole apart from `=` and
- * separators, so a pattern (`'/a/|/b/'`) or a tag (`'</cwd>'`) isn't split into paths; anything with spaces, quoted
- * or not, is split everywhere, so a stray apostrophe in a heredoc can't hide a path behind a long "quoted" span.
+ * The path words in text `tokenize` gave up on, resolved from the folder a `cd` moved to as `segmentPaths` does for
+ * text it can read. A quoted string with no spaces stays whole apart from `=` and separators, so a pattern
+ * (`'/a/|/b/'`) or a tag (`'</cwd>'`) isn't split into paths; anything with spaces, quoted or not, is split
+ * everywhere, so a stray apostrophe in a heredoc can't hide a path behind a long "quoted" span.
  */
 function rawPaths(command: string, cwd: string, home: string): string[] {
-  const parts = command.replace(HOME_VARIABLE, "~").match(RAW_PART) ?? [];
-  const words = parts.flatMap((part) => {
-    const quoted = part.length > 1 && (part.startsWith("'") || part.startsWith('"'));
-    const text = quoted ? part.slice(1, -1) : part;
-    if (quoted && !/\s/.test(text)) return text.split(QUOTED_WORD_BREAK);
-    return text.replace(MARKUP_TAG, " ").split(RAW_WORD_BREAK);
-  });
+  const paths: string[] = [];
+  let dir = cwd;
 
-  // A heredoc's code divides and comments (`a / b`, `/**`); those words aren't places.
-  return words
-    .filter((word) => isPathWord(word) && !SYMBOLS_ONLY.test(word))
-    .map((word) => resolveToolPath(word, cwd, home));
+  for (const text of rawSegments(blankWrittenHeredocs(command.replace(HOME_VARIABLE, "~")))) {
+    const words = rawWords(text).filter(Boolean);
+    const [name = "", ...args] = words;
+    // A backtick names a folder only when the command runs, like a `$dir` target, so neither moves `dir`.
+    if (name === "cd" && !text.includes("`")) {
+      const target = cdTarget(args);
+      // `cd -` returns to the shell's previous folder, which no word names.
+      if (target === undefined || (target !== "-" && !/[$`]/.test(target))) {
+        dir = resolveToolPath(target ?? "~", dir, home);
+        paths.push(dir);
+      }
+      continue;
+    }
+
+    // A heredoc's code divides and comments (`a / b`, `/**`); those words aren't places.
+    for (const word of words) {
+      if (isPathWord(word) && !SYMBOLS_ONLY.test(word)) paths.push(resolveToolPath(word, dir, home));
+    }
+  }
+
+  return paths;
+}
+
+/**
+ * The raw text's words: single-quoted strings, double-quoted strings, then the runs between (or a lone quote), split
+ * as the fallback always has.
+ */
+function rawWords(text: string): string[] {
+  const parts = text.match(RAW_PART) ?? [];
+  return parts.flatMap((part) => {
+    const quoted = isQuoted(part);
+    const inner = quoted ? part.slice(1, -1) : part;
+    if (quoted && !/\s/.test(inner)) return inner.split(QUOTED_WORD_BREAK);
+    return inner.replace(MARKUP_TAG, " ").split(RAW_WORD_BREAK);
+  });
+}
+
+/** True for a whole quoted string, as `RAW_PART` gives one; a lone quote, with no partner, isn't. */
+function isQuoted(part: string): boolean {
+  return part.length > 1 && (part.startsWith("'") || part.startsWith('"'));
+}
+
+/**
+ * The raw text's commands in order, split where a new one starts: a line start, or an unquoted `&&`, `||`, `;`, `|`,
+ * or `&`. A quoted string stays in one piece, as it does in `rawWords`, so a separator inside quotes isn't one.
+ */
+function rawSegments(text: string): string[] {
+  const segments = [""];
+  for (const part of text.match(RAW_PART) ?? []) {
+    const pieces = isQuoted(part) ? [part] : part.split(/(?<=[;|&\n])/);
+    segments[segments.length - 1] += pieces[0] ?? "";
+    segments.push(...pieces.slice(1));
+  }
+  return segments;
+}
+
+/**
+ * `text` with the body of every heredoc that is only written, not run, blanked (its lines kept, so later text stays
+ * where it was). A plain writer's body is data, code for a file or text on stdout, so the paths its code names aren't
+ * places the command reaches. A body that runs (`bash`, `node`, `python3`), one bash expands (an unquoted delimiter
+ * with `$` or a backtick in it), one piped on, and one whose call carries on after it all stay: those paths can be
+ * reached.
+ */
+function blankWrittenHeredocs(text: string): string {
+  const lines = text.split("\n");
+  const blanked = [...lines];
+
+  for (let open = 0; open < lines.length; open++) {
+    const line = lines[open] ?? "";
+    const marker = HEREDOC_OPEN.exec(line);
+    if (!marker) continue;
+
+    const [, dash = "", escaped = "", quote = "", delimiter = ""] = marker;
+    const before = line.slice(0, marker.index);
+    const after = line.slice(marker.index + marker[0].length);
+    // `<<<` is a herestring, and a quote before `<<` makes the marker text.
+    if (line[marker.index - 1] === "<" || /['"]/.test(before)) continue;
+    const writer = WRITTEN_HEREDOC.exec(before);
+    if (!writer || !WRITTEN_AFTER_MARKER.test(after)) continue;
+    // One writer's command, nothing chained after it, and no process substitution on either side: `cat a && bash`,
+    // `echo hi; python3` and `tee >(bash)` all hand the body to a program that runs what it names.
+    if (RUNS_INLINE.test(before) || CHAINED_COMMAND.test(before.slice(writer[0].length))) continue;
+
+    let close = -1;
+    for (let index = open + 1; index < lines.length; index++) {
+      const candidate = lines[index] ?? "";
+      if ((dash === "-" ? candidate.replace(/^\t+/, "") : candidate) === delimiter) {
+        close = index;
+        break;
+      }
+    }
+    if (close < 0) continue;
+
+    // A command after the closing line runs the file: `cat > run.sh <<'EOF'` … `EOF` then `bash run.sh`.
+    if (lines.slice(close + 1).some((rest) => rest.trim() !== "")) continue;
+    // An unquoted, unescaped delimiter lets bash expand the body, so it isn't only text yet.
+    if (escaped === "" && quote === "" && lines.slice(open + 1, close).some((body) => /[$`]/.test(body))) continue;
+
+    for (let index = open + 1; index < close; index++) blanked[index] = "";
+    open = close;
+  }
+
+  return blanked.join("\n");
 }
 
 /**

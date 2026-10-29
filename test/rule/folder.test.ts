@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { getDocsPath, getExamplesPath, getReadmePath } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import type { ToolEnv } from "#core/tool-guard";
@@ -35,7 +35,10 @@ describe("FolderRule", () => {
     ["a skill folder from the prompt", "read", { path: "/home/me/.agents/skills/herdr/SKILL.md" }],
     ["a context file from the prompt", "read", { path: "../AGENTS.md" }],
     ["the temp folder", "read", { path: join(tmpdir(), "pi-bash-1.log") }],
+    ["pi's job log in the temp folder", "read", { path: join(tmpdir(), "pi-job-abc.log") }],
     ["the temp folder by its real path", "read", { path: join(realpathSync(tmpdir()), "mypi-x", "a.md") }],
+    ["pi's job log under /tmp", "read", { path: "/tmp/pi-job-abc.log" }],
+    ["pi's bash log under /tmp", "read", { path: "/tmp/pi-bash-abc.log" }],
     ["/tmp, by habit", "bash", { command: "mktemp -d /tmp/spike.XXXXXX" }],
     ["/private/tmp, where macOS's /tmp points", "read", { path: "/private/tmp/spike/a.md" }],
     ["a /dev stream", "write", { path: "/dev/null" }],
@@ -57,6 +60,11 @@ describe("FolderRule", () => {
       "bash",
       { command: "node <<'NODE'\ntext.matchAll(/^export\\s+(?:const|function)\\s+(\\w+)/gm)\nNODE" },
     ],
+    [
+      "a heredoc that writes a file whose code has a relative import",
+      "bash",
+      { command: "cd frontend && cat > src/a.ts <<'EOF'\nimport { x } from '../../libs/x'\nEOF" },
+    ],
   ])("allows %s", (_case, tool, input) => {
     expect(verdict(tool, input)).toEqual({ kind: "allow" });
   });
@@ -67,6 +75,18 @@ describe("FolderRule", () => {
     ["an absolute path elsewhere", "grep", { path: "/home/me/Documents" }, "/home/me/Documents"],
     ["a folder that only starts like the session's", "ls", { path: "/home/me/work/app-old" }, "/home/me/work/app-old"],
     ["a folder that only starts like /tmp", "ls", { path: "/tmpfoo" }, "/tmpfoo"],
+    [
+      "a mistyped temp folder",
+      "read",
+      { path: join(`${tmpdir()}-typo`, "pi-job-abc.log") },
+      join(`${tmpdir()}-typo`, "pi-job-abc.log"),
+    ],
+    [
+      "the folder above the temp folder",
+      "read",
+      { path: join(dirname(tmpdir()), "pi-job-abc.log") },
+      join(dirname(tmpdir()), "pi-job-abc.log"),
+    ],
     [
       "a skill pi didn't list",
       "read",
@@ -92,6 +112,13 @@ describe("FolderRule", () => {
       "write",
       { path: join(getDocsPath(), "extensions.md") },
       join(getDocsPath(), "extensions.md"),
+    ],
+    // The guard is right to ask; Build's prompt is what should stop the search.
+    [
+      "a command that searches above the project for AGENTS.md",
+      "bash",
+      { command: "find .. -name AGENTS.md" },
+      "/home/me/work",
     ],
   ])("asks for %s, naming the resolved path", (_case, tool, input, path) => {
     expect(verdict(tool, input)).toEqual(asks(path));

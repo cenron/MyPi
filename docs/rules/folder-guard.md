@@ -1,6 +1,6 @@
 # Folder guard
 
-**Status:** done (slices 1–3 done 2026-10-24, slices 4–6 done 2026-10-25)
+**Status:** done (slices 1–3 done 2026-10-24, slices 4–6 done 2026-10-25, slices 7–9 done 2026-10-26 to 2026-10-29)
 
 A built-in rule, not a module: it's always on, in every session (decided 2026-10-24). The code is
 `src/rule/folder.ts`.
@@ -65,7 +65,8 @@ user's other projects and personal files are none of the agent's business unless
   keep patterns and markup whole: a quoted string with no spaces is split only on `;`, `&`, parentheses, backticks,
   and `=`, not on `|`, `<`, or `>`; and HTML or XML tags (`<cwd>`, `</cwd>`) are dropped before splitting. A quoted
   span with spaces is split like the rest, so a stray apostrophe in a heredoc can't hide a path inside a long "quoted"
-  span.
+  span. A `cd` at the start of a command in that text moves where later words resolve, as it does in `tokenize`'s, and
+  the body of a heredoc only a plain writer takes is left out first: it's data, not a command ([slice 9](#slices)).
   In that split, words of slashes and stars alone (`/`, `/**`) aren't places: in a heredoc's code they divide and
   open comments (seen 2026-10-26, DeepSeek editing files through Python heredocs).
 - **`sed`'s scripts aren't paths:** each `-e` value (also in a cluster such as `-ne`), or the first operand when no
@@ -91,6 +92,19 @@ Known gaps in `bash`, accepted for a guard against wandering:
 - **Patterns and markup used to read as paths;** [slice 5](#slices) fixed it. What's left: a tag-shaped redirect
   with no spaces (`cat </etc>out`) loses its target to the tag rule, and a quoted path holding `|`, `<`, or `>` with
   no spaces isn't checked. Both are rare enough to accept.
+- **A written heredoc that stays checked.** Its body is left out only when a plain writer at the line's command
+  position takes it and the call ends at its closing line. A writer behind another command
+  (`mkdir -p dir && cat > f <<'EOF'`), a command chained after the writer (`cat a && bash <<'EOF'`), a process
+  substitution on either side (`tee >(bash) <<'EOF'`, `cat <<'EOF' > >(sh)`), a command after the closing line (a
+  script written and run in one call), and an unquoted delimiter whose body holds `$` or a backtick still name their
+  code's paths; live, a write-then-show call asked (2026-10-29).
+- **A `cd` is followed across every separator**, as `segmentPaths` already does: `cd sub | cat ../x`, `cd sub || cat
+  ../x`, `cd sub & cat ../x`, and a `cd` that fails before `;` resolve from the `cd`'s folder although bash runs them
+  from the old one. Accepted for a guard against wandering.
+- **A `cd` whose target is a variable** (`cd "$DIR"`), a backtick, or `-` isn't followed: the raw text can't name
+  the folder.
+- **Mistyped temp paths still ask** (the guard compares text, and a `T-typo` folder is somewhere else). Reading a
+  job's log through the job tools instead of a guessed path is [roadmap](../roadmap.md) row 36, not a guard change.
 
 ## Design in pi
 
@@ -189,6 +203,47 @@ finding a `tsconfig.json` above, say) are theirs and unchanged. See [lsp](../mod
    - **Built:** read `/`'s entries once when the rule loads; filter bash command paths whose first folder is absent. The pure root check receives its entry list. Paths from tool `path` inputs are unchanged (including `/tmpfoo`). Reads may also reach pi's exported docs, examples, and README paths; writes there still ask.
    - **Tests:** table cases cover the three false command patterns, real path cases, root filtering, pi's docs/examples/README reads, and a docs write. The `/tmpfoo` test remains an `ls` path-input case because this slice only filters bash command paths.
    - **Tried live 2026-10-28,** fresh pi in a throwaway git repo, Build: `rg` over `notes.md` containing `/quiet`, the Node regex heredoc, and reading the installed extensions docs about `registerToolRenderer` all ran without a folder question. `head -n 1 /etc/shells` asked `Reaches outside …: /etc/shells (and anything under it)`; the dialog was answered Yes.
+9. **Done 2026-10-29: four false alarms from the job-search-hub run** ([roadmap](../roadmap.md) row 32). Each was
+   probed first with made-up paths: two were real gaps in the guard, one (pi's own logs) was already allowed, and one
+   (`find ..`) was the guard behaving correctly while Build's prompt sent the model there. The guard's reach is
+   unchanged; every path a real command can name is still asked about.
+
+   | Case | Probe | Before | Now |
+   |---|---|---|---|
+   | pi's own logs | `read /tmp/pi-job-…`, `/tmp/pi-bash-…`, `<tmpdir>/pi-job-…` | allowed | allowed, now pinned; a mistyped `<tmpdir>-typo/…` and the folder above the temp folder still ask |
+   | `find ..` | `bash "find .. -name AGENTS.md"` | asks the parent, correctly | same; Build's prompt no longer points at a file to fetch |
+   | imports in written code | `cat > f <<'EOF'` with `from "../../libs/x"` | asks about a folder nothing reaches | no ask |
+   | `cd` in a compound command | `cd frontend && cat ../shared/x.ts "$X"` (the parser gives up on `$X`) | names `<cwd>/../shared/x.ts` | names `<cwd>/frontend` and `<cwd>/shared/x.ts` |
+
+   - **Built:** in `rawPaths` (`src/core/util/paths.ts`), the raw text is split into commands at line starts and
+     unquoted `&&`, `||`, `;`, `|`, and `&`, so a `cd` at a command's start moves where later words resolve, as
+     `segmentPaths` does; options are skipped, and `-`, a target holding `$` or a backtick, leaves the folder alone.
+     Before the split, the body of a heredoc that is only written, not run, is blanked (its lines kept, so later
+     text stays put): the writer is `cat`, `tee`, `printf`, or `echo` at the line's command position (after an
+     optional `cd <word> &&`), with nothing chained after it and no process substitution on either side of the
+     marker (`cat a && bash <<'EOF'`, `tee >(bash) <<'EOF'`, and `cat <<'EOF' > >(sh)` all keep their bodies checked);
+     nothing but a redirect to a word holding no `|`, `;`, or `&` follows the delimiter on that line
+     (`cat <<'EOF' >&1|sh` keeps its body checked); the delimiter (`<<-`, quoted, or escaped) has a closing line; the
+     delimiter is quoted or the body holds no `$` or backtick; and nothing but whitespace follows the closing line,
+     so a script written and run in the same call stays checked.
+   - **Not taken:** widening the temp allowance (no temp root, no `/var/folders` tree), an `@/`- or `from`-specific
+     import rule (`mv from "../x"` would slip through), and any allowance for `find ..`.
+   - **Tests:** `test/core/util/paths.test.ts` — four `cd` rows and two boundaries, three written-heredoc rows naming
+     nothing, five run/expanded/continued heredocs, two same-call script rows, and seven where another command, a
+     process substitution, or a glued pipe takes the body, all still naming; `test/rule/folder.test.ts` — the
+     `pi-job`/`pi-bash` logs allowed, the mistyped temp folder and its parent asking, the written heredoc allowed,
+     `find ..` asking. Removing the `cd` walk, the blanking, the writer/no-pipe check, the last-command check, the
+     chained-command check, the process-substitution guard, the redirect-target guard, or widening to the temp root
+     each failed its rows.
+   - **Tried live 2026-10-29,** fresh pi on gpt-6-luna at high in a throwaway git repo, Build:
+     `cat > frontend/src/b.ts <<'EOF'` writing `import … "../../../libs/y"` ran unasked;
+     `cd frontend && cat ../README.md; echo $?` ran unasked (the fallback resolved `../README.md` inside the
+     project); `find ../.. -name AGENTS.md` asked the folder above the temp folder (in a temp repo `..` itself is
+     the allowed temp folder), and No declined it; a background job's `pi-job-….log` read unasked, while `T-typo/…`
+     on the same name asked and No declined it; and after `/new` + `/plan build`, asked about the project's coding
+     conventions, the model read only the project's files and didn't look above it. A `mkdir -p frontend/src && cat
+     > frontend/src/a.ts <<'EOF'` with `cat` after it still asked: the writer isn't at the command position and the
+     call goes on (the gap above).
 
 ## Other harnesses
 

@@ -301,6 +301,13 @@ built it in a sub-folder.
     `-C`/`--git-dir`/`--work-tree` before the subcommand, so `git -C <dir> status` runs unasked; `PLAN_PROMPT` says the
     model can't switch modes itself, so it names `/plan build` or Shift+Tab instead of offering switching as an
     `ask_user` answer that does nothing (the pick comes back as text; only the user can switch).
+13. **Built 2026-10-29** (fixes queue Q2, [roadmap](../roadmap.md) row 32): Build's section keys on the project
+    instructions in the context instead of naming the project's `AGENTS.md`. On 2026-10-28 the model still ran
+    `find .. -name AGENTS.md` at the start of a build although the line said not to search: naming the file pointed
+    at something to fetch. Now it says "re-read the principles or before-done checklist named in the project
+    instructions in your context", and, when there are none, "the project has none: nothing above this folder is
+    yours to look for". The folder guard still asks about a `find ..`; the prompt is what keeps the model from going
+    there. Live 2026-10-29: a fresh Build asked about the project's conventions read only the project's files.
 
 ## Open questions
 
