@@ -22,13 +22,13 @@ async function fixture(nested = false) {
   await git(root, "init", "-b", "main");
   await git(root, "config", "user.name", "Fixture");
   await git(root, "config", "user.email", "fixture@example.invalid");
-  await writeFile(join(root, "file.txt"), "one\ntwo\nthree\n");
+  await writeFile(join(root, "file.txt"), BASE);
   await git(root, "add", "-A");
   await git(root, "commit", "-m", "base");
 
   const patches = join(root, PATCHES_DIR);
   await mkdir(patches, { recursive: true });
-  await writeFile(join(root, "file.txt"), "writer\ntwo\nthree\n");
+  await writeFile(join(root, "file.txt"), WRITER);
   await git(root, "add", "file.txt");
   const patch = await git(root, "diff", "--cached", "--binary", "HEAD");
   await writeFile(join(patches, "sub-developer-1.patch"), patch);
@@ -85,37 +85,77 @@ it("refuses without UI because user approval is required", async () => {
   await expect(call()).rejects.toThrow("needs the user's approval, and no one can give it here (no UI)");
 });
 
-it("asks with patch details, applies with three-way merge, and removes the handoff", async () => {
+it("applies with a 3-way merge when the checkout's edit is committed, stages it, and removes both files", async () => {
   const { call, fake, root, patches } = await fixture();
+  await writeFile(join(root, "file.txt"), withLine("parent edit"));
+  await git(root, "add", "file.txt");
+  await git(root, "commit", "-m", "independent edit");
   vi.mocked(fake.session.ctx.ui.select).mockResolvedValue(APPLY);
+
   const response = await call();
+
   const [title, choices] = fake.select.mock.calls[0] ?? [];
   expect(title).toContain("Apply the developer patch?");
   expect(title).toContain("Change the file");
   expect(title).toContain("file.txt | 2 +-");
   expect(title).toContain("Changed it.");
   expect(choices).toEqual(["Cancel", "Apply", "Drop"]);
-  expect(response.content[0]).toMatchObject({ type: "text", text: "Applied sub-developer-1. Files: file.txt." });
-  expect(await readFile(join(root, "file.txt"), "utf8")).toBe("writer\ntwo\nthree\n");
+  expect(response.content[0]).toMatchObject({
+    type: "text",
+    text: "Applied sub-developer-1 with a 3-way merge. Files: file.txt.",
+  });
+  expect(await readFile(join(root, "file.txt"), "utf8")).toBe(withLine("parent edit", "writer"));
+  expect(await git(root, "diff", "--cached", "--name-only")).toBe("file.txt\n");
   await expect(readFile(join(patches, "sub-developer-1.patch"))).rejects.toThrow();
   await expect(readFile(join(patches, "sub-developer-1.md"))).rejects.toThrow();
 });
 
-it("reports a clash without changing the checkout and keeps the patch and handoff", async () => {
+it("refuses a 3-way conflict with an error that names the file and keeps both files", async () => {
   const { call, fake, root, patches } = await fixture();
-  await writeFile(join(root, "file.txt"), "other\ntwo\nthree\n");
+  await writeFile(join(root, "file.txt"), withLine("ten", "other"));
   await git(root, "add", "file.txt");
   await git(root, "commit", "-m", "other edit");
   vi.mocked(fake.session.ctx.ui.select).mockResolvedValue(APPLY);
+
+  const refusal = call();
+
+  await expect(refusal).rejects.toThrow("file.txt");
+  await expect(refusal).rejects.toThrow("nothing was applied");
+  await expect(refusal).rejects.toThrow("resolve the conflict by hand");
+  expect(await readFile(join(root, "file.txt"), "utf8")).toBe(withLine("ten", "other"));
+  expect(await git(root, "ls-files", "-u", "--", "file.txt")).toBe("");
+  await expect(readFile(join(patches, "sub-developer-1.patch"))).resolves.toBeTruthy();
+  await expect(readFile(join(patches, "sub-developer-1.md"))).resolves.toBeTruthy();
+});
+
+it("falls back to a plain apply when the checkout's edit is uncommitted", async () => {
+  const { call, fake, root, patches } = await fixture();
+  await writeFile(join(root, "file.txt"), withLine("parent edit"));
+  vi.mocked(fake.session.ctx.ui.select).mockResolvedValue(APPLY);
+
   const response = await call();
+
   expect(response.content[0]).toMatchObject({
     type: "text",
-    text: expect.stringContaining(
-      "Could not apply sub-developer-1; the patch was kept.\nApplied patch to 'file.txt' with conflicts.",
-    ),
+    text: "Applied sub-developer-1 with a plain apply to your working tree (not staged). Files: file.txt.",
   });
-  expect(await readFile(join(root, "file.txt"), "utf8")).toBe("other\ntwo\nthree\n");
-  expect(await git(root, "ls-files", "-u", "--", "file.txt")).toBe("");
+  expect(await readFile(join(root, "file.txt"), "utf8")).toBe(withLine("parent edit", "writer"));
+  expect(await git(root, "diff", "--cached", "--name-only")).toBe("");
+  await expect(readFile(join(patches, "sub-developer-1.patch"))).rejects.toThrow();
+  await expect(readFile(join(patches, "sub-developer-1.md"))).rejects.toThrow();
+});
+
+it("refuses a plain apply that clashes with uncommitted edits and keeps both files", async () => {
+  const { call, fake, root, patches } = await fixture();
+  await writeFile(join(root, "file.txt"), withLine("ten", "parent"));
+  vi.mocked(fake.session.ctx.ui.select).mockResolvedValue(APPLY);
+
+  const refusal = call();
+
+  await expect(refusal).rejects.toThrow("file.txt");
+  await expect(refusal).rejects.toThrow("nothing was applied");
+  await expect(refusal).rejects.toThrow(/commit or stash/i);
+  expect(await readFile(join(root, "file.txt"), "utf8")).toBe(withLine("ten", "parent"));
   await expect(readFile(join(patches, "sub-developer-1.patch"))).resolves.toBeTruthy();
   await expect(readFile(join(patches, "sub-developer-1.md"))).resolves.toBeTruthy();
 });
@@ -126,21 +166,8 @@ it("applies project-root patches when pi starts in a nested directory", async ()
 
   const response = await call();
 
-  expect(response.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("Applied") });
-  expect(await readFile(join(root, "file.txt"), "utf8")).toBe("writer\ntwo\nthree\n");
-});
-
-it("merges a non-conflicting checkout change with the patch's base", async () => {
-  const { call, fake, root } = await fixture();
-  await writeFile(join(root, "file.txt"), "one\ntwo\nmain edit\n");
-  await git(root, "add", "file.txt");
-  await git(root, "commit", "-m", "independent edit");
-  vi.mocked(fake.session.ctx.ui.select).mockResolvedValue(APPLY);
-
-  const response = await call();
-
-  expect(response.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("Applied") });
-  expect(await readFile(join(root, "file.txt"), "utf8")).toBe("writer\ntwo\nmain edit\n");
+  expect(response.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("3-way merge") });
+  expect(await readFile(join(root, "file.txt"), "utf8")).toBe(WRITER);
 });
 
 it("drops both files when selected", async () => {
@@ -162,3 +189,12 @@ it("keeps both files when cancelled or dismissed", async () => {
 
 const APPLY = "Apply";
 const DROP = "Drop";
+const BASE = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n";
+const WRITER = `writer${BASE.slice("one".length)}`;
+
+function withLine(line: string, first = "one"): string {
+  const lines = BASE.split("\n");
+  lines[0] = first;
+  lines[9] = line;
+  return lines.join("\n");
+}

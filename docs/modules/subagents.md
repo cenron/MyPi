@@ -247,12 +247,15 @@ it here (no UI). Tell the user what you needed and why: …").
      dropped. See [worktree](../tools/worktree.md#subagent-integration).
   4. The run's result names the patch and the files. The main agent reviews it and calls `subagent_apply`, which
      asks me first: a dialog with the agent, the task's first line, the diff stat, and the child's summary, and
-     Cancel, Apply, or Drop (Cancel is the default, including Escape). Apply preflights with a three-way check before
-     running `git apply --3way` (Build only), which leaves the change staged; a clash is reported with git's output without changing the checkout, and
-     both files are kept. On success, the patch and handoff are deleted and
-     the result lists the files. Drop deletes both files; Cancel changes nothing. Unknown names list the available
-     patches, and without a UI the tool refuses because my approval is required. The prompt says never to use
-     `git apply` through `bash`, which wouldn't ask me. Patches are applied one at a time.
+     Cancel, Apply, or Drop (Cancel is the default, including Escape). Apply preflights with a three-way check; with
+     only committed edits, `git apply --3way` leaves the change staged. Uncommitted edits in a touched file make
+     three-way impossible (`does not match index`), so it falls back to a plain atomic `git apply` (never `--reject`),
+     which leaves the change unstaged and says so. A refusal is an error that names the conflicting files, says
+     nothing was applied, keeps both files, and says either to commit or stash and retry (uncommitted edits) or to
+     resolve the conflict by hand and drop the patch (three-way conflict). On success, the patch and handoff are
+     deleted and the result lists the files and the method. Drop deletes both files; Cancel changes nothing. Unknown
+     names list the available patches, and without a UI the tool refuses because my approval is required. The prompt
+     says never to use `git apply` through `bash`, which wouldn't ask me. Patches are applied one at a time.
 - **A writer pi quit in the middle of is recovered on the next start.** pi's shutdown stops jobs without waiting, so
   a running writer's work can't be captured then; its worktree and branch were left behind (seen 2026-10-26). Each
   writer now writes its pi's process id beside its worktree (`.pi/worktrees/<name>.owner`). When the subagents module
@@ -428,6 +431,17 @@ A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscrip
     repo: after `/plan implement`, a `developer` writer got the plan step, created `result.txt`, and ran `npm test`
     through the linked `node_modules`; its patch held only `result.txt`, and the main checkout's dependency file was
     unchanged.
+15. **Built 2026-10-29** (fixes queue Q5, [roadmap](../roadmap.md) row 29): `subagent_apply` applies the best way git
+    can and says which way. With only committed edits in the checkout, it keeps the three-way merge and leaves the
+    change staged. Uncommitted edits in a touched file make three-way impossible, so it falls back to a plain atomic
+    `git apply` (unstaged, never `--reject`); when that also fails it refuses. Every refusal now throws, so pi shows
+    it as an error result in red and the model sees a failure: it names the files, says nothing was applied, keeps the
+    patch and handoff, and says either to commit or stash and retry or to resolve the conflict by hand and drop the
+    patch. Success names the method (`3-way merge` or `plain apply`). Tests in `test/module/subagents/apply.test.ts`
+    cover the four cases. Live 2026-10-29 in a temp repo: an uncommitted line-10 edit gave the green plain-apply result
+    saying `not staged`; an uncommitted line-1 edit gave the red refusal naming `file.txt` and saying
+    commit-or-stash; committing it gave the red conflict refusal saying resolve-by-hand or drop, with the checkout
+    unchanged and both patch files still there.
 
 ## Open questions
 
