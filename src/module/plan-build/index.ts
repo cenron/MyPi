@@ -78,8 +78,9 @@ export class PlanBuildModule extends BaseModule<{
     // Reads this.mode on every call, so a switch applies to the very next tool call, even mid-run.
     this.onToolCall((call, env) => (this.mode === Mode.PLAN ? planRule(call, env) : { kind: "allow" }));
 
-    // Other modules, such as the done check, ask which mode is on.
+    // Other modules, such as the done check, ask which mode is on; subagents also ask for the plan.
     this.answer("mode", () => this.mode);
+    this.answer("plan", () => this.plan);
   }
 
   commands(): Command[] {

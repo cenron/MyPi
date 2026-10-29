@@ -147,8 +147,13 @@ git's own message, and nothing runs with `--force`.
   in the main checkout's path survive.
 - **Done-check approval** is keyed by the git common folder, so a repository's worktrees share it; config is read
   and commands run in the active checkout. Old folder approvals ask once more.
-- Not done: copying other ignored files (`.env`) into a worktree, with an explicit include list. Build it when
-  someone needs it.
+- **Writer dependencies** are links, not copies: a subagent writer's worktree gets every ignored `node_modules` from
+  the main checkout, at the root and nested, as a symlink. Staging excludes them, so the patch never carries them;
+  discarding the worktree removes the links without touching the main checkout's dependencies. A tool that writes a
+  cache under a linked `node_modules` (for example `node_modules/.vite`) writes into the main checkout; accepted for
+  now. `/worktree enter` does not link dependencies.
+- Not done: copying other ignored files (`.env`) into a worktree, with an explicit include list. Writers link only
+  `node_modules`; other ignored files are still not shared. Build it when someone needs it.
 
 ### Tried live (2026-10-25)
 

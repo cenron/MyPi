@@ -224,14 +224,23 @@ it here (no UI). Tell the user what you needed and why: …").
   stopped run, `writer.ts` captures the work, removes the worktree, and returns the patch name and files; the main
   agent reviews it and uses `subagent_apply`. A dirty calling checkout refuses the run and names the files; there is
   no fallback to in-place work.
+- **A writer gets the active plan's text, and the main checkout's dependencies.** A writer's worktree starts at
+  committed `HEAD`, so ignored state isn't there. `writer.ts` asks plan-build for the active plan on the `plan` bus
+  and puts its text under `## The plan this implements`; a plan that can't be read is warned about, and the writer
+  goes without it. Every ignored `node_modules` in the main checkout, at the root or nested, is symlinked into the
+  worktree and named under `## Dependencies`, with `npm install`, `npm ci`, and anything else that changes
+  `node_modules` forbidden; a change needing a new dependency is reported instead. Staging excludes those links, so
+  they never reach the patch, and discarding the worktree removes only the links. With no dependencies installed the
+  task says checks that need them can't run, and must be reported. Known gap: a tool writing a cache under a linked
+  `node_modules` (for example `node_modules/.vite`) writes it into the main checkout; accepted for now.
   1. The worktree branches from the **calling checkout's committed `HEAD`** (decided 2026-10-25), matching
      `Session.worktrees.create`. If the parent works inside a worktree, the writer branches from that checkout,
      not the primary checkout. Storage remains under the main checkout's `.pi/worktrees/`. The clean-caller
      preflight below applies to the calling checkout. `prepareWriter` in `src/module/subagents/writer.ts` refuses
      any `git status --porcelain` output and lists the caller's files before creating the worktree.
-  2. `captureWork` stages everything in the worktree (`git add -A`) and writes `git diff --cached --binary <base>`
-     to `.pi/patches/<name>.patch`, plus `<name>.md`: the agent, task, base commit, files changed, diff stat, patch
-     path, and child's summary. No-change runs create no patch or handoff.
+  2. `captureWork` stages everything in the worktree (`git add -A`, with the linked `node_modules` excluded) and writes
+     `git diff --cached --binary <base>` to `.pi/patches/<name>.patch`, plus `<name>.md`: the agent, task, base
+     commit, files changed, diff stat, patch path, and child's summary. No-change runs create no patch or handoff.
   3. After both files are saved, `Session.worktrees.discard(name)` removes the managed worktree with force and deletes
      its branch. It still refuses new or changed `.pi/memories/` and `.pi/plans/` files, which a patch cannot carry;
      if that happens, the worktree stays and the refusal names the files. Patches and handoffs stay until applied or
@@ -408,6 +417,17 @@ A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscrip
     `cd sub && TZ=UTC npm test a.test.js` unrefused, while `node --test` from the same folder was refused as
     unapproved; an `explore` told to use one bash loop had it refused and reported it; and a developer in a repo
     without `AGENTS.md` made no `find ..` or `AGENTS.md` search.
+14. **Built 2026-10-29** (fixes queue Q4, [roadmap](../roadmap.md) rows 22 and 30): a writer worktree gets the active
+    plan's text and the main checkout's ignored `node_modules`, so a delegated Build step can implement the plan and
+    run its checks. plan-build answers a new `plan` bus question with the plan's path; `activePlan` reads it and
+    `writerTask` adds `## The plan this implements` before the path-rewritten caller task, warning instead of failing
+    silently when the plan can't be read. `linkDependencies` uses one `git ls-files --others --ignored
+    --exclude-standard --directory` call to link every `node_modules/` at the root and nested, and `captureWork`
+    excludes those links from `git add`, since a trailing-slash `.gitignore` rule doesn't match a symlink. Tests in
+    `test/module/subagents/writer.test.ts` and `test/module/plan-build/index.test.ts`; live 2026-10-29 in a temp
+    repo: after `/plan implement`, a `developer` writer got the plan step, created `result.txt`, and ran `npm test`
+    through the linked `node_modules`; its patch held only `result.txt`, and the main checkout's dependency file was
+    unchanged.
 
 ## Open questions
 

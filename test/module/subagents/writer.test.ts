@@ -1,10 +1,11 @@
 import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { answer } from "#core/events";
 import type { AgentDefinition } from "#module/subagents/agents";
 import { subagentTool } from "#module/subagents/tools/subagent";
 import { captureWork, PATCHES_DIR, prepareWriter, recoverWriters, runWriter } from "#module/subagents/writer";
@@ -39,6 +40,14 @@ async function put(cwd: string, file: string, text = "work") {
   const path = join(cwd, file);
   await mkdir(join(path, ".."), { recursive: true });
   await writeFile(path, text);
+}
+
+/** A committed `.gitignore` for `node_modules/`, then installed dependencies at the root and in `frontend/`. */
+async function installDependencies() {
+  await put(main, ".gitignore", "node_modules/\n");
+  await commit(main);
+  await put(main, "node_modules/dep/index.js", "module.exports = 'dep';\n");
+  await put(main, "frontend/node_modules/dep/index.js", "module.exports = 'dep';\n");
 }
 
 beforeEach(async () => {
@@ -147,6 +156,136 @@ describe("writer work", () => {
     expect(result.patchName).toBeDefined();
     expect(result.changedFiles).toEqual(["partial.txt"]);
     expect(await git(main, "worktree", "list", "--porcelain")).not.toContain("sub-developer-");
+  });
+
+  it("gives the writer the active plan's text", async () => {
+    const plan = join(root, "step.md");
+    await writeFile(plan, "# Step\n\nCreate result.txt.\n");
+    answer(session.pi.events, "plan", "plan-build", () => plan);
+    let received = "";
+    const run = async ({ task }: { task: string }) => {
+      received = task;
+      return {
+        answer: "Done",
+        usage: { tokens: 1, cost: 0 },
+        sessionFile: undefined,
+        changedFiles: [],
+        timedOut: false,
+      };
+    };
+
+    await runWriter(
+      session,
+      {
+        parent: session.ctx,
+        agent: developer,
+        task: "Do the step",
+        settings: {},
+        signal: new AbortController().signal,
+        onStep: () => {},
+      },
+      run as never,
+    );
+
+    expect(received).toContain("## The plan this implements");
+    expect(received).toContain("# Step");
+    expect(received).toContain("Create result.txt.");
+  });
+
+  it("links the main checkout's node_modules at the root and nested, and says they are shared", async () => {
+    await installDependencies();
+    const prepared = await prepareWriter(session, developer);
+    expect((await lstat(join(prepared.path, "node_modules"))).isSymbolicLink()).toBe(true);
+    expect((await lstat(join(prepared.path, "frontend", "node_modules"))).isSymbolicLink()).toBe(true);
+    expect(prepared.dependencies).toEqual(expect.arrayContaining(["node_modules", "frontend/node_modules"]));
+
+    let received = "";
+    const run = async ({ task }: { task: string }) => {
+      received = task;
+      return {
+        answer: "Done",
+        usage: { tokens: 1, cost: 0 },
+        sessionFile: undefined,
+        changedFiles: [],
+        timedOut: false,
+      };
+    };
+
+    await runWriter(
+      session,
+      {
+        parent: session.ctx,
+        agent: developer,
+        task: "Run the tests",
+        settings: {},
+        signal: new AbortController().signal,
+        onStep: () => {},
+      },
+      run as never,
+    );
+
+    expect(received).toContain("the main checkout's");
+    expect(received).toContain("frontend/node_modules");
+    expect(received).toContain("node_modules");
+    expect(received).toContain("npm install");
+    expect(received).toContain("npm ci");
+  });
+
+  it("keeps the linked dependencies out of the patch", async () => {
+    await installDependencies();
+    const prepared = await prepareWriter(session, developer);
+    await put(prepared.path, "change.txt", "writer change\n");
+
+    const captured = await captureWork(session, prepared, developer, "Change it", "Changed it.");
+    const patch = await readFile(captured.patchPath as string, "utf8");
+
+    expect(patch).not.toContain("node_modules");
+    expect(await git(main, "apply", "--check", captured.patchPath as string)).toBe("");
+    expect((await lstat(join(main, "node_modules/dep/index.js"))).isFile()).toBe(true);
+  });
+
+  it("discards a worktree with linked dependencies without touching the main checkout's", async () => {
+    await installDependencies();
+    const before = await readFile(join(main, "node_modules/dep/index.js"), "utf8");
+    const prepared = await prepareWriter(session, developer);
+    await put(prepared.path, "change.txt", "writer change\n");
+
+    await captureWork(session, prepared, developer, "Change it", "Changed it.");
+
+    expect(existsSync(prepared.path)).toBe(false);
+    expect(await readFile(join(main, "node_modules/dep/index.js"), "utf8")).toBe(before);
+  });
+
+  it("says no dependencies are installed when the main checkout has none", async () => {
+    const prepared = await prepareWriter(session, developer);
+    expect(prepared.dependencies).toEqual([]);
+    let received = "";
+    const run = async ({ task }: { task: string }) => {
+      received = task;
+      return {
+        answer: "Done",
+        usage: { tokens: 1, cost: 0 },
+        sessionFile: undefined,
+        changedFiles: [],
+        timedOut: false,
+      };
+    };
+
+    await runWriter(
+      session,
+      {
+        parent: session.ctx,
+        agent: developer,
+        task: "Run the tests",
+        settings: {},
+        signal: new AbortController().signal,
+        onStep: () => {},
+      },
+      run as never,
+    );
+
+    expect(received).toContain("No dependencies are installed here");
+    expect(received).toContain("report");
   });
 
   it("reports the saved patch when the user stops its background job", async () => {

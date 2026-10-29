@@ -53,6 +53,8 @@ export type OpenTask = { id: string; subject: string; status: "pending" | "in_pr
 export type MyPiQuestions = {
   /** Plan or Build. The done check and subagents ask; plan-build answers. */
   mode: { request: undefined; answer: "plan" | "build" };
+  /** The plan file the Build session is implementing. Subagents ask; plan-build answers. */
+  plan: { request: undefined; answer: string | undefined };
   /** The problems in `files`. The done check asks; the LSP module answers. */
   diagnostics: { request: { files: readonly string[]; signal?: AbortSignal }; answer: Problem[] };
   /** New top-level names already declared elsewhere in changed files. The done check asks; the LSP module answers. */

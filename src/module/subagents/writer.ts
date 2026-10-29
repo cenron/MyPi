@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ask } from "#core/events";
 import type { Session } from "#core/session";
-import { isNodeError } from "#core/util/errors";
+import { errorMessage, isNodeError } from "#core/util/errors";
 import { keepOutOfGit } from "#core/util/git";
 import { slugify } from "#core/util/slug";
 import { git } from "#core/worktree/git";
@@ -16,6 +17,7 @@ type PreparedWriter = {
   readonly base: string;
   readonly path: string;
   readonly main: string;
+  readonly dependencies: readonly string[];
 };
 
 /** Saved patch details for a writer with changes; no-change runs have no handoff files. */
@@ -77,9 +79,10 @@ export async function prepareWriter(session: Session, agent: AgentDefinition): P
     const name = await freeName(session, project.main, agent.name);
     const base = (await git(session.ctx.cwd, ["rev-parse", "HEAD"])).trim();
     const worktree = await session.worktrees.create(name);
+    const dependencies = await linkDependencies(project.main, worktree.path);
     // Beside the checkout, in the ignored worktrees folder: which pi runs this writer, for `recoverWriters`.
     await writeFile(ownerFile(worktree.path), String(process.pid));
-    return { name, base, path: worktree.path, main: project.main };
+    return { name, base, path: worktree.path, main: project.main, dependencies };
   });
 }
 
@@ -91,14 +94,10 @@ export async function runWriter(session: Session, run: ChildRun, runChildSession
 
   const { agent, task, signal } = run;
   const prepared = await prepareWriter(session, agent);
-  const writerTask =
-    `You work in your own worktree of this project: ${prepared.path}. Make the changes directly in its files. ` +
-    `It holds the project's files at the same paths as ${prepared.main}; work on them here. Don't commit, ` +
-    "and don't write patch files, even if asked: when you finish, MyPi turns your edits into a patch for the user.\n\n" +
-    rewriteWriterTaskPaths(task, prepared.main, prepared.path);
+  const taskWithPlan = writerTask(prepared, task, await activePlan(session));
   let result: ChildResult;
   try {
-    result = await runChildSession({ ...run, task: writerTask }, prepared.path);
+    result = await runChildSession({ ...run, task: taskWithPlan }, prepared.path);
   } catch (error) {
     const captured = await captureWork(
       session,
@@ -129,6 +128,86 @@ export async function runWriter(session: Session, run: ChildRun, runChildSession
   };
 }
 
+/** The plan file the Build session is implementing, read for the writer's task; a missing one is reported. */
+async function activePlan(session: Session): Promise<string | undefined> {
+  const answers = await ask(session.pi.events, "plan", undefined);
+  const [path] = answers.flatMap((answer) => (answer.kind === "answer" ? [answer.value] : []));
+  if (!path) return undefined;
+
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    session.logWarning(
+      `Subagents: couldn't read the plan at ${path}: ${errorMessage(error)}; the writer goes without it.`,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * The writer's full task: where it works, the active plan when Build has one, and the caller's task. Only the caller's
+ * task has paths repointed into the worktree; the plan is quoted as written.
+ */
+function writerTask(prepared: PreparedWriter, task: string, plan: string | undefined): string {
+  const header =
+    `You work in your own worktree of this project: ${prepared.path}. Make the changes directly in its files. ` +
+    `It holds the project's files at the same paths as ${prepared.main}; work on them here. Don't commit, ` +
+    "and don't write patch files, even if asked: when you finish, MyPi turns your edits into a patch for the user.\n\n";
+  const callerTask = rewriteWriterTaskPaths(task, prepared.main, prepared.path);
+  const dependencies = dependenciesSection(prepared.dependencies);
+  if (!plan) return header + dependencies + callerTask;
+
+  return `${header}${dependencies}## The plan this implements\n${plan.trimEnd()}\n\n## Your task\n${callerTask}`;
+}
+
+/** What the writer may run against, and what it must not change: the main checkout's linked dependencies. */
+function dependenciesSection(dependencies: readonly string[]): string {
+  if (!dependencies.length) {
+    return (
+      "## Dependencies\nNo dependencies are installed here, so a check that needs them can't run; run the checks " +
+      "you can and report the ones you couldn't.\n\n"
+    );
+  }
+
+  const dirs = dependencies.map((dir) => `\`${dir}\``).join(", ");
+  return (
+    `## Dependencies\n${dirs} are the main checkout's, linked into this worktree; run the project's checks here, but ` +
+    "never run `npm install`, `npm ci`, or anything else that changes `node_modules`. If a change needs a new " +
+    "dependency, say so in your report.\n\n"
+  );
+}
+
+/** The main checkout's ignored `node_modules` folders, nested ones included, as git names them (`node_modules/`). */
+async function ignoredNodeModules(main: string): Promise<string[]> {
+  return (await git(main, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"]))
+    .split("\0")
+    .filter((entry) => entry === "node_modules/" || entry.endsWith("/node_modules/"));
+}
+
+/** Links each ignored `node_modules` from the main checkout into `worktree`; returns their relative dirs. */
+async function linkDependencies(main: string, worktree: string): Promise<string[]> {
+  const dependencies = (await ignoredNodeModules(main)).map((dir) => dir.replace(/\/$/, ""));
+  for (const dir of dependencies) {
+    await mkdir(join(worktree, dir, ".."), { recursive: true });
+    await symlink(join(main, dir), join(worktree, dir), "dir");
+  }
+  return dependencies;
+}
+
+/** The ignored `node_modules` the worktree has as symlinks: what staging must exclude. */
+async function linkedDependencies(main: string, worktree: string): Promise<string[]> {
+  const linked: string[] = [];
+  for (const entry of await ignoredNodeModules(main)) {
+    const dir = entry.replace(/\/$/, "");
+    try {
+      if ((await lstat(join(worktree, dir))).isSymbolicLink()) linked.push(dir);
+    } catch (error) {
+      if (!isNodeError(error) || (error.code !== "ENOENT" && error.code !== "ENOTDIR")) throw error;
+    }
+  }
+  return linked;
+}
+
 /** Repoints task paths into the writer's worktree without rewriting paths already there. */
 function rewriteWriterTaskPaths(task: string, main: string, worktree: string): string {
   return task.replaceAll(`${main}/`, (prefix, offset: number) =>
@@ -144,7 +223,8 @@ export async function captureWork(
   task: string,
   answer: string,
 ): Promise<CapturedWork> {
-  await git(prepared.path, ["add", "-A"]);
+  const links = await linkedDependencies(prepared.main, prepared.path);
+  await git(prepared.path, ["add", "-A", "--", ".", ...links.map((dir) => `:(exclude)${dir}`)]);
   const patch = await git(prepared.path, ["diff", "--cached", "--binary", prepared.base]);
   const diffStat = await git(prepared.path, ["diff", "--cached", "--stat", prepared.base]);
   const files = (await git(prepared.path, ["diff", "--cached", "--name-only", "-z", prepared.base]))
@@ -185,7 +265,13 @@ export async function recoverWriters(session: Session): Promise<CapturedWork[]> 
     const base = (await git(project.main, ["merge-base", "HEAD", head])).trim();
     const agent = { name: name.slice(WRITER_PREFIX.length).replace(/-\d+$/, "") };
     recovered.push(
-      await captureWork(session, { name, base, path, main: project.main }, agent, RECOVERED_TASK, RECOVERED_ANSWER),
+      await captureWork(
+        session,
+        { name, base, path, main: project.main, dependencies: [] },
+        agent,
+        RECOVERED_TASK,
+        RECOVERED_ANSWER,
+      ),
     );
   }
   return recovered;

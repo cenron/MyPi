@@ -148,6 +148,19 @@ describe("PlanBuildModule", () => {
     expect(await ask(session.pi.events, "mode", undefined)).toMatchObject([{ value: "build" }]);
   });
 
+  it("answers the plan file on the bus, or none in Plan", async () => {
+    const plan = join(tmpdir(), "plan-build-plan", "step.md");
+    const { session } = startPlanBuild([saved("build", plan)]);
+    expect(await ask(session.pi.events, "plan", undefined)).toEqual([
+      { from: "plan-build", kind: "answer", value: plan },
+    ]);
+
+    const planMode = startPlanBuild([saved("plan")]);
+    expect(await ask(planMode.session.pi.events, "plan", undefined)).toMatchObject([
+      { from: "plan-build", kind: "answer", value: undefined },
+    ]);
+  });
+
   it("restores the mode /plan saved, as after a /reload", async () => {
     const { session, setStatus, run } = startPlanBuild();
     await run("build");
