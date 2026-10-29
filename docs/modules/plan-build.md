@@ -171,7 +171,8 @@ checks only the first word plus a denylist, so `ls; node …` and the 3a test ca
   `-fprint0`, `-fprintf`, `-fls`), `fd` (`-x`, `-X`, `--exec`, `--exec-batch`), `rg` (`--pre`, `--hostname-bin`),
   `sort` (`-o`, `--output`, `--compress-program`), `uniq` (more than one operand), `sed` (only `sed -n 'Np'` or
   `'N,Mp'`, `$` for the last line, then files), `git` (below), `npm` (`ls`, `list`, `view`, `info`, `outdated`).
-- `git`: `--no-pager` may come first; any other global option (`-c`, `-C`, `-p`, …) asks. Read subcommands: `status
+- `git`: `--no-pager`, `-C <dir>` (`-C<dir>`), `--git-dir[=<dir>]` and `--work-tree[=<dir>]` may come before the
+  subcommand, in any order; any other global option (`-c`, `-p`, …) asks. Read subcommands: `status
   log show diff blame ls-files ls-tree rev-parse describe shortlog`, and `grep` without `-O`. `--output` asks
   anywhere. `branch` and `tag` allow list flags only, and operands only with `-l`/`--list` (so `branch --contains abc`
   asks; `--contains=abc` doesn't). `remote` bare, `-v`, `show`, `get-url`. `stash list`/`show` (a bare `git stash`
@@ -296,6 +297,10 @@ built it in a sub-folder.
     while plan mode is on, don't attempt it; say so, then put the change in a plan with `submit_plan` or ask them to
     switch with `/plan build`. Measure: blocked `write`/`edit` calls in Plan sessions (2 of 17 writes on 2026-10-27,
     one a live-check artifact) should stay at zero. The guard's block remains the backstop.
+12. **Built 2026-10-29** (fixes queue Q1, rows 33 and 34): Plan's read-only git check accepts
+    `-C`/`--git-dir`/`--work-tree` before the subcommand, so `git -C <dir> status` runs unasked; `PLAN_PROMPT` says the
+    model can't switch modes itself, so it names `/plan build` or Shift+Tab instead of offering switching as an
+    `ask_user` answer that does nothing (the pick comes back as text; only the user can switch).
 
 ## Open questions
 

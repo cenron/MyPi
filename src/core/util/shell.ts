@@ -409,13 +409,33 @@ function listOnly(shorts: string, longs: string[]): ArgCheck {
 }
 
 /**
- * `git` reads only: a read subcommand and no `--output`. A global option (`-c`, `-C`, `-p`, …) sits where the
- * subcommand goes, so it never matches one. `--no-pager` is skipped: agents add it often, and it only turns the pager
- * off.
+ * The words from git's subcommand on, or undefined when there is none. `--no-pager`, `-C <dir>` (`-C<dir>`),
+ * `--git-dir[=<dir>]` and `--work-tree[=<dir>]` stand before it and only pick the repository or the pager; any other
+ * global option (`-c`, `-p`, …) stays the first word, so it asks.
+ */
+function afterGitGlobals(words: string[]): string[] | undefined {
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i] ?? "";
+    if (word === "--no-pager") continue;
+    if (word === "-C" || word === "--git-dir" || word === "--work-tree") {
+      i++; // the directory is the next word
+      continue;
+    }
+    if (word.startsWith("--git-dir=") || word.startsWith("--work-tree=") || /^-C./.test(word)) continue;
+    return words.slice(i);
+  }
+  return undefined;
+}
+
+/**
+ * `git` reads only: a read subcommand and no `--output`. The options `afterGitGlobals` skips may come before the
+ * subcommand in any order; any other global option (`-c`, `-p`, …) stays where it is, so it asks. `--output` writes
+ * wherever it sits, so it's checked in every word.
  */
 function git(words: string[]): boolean {
-  const [sub = "", ...args] = words[0] === "--no-pager" ? words.slice(1) : words;
-  return !hasLong(args, ["--output"]) && (GIT_SUBCOMMANDS.get(sub)?.(args) ?? false);
+  if (hasLong(words, ["--output"])) return false;
+  const [sub = "", ...args] = afterGitGlobals(words) ?? [];
+  return GIT_SUBCOMMANDS.get(sub)?.(args) ?? false;
 }
 
 /** `sed -n 'Np'` or `sed -n 'N,Mp'` (`$` for the last line), then files. Rejects `w`, `-i`, `-e`, …. */
