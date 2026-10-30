@@ -31,8 +31,10 @@ export class MyPi {
   constructor(readonly pi: ExtensionAPI) {
     // Once per extension load: pi keeps resolvers in a list, so registering on every session_start would stack them.
     pi.registerToolRenderer(backgroundRenderer);
-    // pi starts extensions (session_start) before it draws any message, so a session is always set by the first call.
-    pi.registerToolRenderer((toolName, next) => this.session.renderers.resolve(toolName, next));
+    // A reload redraws the transcript before session_start, so this runs with no session yet: pi's renderers then.
+    pi.registerToolRenderer((toolName, next) =>
+      this.session ? this.session.renderers.resolve(toolName, next) : next(),
+    );
   }
 
   async onSessionStart(ev: SessionStartEvent, ctx: ExtensionContext) {

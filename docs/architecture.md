@@ -87,8 +87,10 @@ extension runner). So `MyPi`, its `Session`, and its modules all live for one se
 - **`RendererChain`** (`tool-renderers.ts`) holds one tool renderer resolver per module, keyed by `info.name`, and is
   `session.renderers`. Modules set theirs with `BaseModule.onToolRender(resolver)`. pi can't unregister a resolver, so
   `MyPi` registers one, once per extension load, that asks the current session's chain: resolvers in the order set,
-  each wrapping the ones after it, then pi's own. Quiet is the first user; a layout theme (the roadmap's Theme picker)
-  is the next.
+  each wrapping the ones after it, then pi's own. A reload redraws the transcript from `rebuildChatFromMessages`
+  before it emits `session_start`, so the resolver runs with no session yet and hands those rows to `next()`, pi's
+  own renderers; rows drawn then keep pi's look until the session ends. Quiet is the first user; a layout theme (the
+  roadmap's Theme picker) is the next.
 - **`PromptManager`** (`prompt-manager.ts`) holds one system prompt section per module, keyed by `info.name`, and is
   `session.promptManager`. Modules set theirs with `BaseModule.setPrompt(text)`; `undefined` clears it. Core sets one
   of its own, `identity` ([identity](core/identity.md)), from `MyPi` on every run. `apply(sections)`

@@ -7,6 +7,7 @@ import {
   type SessionStartEvent,
   type ToolCallEvent,
   type ToolDefinition,
+  type ToolRendererResolver,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Session } from "#core/session";
@@ -16,7 +17,7 @@ import { Worktrees } from "#core/worktree/index";
 import { loadModules } from "#module/index";
 import { backgroundRenderer } from "#tool/bash/render";
 import mypi from "../index";
-import { fakeUI } from "./fakes";
+import { fakeToolRenderers, fakeUI } from "./fakes";
 
 type CommandOptions = Omit<RegisteredCommand, "name" | "sourceInfo">;
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
@@ -35,7 +36,7 @@ function loadExtension() {
     branch.push({ type: "custom", customType, data });
   });
   const mcpServers: string[] = [];
-  const toolRenderers: unknown[] = [];
+  const toolRenderers: ToolRendererResolver[] = [];
   let active = [...registered];
   const pi = {
     events: createEventBus(),
@@ -58,7 +59,7 @@ function loadExtension() {
     sendUserMessage: () => {},
     registerMessageRenderer: () => {},
     appendEntry,
-    registerToolRenderer: (resolver: unknown) => {
+    registerToolRenderer: (resolver: ToolRendererResolver) => {
       toolRenderers.push(resolver);
     },
     getActiveTools: () => [...active],
@@ -225,6 +226,19 @@ describe("mypi extension", () => {
       ctx,
     );
     await expect(handlers.get("tool_call")?.(read, ctx)).resolves.toBeUndefined();
+  });
+
+  // A reload redraws the transcript before session_start, so the resolver runs with no session yet.
+  it("draws a reload's redrawn rows with pi's renderers, before a session starts", async () => {
+    const { handlers, toolRenderers } = loadExtension();
+    const delegate = toolRenderers[1];
+    if (!delegate) throw new Error("MyPi registered only one tool renderer");
+    const piRenderers = fakeToolRenderers();
+    const next = vi.fn(() => piRenderers);
+    expect(delegate("bash", next)).toBe(piRenderers);
+    await startSession(handlers);
+    // With a session the modules' chain answers; quiet is off at startup, so pi's renderers still come back.
+    expect(delegate("bash", next)).toBe(piRenderers);
   });
 
   it("registers each renderer once across sessions", async () => {
