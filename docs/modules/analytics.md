@@ -228,7 +228,7 @@ Dated, with the window and model; newest last. Each says what was decided.
     read-only changes that its own tests passed (a heredoc skipped behind a chained command, a process substitution,
     and a pipe in a redirect target; an absolute `cd` with `..`). All fixed with failing tests first.
 
-  Decided: DeepSeek stays a cheap builder for well-specified steps, with a reviewer who probes every guard or
+  Proposed (Claude, not yet decided): DeepSeek stays a cheap builder for well-specified steps, with a reviewer who probes every guard or
   permission change before it's committed. To decide: whether Plan should take the shapes DeepSeek writes, or the
   prompt should say it more firmly; whether the LSP nudge needs a DeepSeek-specific form; the date window for
   `/analytics`.
