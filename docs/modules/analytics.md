@@ -211,6 +211,28 @@ Dated, with the window and model; newest last. Each says what was decided.
   To decide: which of the subagent fixes come first (refusals, partial writers, `subagent_apply` merging, worktree
   setup), the folder-guard false alarms, and a project (cwd) filter for `/analytics`.
 
+- **2026-10-30, the fixes queue on DeepSeek** (MyPi rows 22, 28–30, 32–34, 37; 2026-10-29 from 08:30 local;
+  opencode-go/deepseek-v4.1-flash, high; one Plan and one Build session per step; Claude answered pi's questions,
+  reviewed, probed and committed each step): 12 sessions, 613 replies, $0.64, plus $0.03 for the live checks' own pi
+  sessions: about $0.11 a step (Q1 $0.04, Q2 $0.20, the rest $0.09–0.13). Cache read 97%. No compactions (the largest
+  session peaked at 170k of the 1M window), no provider errors. The window was read from the database: `/analytics`
+  can filter by project now but not yet by date.
+  - **It built cleanly.** `edit` failed 2 of 83 times (job-search-hub on gpt-6-luna: 15%); `bash` 3 of 463, all calls
+    the reviewer declined. The done check passed 9 times; its one report was a false duplicate-name flag, explained.
+  - **It ignored Plan's search guidance.** 38 permission dialogs (folder guard 23, 4 declined; Plan 15, 2 declined).
+    Most were simple searches wrapped in `cd … &&`, pipes, or globs, though the Plan prompt says to search one command
+    at a time; `cd` was its most-run shell command (208, ahead of `rg` 123). Three steering notes were needed, two of
+    them to stop it reading session files outside the project.
+  - **No `lsp`.** 0 `lsp` calls against 162 code searches (2% on 2026-10-27). The LSP nudge doesn't reach DeepSeek.
+  - **Its tests missed safety holes.** Claude's probes with hostile commands found five holes in the folder guard and
+    read-only changes that its own tests passed (a heredoc skipped behind a chained command, a process substitution,
+    and a pipe in a redirect target; an absolute `cd` with `..`). All fixed with failing tests first.
+
+  Decided: DeepSeek stays a cheap builder for well-specified steps, with a reviewer who probes every guard or
+  permission change before it's committed. To decide: whether Plan should take the shapes DeepSeek writes, or the
+  prompt should say it more firmly; whether the LSP nudge needs a DeepSeek-specific form; the date window for
+  `/analytics`.
+
 ## What pi offers
 
 Checked against the installed pi 1.2.0 (2026-10-22):
