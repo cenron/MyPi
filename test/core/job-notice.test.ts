@@ -159,6 +159,25 @@ describe("noticeOnEnd", () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  // pi queues a mid-run message at once, so a job_wait later in the run would hand the model the same result twice.
+  it("waits until the run settles, then sends only the notices no job_wait took", async () => {
+    const { session, sendMessage, setIdle, emit } = fakeSession();
+    setIdle(false);
+    const waited = session.jobs.start({ kind: "shell", label: "waited", run: async () => 1 });
+    const grouped = session.jobs.start({ kind: "subagent", label: "grouped", run: async () => 0 });
+    noticeOnEnd(session, waited);
+    noticeOnEnd(session, grouped, undefined, new NoticeGroup(session, 0));
+    await Promise.all([waited.done, grouped.done]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    takeNotice(waited);
+    setIdle(true);
+    await emit("agent_settled", { type: "agent_settled", aborted: false });
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0]?.[0].content).toContain("grouped");
+  });
+
   // A stopped writer saved a patch: the model needs its name, though a stop normally sends nothing.
   it.each([
     ["sends", true, 1],

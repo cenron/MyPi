@@ -52,6 +52,10 @@ export class NoticeGroup {
     this.timer = undefined;
     const jobs = [...this.jobs];
     this.jobs.clear();
+    this.session.whenIdle(() => this.send(jobs));
+  }
+
+  private send(jobs: Job[]): void {
     if (this.session.jobs.closed) return;
 
     const content = jobs
@@ -68,8 +72,9 @@ export class NoticeGroup {
 }
 
 /**
- * Tells the model when `job` ends, starting a turn if the agent is idle. `notice` builds the message; by default it
- * carries the job's last lines. Successful jobs may join a group; failures are sent at once. A stopped job sends
+ * Tells the model when `job` ends, starting a turn. `notice` builds the message; by default it carries the job's last
+ * lines. Successful jobs may join a group; failures are sent at once. Either waits while the agent runs, so a
+ * `job_wait` in that run can take the notice instead and the model doesn't get it twice. A stopped job sends
  * nothing, since the user stopped it, unless `sendWhenStopped` says it left something the model needs (a stopped
  * writer's saved patch).
  */
@@ -90,10 +95,13 @@ export function noticeOnEnd(
         group.add(job);
         return;
       }
-      session.pi.sendMessage(
-        { customType: JOB_NOTICE, display: true, ...notice(ended) },
-        { deliverAs: "followUp", triggerTurn: true },
-      );
+      session.whenIdle(() => {
+        if (session.jobs.closed || notices.get(job)?.taken) return;
+        session.pi.sendMessage(
+          { customType: JOB_NOTICE, display: true, ...takeNotice(job) },
+          { deliverAs: "followUp", triggerTurn: true },
+        );
+      });
     })
     .catch((error) => session.logError(`Job ${job.info.id} notice: ${errorMessage(error)}`));
 }

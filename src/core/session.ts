@@ -32,6 +32,7 @@ export class Session {
   /** Where MyPi keeps a project's `.pi/` state: the main checkout in git, else the session's folder. */
   readonly projectRoot: string;
   private jobsInterval: ReturnType<typeof setInterval> | undefined;
+  private readonly idleActions: (() => void)[] = [];
 
   constructor(
     readonly ctx: ExtensionContext,
@@ -50,6 +51,16 @@ export class Session {
     this.worktrees = new Worktrees(ctx.cwd);
     subscribe(pi.events, "jobs", (running) => this.updateJobsWidget(running));
     pi.on("session_shutdown", () => this.clearJobsWidget());
+    pi.on("agent_settled", () => this.runIdleActions());
+  }
+
+  /**
+   * Runs `action` now when the agent is idle, else once its run has settled. For a message that may be withdrawn before
+   * it's sent: pi queues a message sent mid-run at once, and a queued message can't be taken back.
+   */
+  whenIdle(action: () => void) {
+    if (this.ctx.isIdle()) action();
+    else this.idleActions.push(action);
   }
 
   /**
@@ -97,6 +108,10 @@ export class Session {
   /** Sends a notification through pi, and drops it when there is no UI (print and JSON modes). */
   private notify(msg: string, type: "info" | "warning" | "error") {
     if (this.ctx.hasUI) this.ctx.ui.notify(msg, type);
+  }
+
+  private runIdleActions() {
+    for (const action of this.idleActions.splice(0)) action();
   }
 
   private updateJobsWidget(running: number) {

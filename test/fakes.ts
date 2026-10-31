@@ -90,6 +90,7 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: 
   let activeTools = [...builtins];
   const tools = new Map<string, ToolDefinition>();
   const mcpServers = new Map<string, McpServerConfig>();
+  let idle = true;
   const handlers = new Map<string, ((ev: unknown, ctx: ExtensionContext) => unknown)[]>();
   const pi = {
     on: (event: string, handler: (ev: unknown, ctx: ExtensionContext) => unknown) => {
@@ -119,6 +120,7 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: 
     hasUI: true,
     cwd,
     isProjectTrusted: () => false,
+    isIdle: () => idle,
     modelRegistry: { find: vi.fn((provider: string, id: string) => ({ provider, id })) },
     ui,
     sessionManager: { getBranch: () => branch },
@@ -146,6 +148,10 @@ export function fakeSession(branch: unknown[] = [], cwd = "/project", project?: 
     registerMessageRenderer: pi.registerMessageRenderer,
     select: ui.select,
     emit,
+    /** Whether `ctx.isIdle()` says the agent is idle; true until set. */
+    setIdle: (value: boolean) => {
+      idle = value;
+    },
   };
 }
 
