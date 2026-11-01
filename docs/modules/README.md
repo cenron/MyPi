@@ -19,7 +19,7 @@ Each module has a doc here, named after its folder in `src/module/`. Start a doc
 | [lsp](lsp.md) | done | Symbol navigation, rename, and diagnostics from language servers, with a `/lsp` menu |
 | [memory](memory.md) | done | Markdown memories per project (git-ignored) and global; the prompt lists them, the agent reads what it needs. `ALWAYS`, replaceable |
 | [notifications](notifications.md) | idea | A desktop notification when the agent is done or a dialog is waiting |
-| [pair-programmer](pair-programmer.md) | idea | A pair-programming mode where the agent navigates and I drive |
+| [pair-programmer](pair-programmer.md) | idea | A pair-programming mode where the agent navigates and I drive: `/pair`, a Navigator tool rule, a prompt and thinking swap, changed files each turn; design proposed 2026-10-31 |
 | [plan-build](plan-build.md) | done | Plan and Build modes with an "Implement this plan?" dialog |
 | [quiet](quiet.md) | done | Compact tool-call status lines with failures open and a `QUIET` footer label. `ALWAYS` |
 | [subagents](subagents.md) | done | Reusable agents (architect, developer, reviewer, and ones I create) run as pi sessions through pi's SDK, with the jobs and agents views and parallel worktree writers returning patches; external harnesses in herdr panes later. `ALWAYS`: foundational, for background research and checks as well as delegated work |
