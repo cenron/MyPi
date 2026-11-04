@@ -18,7 +18,7 @@ export function registerMcpServers(pi: ExtensionAPI, session: Session): void {
   }
 }
 
-/** MyPi's MCP servers. Add new ones here. */
-function createMcpServers(): McpServer[] {
+/** MyPi's MCP servers. Add new ones here. Subagent children register them too, for the web tools. */
+export function createMcpServers(): McpServer[] {
   return [parallelServer(), exaServer(), tinyfishServer(), tavilyServer()].filter((server) => server !== undefined);
 }

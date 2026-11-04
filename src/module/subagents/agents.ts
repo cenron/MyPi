@@ -37,10 +37,22 @@ export function projectAgentDir(cwd: string): string {
 }
 
 /**
- * The tools a child can have: pi's built-ins (its `allToolNames`, which the package doesn't export). A child loads no
- * extensions, so MyPi's tools (`lsp`, `web_search`, …) don't exist there; naming one was silently ignored.
+ * The tools a child can have: pi's built-ins (its `allToolNames`, which the package doesn't export) and MyPi's web
+ * tools, which the child registers itself. A child loads no extensions, so MyPi's other tools (`lsp`, …) don't exist
+ * there; naming one was silently ignored.
  */
-const CHILD_TOOLS = new Set(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
+const CHILD_TOOLS = new Set([
+  "read",
+  "bash",
+  "powershell",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+  "web_search",
+  "web_fetch",
+]);
 
 /** Parses one agent file and reports invalid values with the source path. */
 export function parseAgentFile(file: string, source: string): Omit<AgentDefinition, "source" | "path"> {
@@ -74,7 +86,7 @@ export function parseAgentFile(file: string, source: string): Omit<AgentDefiniti
   const unknown = (tools ?? []).filter((tool: string) => !CHILD_TOOLS.has(tool));
   if (unknown.length) {
     throw new Error(
-      `${file}: a subagent can't use ${unknown.join(", ")}: it has pi's built-in tools only (${[...CHILD_TOOLS].join(", ")})`,
+      `${file}: a subagent can't use ${unknown.join(", ")}: it has pi's built-in tools and MyPi's web tools only (${[...CHILD_TOOLS].join(", ")})`,
     );
   }
 

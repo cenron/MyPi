@@ -44,10 +44,10 @@ describe("parseAgentFile", () => {
   });
 
   it("defaults model and thinking and parses tools", () => {
-    expect(parseAgentFile("agent.md", valid("explore", "tools: [read, bash]\n"))).toMatchObject({
+    expect(parseAgentFile("agent.md", valid("explore", "tools: [read, bash, web_search]\n"))).toMatchObject({
       model: "inherit",
       thinking: "inherit",
-      tools: ["read", "bash"],
+      tools: ["read", "bash", "web_search"],
       prompt: "Prompt",
     });
   });

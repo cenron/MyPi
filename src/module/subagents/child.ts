@@ -3,8 +3,10 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
   createAgentSession,
+  createMcpExtension,
   DefaultResourceLoader,
   type ExtensionContext,
+  type ExtensionFactory,
   getAgentDir,
   ModelRuntime,
   resolveCliModel,
@@ -13,6 +15,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { MYPI_SESSION_MARKER_TYPE } from "#core/session-marker";
 import type { ThinkingLevel } from "#core/util/thinking";
+import { createMcpServers } from "#mcp/index";
+import { webFetchTool } from "#tool/web-fetch/index";
+import { webSearchTool } from "#tool/web-search/index";
 import { checksPrompt, childAccess, READ_ONLY_PROMPT } from "./access";
 import type { AgentDefinition } from "./agents";
 
@@ -20,7 +25,7 @@ import type { AgentDefinition } from "./agents";
 export const RUN_TIMEOUT_MINUTES = 30;
 
 /** The tools a `read-only` agent gets when its file names none. */
-const READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "bash"];
+const READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "bash", "web_search", "web_fetch"];
 
 /** A run's model and thinking level, each undefined to inherit the parent's. */
 export type RunSettings = { model?: string; thinking?: ThinkingLevel };
@@ -93,6 +98,7 @@ export async function runChild(run: ChildRun, cwd = run.parent.cwd): Promise<Chi
   signal.addEventListener("abort", abort, { once: true });
 
   try {
+    await session.bindExtensions({});
     if (signal.aborted) throw new Error("aborted");
     await session.prompt(task);
     return {
@@ -150,7 +156,8 @@ function childModel(parent: ExtensionContext, settings: RunSettings, runtime: Mo
 
 /**
  * The child's prompt and context: the agent's prompt, and the project's AGENTS.md except for `explore`. No
- * extensions: MyPi loaded in a child would look for the parent's session.
+ * extensions: MyPi loaded in a child would look for the parent's session. The child gets its access rules and MyPi's
+ * web tools as inline extensions instead.
  */
 async function childResources(
   cwd: string,
@@ -163,11 +170,27 @@ async function childResources(
     settingsManager: SettingsManager.create(cwd, getAgentDir()),
     noExtensions: true,
     noContextFiles: agent.name === "explore",
-    extensionFactories: [childAccess(agent, checks)],
+    extensionFactories: [childAccess(agent, checks), ...childWeb()],
     systemPrompt: agent.access === "read-only" ? agent.prompt + READ_ONLY_PROMPT + checksPrompt(checks) : agent.prompt,
   });
   await loader.reload();
   return loader;
+}
+
+/**
+ * MyPi's `web_search` and `web_fetch`, and the MCP servers they search through. SDK sessions don't load pi's built-in
+ * MCP extension, so the child adds it, with MyPi's servers and not the user's `mcp.json`. The servers connect on
+ * `session_start`, which `bindExtensions` emits. Their tools stay `deferred` and the child has no `tool_search`, so
+ * only `web_search` reaches them.
+ */
+function childWeb(): ExtensionFactory[] {
+  return [
+    createMcpExtension({ loadConfig: () => ({ servers: [], errors: [] }) }),
+    (pi) => {
+      for (const server of createMcpServers()) pi.registerMcpServer(server.name, server.config);
+      for (const tool of [webSearchTool(), webFetchTool()]) pi.registerTool(tool.definition);
+    },
+  ];
 }
 
 /** The file a tool call changes: the `path` of a `write` or `edit`. */

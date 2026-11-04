@@ -97,7 +97,7 @@ Markdown files with frontmatter and the prompt as the body:
 |---|---|
 | `name`, `description` | How the parent picks it: the description is all it sees (see "Writing agent files"). |
 | `access` | `read-only` or `write`. |
-| `tools` | Optional: an exact allowlist of pi tool names, inside what `access` allows. |
+| `tools` | Optional: an exact allowlist of pi's built-in tool names and MyPi's `web_search` and `web_fetch`, inside what `access` allows. |
 | `model` | An exact `provider/id`, or `inherit` for the main session's model. |
 | `thinking` | `inherit` (the default) or pi's thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 
@@ -191,7 +191,16 @@ MyPi's own rules (`registerRules`, as the parent does), fills their prompt paths
 guard turns any ask into a block with the reason ("Refused: this call needs the user's approval, and no one can give
 it here (no UI). Tell the user what you needed and why: …").
 
-- **`read-only`:** `read`, `grep`, `find`, `ls`, and `bash`, with the Plan rule (`planRule`, `src/core/plan-rule.ts`) on the child's guard: the
+A second inline extension gives every child MyPi's `web_search` and `web_fetch` (added 2026-11-03, after an `explore`
+run asked for current web research found no web tool and its `bash` fetch was refused). Those tools search through
+MCP servers, and SDK sessions don't load pi's built-in MCP extension (pi's `docs/mcp.md`, "Use MCP from the SDK"), so
+the child adds `createMcpExtension` with MyPi's servers (`createMcpServers`) and not the user's `mcp.json`, and
+`runChild` calls `session.bindExtensions({})`, which emits the `session_start` that connects them. The servers' tools
+stay `deferred` and the child has no `tool_search`, so only `web_search` reaches them. A spike checked each step: the
+web tools alone fail with "Tool mcp__parallel__web_search not found", with or without the tool allowlist; with the
+MCP extension and the bind, `web_search` and `web_fetch` work behind the read-only guard.
+
+- **`read-only`:** `read`, `grep`, `find`, `ls`, `bash`, `web_search`, and `web_fetch`, with the Plan rule (`planRule`, `src/core/plan-rule.ts`) on the child's guard: the
   same check as Plan, so `git log` runs and `touch` is refused. One exception: the project's check commands the user
   already approved for the done check (`.pi/done-check.json`) may run as written, alone or chained with read-only
   commands, and may add a `cd` inside the project, a leading `TZ=`, and extra file names (no other flags, no globs,
@@ -365,7 +374,8 @@ A throwaway script ran a child in process on gpt-6-luna with the OpenAI subscrip
   available model, `gpt-4`, which the subscription rejects. `inherit` passes the parent's current model.
 - **`DefaultResourceLoader({ noExtensions: true, systemPrompt })`.** Without `noExtensions` the child loads the
   user's global extensions, MyPi included, and MyPi's `bash` wrapper failed looking for the parent's `toolGuard`.
-  A child gets only its own inline extension (access and the folder guard).
+  A child gets only its own inline extensions (access and the folder guard; since 2026-11-03 also the web tools,
+  see "Access and Plan mode").
 - **The answer and usage:** `session.getLastAssistantText()`, and the usage on the last assistant message in
   `session.messages`.
 - **The session file:** `SessionManager.create(cwd, sessionDir, { parentSession })` writes it in the given folder with
