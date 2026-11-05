@@ -44,6 +44,8 @@ doesn't keep: the plan being implemented, `principles.md`, and recently edited f
 | C | Steer the summary | this module, `compaction.ts` (`session_before_compact`) | **Done 2026-10-25** |
 | D | Re-check the principles before "done" | plan-build's Build section | **Done 2026-10-25** |
 | E | Clear old tool results | this module, `tool-results.ts` (pi's `context` event) | **Done 2026-10-25** |
+| F | Messages sent mid-run are acknowledged | this module, `mid-run.ts` (pi's `context` event) | **Done 2026-10-28** |
+| G | Compact before an idle session's cache expires | this module, behind a setting | **Deferred 2026-11-04**: measured, too little gain on today's models |
 
 ### B: the plan stays in view
 
@@ -137,6 +139,56 @@ of it, then continue:") before each user message that comes right after a tool r
 transcript keeps what the user typed. A follow-up (`Alt+Enter`) arrives after the run ends, after the agent's reply, so
 it's left alone. Tried live (gpt-6-luna): "also print the date at the end", sent during three `sleep 6` calls, got "Got
 it—… I'll print the date afterward." before the next call; without F, the same run said nothing.
+
+### G: compact before an idle session's cache expires
+
+**Deferred 2026-11-04.** Claude Code compacts a long conversation I've walked away from just before its prompt cache
+expires, so the first message back sends a short summary instead of reprocessing the whole history uncached. MyPi
+could do the same; on the models I use now it would save almost nothing, so it waits.
+
+**What Claude Code does** ([prompt caching](https://code.claude.com/docs/en/prompt-caching.md#compacting-the-conversation),
+[`idleCompaction`](https://code.claude.com/docs/en/settings-reference.md#idlecompaction),
+[`CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`](https://code.claude.com/docs/en/env-vars.md)): on by default since v2.1.299,
+only for the main conversation on the one-hour cache, only from 200,000 tokens (configurable, 100,000 at the least).
+Write-ups ([dsebastien.net](https://www.dsebastien.net/2026-10-16-claude-code-idle-compaction-cheaper-to-resume-but-from-a-summary/))
+add that a timer fires at 90% of the cache lifetime (54 minutes) and that it runs the same request as `/compact`,
+showing "Compacted while idle, before the prompt cache expired". The cost: coming back to a summary, which can drop
+details such as rejected approaches and exact error messages.
+
+**Two rules, both must hold:**
+
+1. **The context is big enough to be worth it.** The last request's context (`ctx.getContextUsage()`) is at or above a
+   threshold: a MyPi setting, default 100k tokens. Below that an uncached resend costs little and a summary loses
+   more than it saves. Claude Code's 200k default would never fire here: A compacts at about 192k of a 272k window.
+2. **The cache is about to expire.** Nothing has happened since the last request (no run, no compaction, nothing
+   typed or queued) until 90% of the model's cache lifetime, the moment pi's cache warmer also picks. The lifetime is
+   the model's `promptCache` tier from pi's catalog or a `modelOverrides` entry. A model with no lifetime is never
+   compacted on idle: without one there's no expiry to beat.
+
+Also skipped: no UI (print, JSON, a subagent child), a background job still running (its notice would land on the
+summary), and a second idle compaction before I've sent anything since the first.
+
+**How it would be built:** for a model that declares a lifetime, pi's warmer already fires a `cache_warming_decision`
+in the idle phase at that moment; MyPi answers `stop` and compacts instead. For the others, a MyPi timer armed on
+`agent_settled` and cleared by `before_agent_start`. Then `ctx.compact()`, which runs C's summary instructions, and a
+notice like Claude Code's. GPT-6 Luna and DeepSeek V4 declare no lifetime in pi's catalog, so they'd need a
+`modelOverrides` `promptCache` entry first; OpenAI documents at least 30 minutes for GPT-5.6 and later, or 12 hours on
+request ([prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching)).
+
+**Why it waits** (pi sessions from the last 21 days, measured 2026-11-04):
+
+| Time away (GPT-6 Luna, context over 5k tokens) | Returns | Cache still there |
+|---|---|---|
+| 1–29 minutes | 56 | 54 |
+| 60 minutes or more | 9 | 0 |
+
+- Nine returns after an hour in three weeks, the largest at 113k tokens: only one would pass rule 1.
+- A miss is cheap here: 113k uncached tokens on Luna cost about 1¢ at API prices, and the ChatGPT subscription covers
+  it. The same miss on Claude Opus costs over 50¢, which is why Claude Code has the feature.
+- On a 30-minute cache, rule 2 fires after 27 idle minutes, an ordinary pause, and I'd come back to a summary.
+
+**Revisit** when I run Claude models through pi, work in contexts well past 100k as a habit, or analytics shows
+returns after the cache expired becoming common and costly.
 
 ## Not taking
 
